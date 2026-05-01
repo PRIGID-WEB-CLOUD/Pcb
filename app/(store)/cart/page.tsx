@@ -18,10 +18,21 @@ export default function CartPage() {
   };
 
   useEffect(() => {
-    let mounted = true;
-    if (mounted) fetchCart();
-    return () => { mounted = false; };
+    const fetchCart = async () => {
+      const res = await fetch("/api/cart");
+      const data = await res.json();
+      setCart(data);
+      setLoading(false);
+    };
+    fetchCart();
   }, []);
+
+  const refreshCart = async () => {
+    const res = await fetch("/api/cart");
+    const data = await res.json();
+    setCart(data);
+    setLoading(false);
+  };
 
   const updateQuantity = async (productId: string, newQty: number) => {
     if (newQty < 1) return;
@@ -30,12 +41,12 @@ export default function CartPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ quantity: newQty }),
     });
-    fetchCart();
+    refreshCart();
   };
 
   const removeItem = async (productId: string) => {
     await fetch(`/api/cart/${productId}`, { method: "DELETE" });
-    fetchCart();
+    refreshCart();
   };
 
   const subtotal = cart?.items?.reduce((acc: number, item: any) => acc + (item.product.price * item.quantity), 0) || 0;

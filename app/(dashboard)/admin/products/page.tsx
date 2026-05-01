@@ -38,10 +38,27 @@ export default function AdminProductsPage() {
       router.push("/");
       return;
     }
-    const controller = new AbortController();
+    const fetchData = async () => {
+      const [resP, resC] = await Promise.all([
+        fetch("/api/products"),
+        fetch("/api/categories")
+      ]);
+      setProducts(await resP.json());
+      setCategories(await resC.json());
+      setLoading(false);
+    };
     fetchData(); 
-    return () => controller.abort();
   }, [session, router]);
+
+  const refreshData = async () => {
+    const [resP, resC] = await Promise.all([
+      fetch("/api/products"),
+      fetch("/api/categories")
+    ]);
+    setProducts(await resP.json());
+    setCategories(await resC.json());
+    setLoading(false);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,7 +70,7 @@ export default function AdminProductsPage() {
     if (res.ok) {
       setShowForm(false);
       setFormData({ name: "", description: "", price: "", imageUrl: "", categoryId: "" });
-      fetchData();
+      refreshData();
     }
   };
 

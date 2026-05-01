@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET() {
   try {
-    const postsCount = await (prisma as any).post.count();
+    const postsCount = await prisma.post.count();
     if (postsCount > 0) {
       return NextResponse.json({ message: "Posts already seeded" });
     }
@@ -24,7 +24,7 @@ export async function GET() {
     ];
 
     for (const post of posts) {
-      await (prisma as any).post.create({
+      await prisma.post.create({
         data: post,
       });
     }
