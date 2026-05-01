@@ -86,7 +86,7 @@ export default function HomePage() {
         <div className="grid grid-cols-1 md:grid-cols-12 gap-8 h-auto md:h-[700px]">
           <Link href="/products" className="md:col-span-8 relative group overflow-hidden bg-slate-100">
             <Image 
-              src="https://images.unsplash.com/photo-1441984904996-e0b6ba687e12?q=80&w=2070&auto=format&fit=crop"
+              src="https://images.unsplash.com/photo-1441986300917-64674bd600d8?q=80&w=2070&auto=format&fit=crop"
               alt="Ready to Wear"
               fill
               className="object-cover transition-transform duration-1000 group-hover:scale-105"
@@ -100,7 +100,7 @@ export default function HomePage() {
           <div className="md:col-span-4 flex flex-col gap-8">
             <Link href="/products" className="flex-1 relative group overflow-hidden bg-slate-100">
               <Image 
-                src="https://images.unsplash.com/photo-1549444226-9020f666f2a6?q=80&w=2072&auto=format&fit=crop"
+                src="https://images.unsplash.com/photo-1523275335684-37898b6baf30?q=80&w=2072&auto=format&fit=crop"
                 alt="Accessories"
                 fill
                 className="object-cover transition-transform duration-1000 group-hover:scale-105"
