@@ -125,3 +125,15 @@ model Review {
   product   Product  @relation(fields: [productId], references: [id])
   createdAt DateTime @default(now())
 }
+
+model Post {
+  id        String   @id @default(cuid())
+  title     String
+  content   String   @db.Text
+  excerpt   String?  @db.Text
+  imageUrl  String?
+  author    String   @default("Prigid Collection")
+  published Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

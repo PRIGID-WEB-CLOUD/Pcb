@@ -9,6 +9,7 @@ import { ArrowRight, Play } from "lucide-react";
 
 export default function HomePage() {
   const [products, setProducts] = useState<any[]>([]);
+  const [posts, setPosts] = useState<any[]>([]);
 
   useEffect(() => {
     fetch("/api/products")
@@ -19,6 +20,15 @@ export default function HomePage() {
         }
       })
       .catch((err) => console.error("Error fetching products:", err));
+
+    fetch("/api/posts")
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setPosts(data.slice(0, 2));
+        }
+      })
+      .catch((err) => console.error("Error fetching posts:", err));
   }, []);
 
   return (
@@ -204,15 +214,27 @@ export default function HomePage() {
       <section className="py-32 overflow-hidden bg-slate-50 border-y border-slate-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 md:grid-cols-2 gap-24 items-center">
           <div className="relative">
-            <div className="aspect-[3/4] md:aspect-square relative overflow-hidden shadow-2xl">
-              <Image 
-                src="https://images.unsplash.com/photo-1445205170230-053b830c6050?q=80&w=2071&auto=format&fit=crop"
-                alt="Atelier Narrative"
-                fill
-                className="object-cover"
-                referrerPolicy="no-referrer"
-              />
-            </div>
+            {posts.length > 0 ? (
+              <div className="aspect-[3/4] md:aspect-square relative overflow-hidden shadow-2xl">
+                <Image 
+                  src={posts[0].imageUrl || "https://images.unsplash.com/photo-1551488831-00ddcb6c6bd3?q=80&w=2070&auto=format&fit=crop"}
+                  alt={posts[0].title}
+                  fill
+                  className="object-cover"
+                  referrerPolicy="no-referrer"
+                />
+              </div>
+            ) : (
+              <div className="aspect-[3/4] md:aspect-square relative overflow-hidden shadow-2xl">
+                <Image 
+                  src="https://images.unsplash.com/photo-1551488831-00ddcb6c6bd3?q=80&w=2070&auto=format&fit=crop"
+                  alt="Atelier Narrative"
+                  fill
+                  className="object-cover"
+                  referrerPolicy="no-referrer"
+                />
+              </div>
+            )}
             <motion.div 
               initial={{ x: 50, opacity: 0 }}
               whileInView={{ x: 0, opacity: 1 }}
@@ -224,21 +246,43 @@ export default function HomePage() {
             </motion.div>
           </div>
           <div className="space-y-10">
-            <div className="space-y-4">
-              <span className="text-slate-400 text-[10px] font-bold uppercase tracking-[0.5em]">The Journal</span>
-              <h2 className="text-5xl font-serif text-slate-900 leading-[1.1] tracking-tight">The Modern <br /><span className="italic font-light">Heritage</span></h2>
-            </div>
-            <p className="text-slate-600 text-lg font-light leading-relaxed">
-              Every garment tells a story of longevity. We source our textiles from heritage mills in Italy and Japan, ensuring each thread meets the highest standards of environmental stewardship and timeless design.
-            </p>
-            <div className="pt-4">
-               <Link href="/products" className="inline-flex items-center gap-4 group">
-                <span className="text-[10px] font-bold uppercase tracking-[0.3em] border-b border-slate-900 pb-2">Read the Manifesto</span>
-                <div className="w-10 h-10 rounded-full border border-slate-200 flex items-center justify-center group-hover:bg-slate-900 group-hover:text-white transition-all duration-300">
-                  <ArrowRight size={14} />
+            {posts.length > 0 ? (
+              <>
+                <div className="space-y-4">
+                  <span className="text-slate-400 text-[10px] font-bold uppercase tracking-[0.5em]">The Journal</span>
+                  <h2 className="text-5xl font-serif text-slate-900 leading-[1.1] tracking-tight">{posts[0].title}</h2>
                 </div>
-              </Link>
-            </div>
+                <p className="text-slate-600 text-lg font-light leading-relaxed">
+                  {posts[0].excerpt || posts[0].content.substring(0, 200) + "..."}
+                </p>
+                <div className="pt-4">
+                   <Link href={`/blog/${posts[0].id}`} className="inline-flex items-center gap-4 group">
+                    <span className="text-[10px] font-bold uppercase tracking-[0.3em] border-b border-slate-900 pb-2">Read Article</span>
+                    <div className="w-10 h-10 rounded-full border border-slate-200 flex items-center justify-center group-hover:bg-slate-900 group-hover:text-white transition-all duration-300">
+                      <ArrowRight size={14} />
+                    </div>
+                  </Link>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="space-y-4">
+                  <span className="text-slate-400 text-[10px] font-bold uppercase tracking-[0.5em]">The Journal</span>
+                  <h2 className="text-5xl font-serif text-slate-900 leading-[1.1] tracking-tight">The Modern <br /><span className="italic font-light">Heritage</span></h2>
+                </div>
+                <p className="text-slate-600 text-lg font-light leading-relaxed">
+                  Every garment tells a story of longevity. We source our textiles from heritage mills in Italy and Japan, ensuring each thread meets the highest standards of environmental stewardship and timeless design.
+                </p>
+                <div className="pt-4">
+                   <Link href="/blog" className="inline-flex items-center gap-4 group">
+                    <span className="text-[10px] font-bold uppercase tracking-[0.3em] border-b border-slate-900 pb-2">Read the Manifesto</span>
+                    <div className="w-10 h-10 rounded-full border border-slate-200 flex items-center justify-center group-hover:bg-slate-900 group-hover:text-white transition-all duration-300">
+                      <ArrowRight size={14} />
+                    </div>
+                  </Link>
+                </div>
+              </>
+            )}
             
             <div className="pt-12 border-t border-slate-100">
                <p className="text-slate-400 text-[10px] font-bold uppercase tracking-[0.4em] mb-4">Join our list</p>
