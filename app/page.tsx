@@ -94,7 +94,7 @@ export default function HomePage() {
           <Link href="/products" className="text-[10px] font-bold uppercase tracking-widest border-b border-slate-900 pb-1">View All</Link>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-12 gap-8 h-auto md:h-[700px]">
-          <Link href="/products" className="md:col-span-8 relative group overflow-hidden bg-slate-100">
+          <Link href="/products?category=Monochrome" className="md:col-span-8 relative group overflow-hidden bg-slate-100">
             <Image 
               src="https://images.unsplash.com/photo-1441986300917-64674bd600d8?q=80&w=2070&auto=format&fit=crop"
               alt="Ready to Wear"
@@ -108,7 +108,7 @@ export default function HomePage() {
             </div>
           </Link>
           <div className="md:col-span-4 flex flex-col gap-8">
-            <Link href="/products" className="flex-1 relative group overflow-hidden bg-slate-100">
+            <Link href="/products?category=Accessories" className="flex-1 relative group overflow-hidden bg-slate-100">
               <Image 
                 src="https://images.unsplash.com/photo-1523275335684-37898b6baf30?q=80&w=2072&auto=format&fit=crop"
                 alt="Accessories"
@@ -121,7 +121,7 @@ export default function HomePage() {
                 <span className="text-[10px] font-bold uppercase tracking-widest border-b border-white pb-1">Shop</span>
               </div>
             </Link>
-            <Link href="/products" className="flex-1 relative group overflow-hidden bg-slate-100">
+            <Link href="/products?category=Footwear" className="flex-1 relative group overflow-hidden bg-slate-100">
               <Image 
                 src="https://images.unsplash.com/photo-1558769132-cb1aea458c5e?q=80&w=1974&auto=format&fit=crop"
                 alt="Footwear"

@@ -73,14 +73,14 @@ export default function BlogDetailPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8 }}
              >
-                <Link href="/blog" className="inline-flex items-center gap-2 text-white/70 hover:text-white transition-colors mb-8 text-[10px] font-bold uppercase tracking-widest">
+                <Link href="/blog" className="inline-flex items-center gap-2 text-white/70 hover:text-white transition-colors mb-8 text-[10px] font-bold uppercase tracking-[0.4em]">
                   <ArrowLeft size={14} />
                   Journal
                 </Link>
-                <h1 className="text-4xl md:text-6xl text-white font-serif leading-[1.1] mb-8">
+                <h1 className="text-4xl md:text-6xl text-white font-serif leading-[1.1] tracking-tight mb-8">
                   {post.title}
                 </h1>
-                <div className="flex items-center justify-center gap-8 text-white/80 text-[10px] font-bold uppercase tracking-widest">
+                <div className="flex items-center justify-center gap-8 text-white/80 text-[10px] font-bold uppercase tracking-[0.4em]">
                   <span className="flex items-center gap-2">
                     <User size={12} />
                     {post.author}
