@@ -1,0 +1,98 @@
+"use client";
+
+import Link from "next/link";
+import { ShoppingBag, User, Search, Menu, X } from "lucide-react";
+import { useSession } from "next-auth/react";
+import { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "motion/react";
+
+export default function Header() {
+  const { data: session } = useSession();
+  const [isScrolled, setIsScrolled] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 50);
+    };
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  return (
+    <header 
+      className={`fixed top-0 w-full z-50 transition-all duration-500 ${
+        isScrolled ? "bg-white/80 backdrop-blur-xl border-b border-slate-100 py-4" : "bg-transparent py-8"
+      }`}
+    >
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center transition-all duration-500">
+        <Link href="/" className={`text-xl md:text-2xl font-serif tracking-[0.3em] uppercase transition-colors duration-500 ${isScrolled ? "text-slate-900" : "text-white"}`}>
+          LUXE
+        </Link>
+
+        {/* Desktop Navigation */}
+        <nav className="hidden md:flex items-center space-x-12">
+          {["Collections", "New Arrivals", "Journal", "Heritage"].map((item) => (
+            <Link 
+              key={item}
+              href="/products" 
+              className={`text-[10px] font-bold uppercase tracking-[0.2em] transition-all duration-500 hover:opacity-50 ${
+                isScrolled ? "text-slate-900" : "text-white"
+              }`}
+            >
+              {item}
+            </Link>
+          ))}
+        </nav>
+
+        <div className={`flex items-center space-x-8 transition-colors duration-500 ${isScrolled ? "text-slate-900" : "text-white"}`}>
+          <button className="hover:opacity-50 transition-opacity">
+            <Search size={18} strokeWidth={1.5} />
+          </button>
+          <Link href="/cart" className="relative group">
+            <ShoppingBag size={18} strokeWidth={1.5} />
+            <span className="absolute -top-2 -right-2 text-[8px] bg-slate-900 text-white w-4 h-4 rounded-full flex items-center justify-center font-bold">0</span>
+          </Link>
+          <Link href={session ? "/admin/products" : "/login"} className="hidden sm:block hover:opacity-50 transition-opacity">
+            <User size={18} strokeWidth={1.5} />
+          </Link>
+          <button 
+            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} 
+            className="md:hidden"
+          >
+            {isMobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
+          </button>
+        </div>
+      </div>
+
+      {/* Mobile Menu */}
+      <AnimatePresence>
+        {isMobileMenuOpen && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="md:hidden bg-white border-b border-slate-100 overflow-hidden"
+          >
+            <div className="px-8 py-12 flex flex-col space-y-8">
+              {["Collections", "New Arrivals", "Journal", "Heritage", "Sustainability"].map((item) => (
+                <Link 
+                  key={item}
+                  href="/products" 
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="text-sm font-bold uppercase tracking-[0.3em] text-slate-900 border-b border-slate-50 pb-4"
+                >
+                  {item}
+                </Link>
+              ))}
+              <div className="flex space-x-8 pt-4">
+                 <Link href="/login" className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Account</Link>
+                 <Link href="/cart" className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Global Bag (0)</Link>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </header>
+  );
+}
