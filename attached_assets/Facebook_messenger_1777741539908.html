@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif:wght@400;600;700&amp;family=Manrope:wght@400;500;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "tertiary-fixed": "#e0e3e5",
+                        "surface-container-high": "#dce9ff",
+                        "on-primary-fixed": "#131b2e",
+                        "surface-container-low": "#eff4ff",
+                        "secondary-fixed-dim": "#4edea3",
+                        "secondary-fixed": "#6ffbbe",
+                        "primary-fixed": "#dae2fd",
+                        "on-tertiary-container": "#818486",
+                        "on-secondary-fixed-variant": "#005236",
+                        "surface-container-highest": "#d3e4fe",
+                        "tertiary-fixed-dim": "#c4c7c9",
+                        "primary-fixed-dim": "#bec6e0",
+                        "primary": "#000000",
+                        "on-tertiary-fixed-variant": "#444749",
+                        "inverse-primary": "#bec6e0",
+                        "surface-tint": "#565e74",
+                        "on-primary-fixed-variant": "#3f465c",
+                        "on-background": "#0b1c30",
+                        "tertiary-container": "#191c1e",
+                        "surface-bright": "#f8f9ff",
+                        "on-secondary": "#ffffff",
+                        "inverse-surface": "#213145",
+                        "on-primary-container": "#7c839b",
+                        "on-secondary-fixed": "#002113",
+                        "inverse-on-surface": "#eaf1ff",
+                        "background": "#f8f9ff",
+                        "on-error": "#ffffff",
+                        "surface": "#f8f9ff",
+                        "on-error-container": "#93000a",
+                        "primary-container": "#131b2e",
+                        "on-surface-variant": "#45464d",
+                        "on-tertiary-fixed": "#191c1e",
+                        "outline": "#76777d",
+                        "surface-dim": "#cbdbf5",
+                        "secondary": "#006c49",
+                        "on-secondary-container": "#00714d",
+                        "surface-variant": "#d3e4fe",
+                        "error-container": "#ffdad6",
+                        "on-surface": "#0b1c30",
+                        "error": "#ba1a1a",
+                        "on-primary": "#ffffff",
+                        "tertiary": "#000000",
+                        "surface-container-lowest": "#ffffff",
+                        "surface-container": "#e5eeff",
+                        "outline-variant": "#c6c6cd",
+                        "secondary-container": "#6cf8bb",
+                        "on-tertiary": "#ffffff"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "stack-md": "24px",
+                        "stack-lg": "48px",
+                        "section-padding": "80px",
+                        "container-max": "1280px",
+                        "stack-sm": "12px",
+                        "base": "8px",
+                        "gutter": "24px"
+                    },
+                    "fontFamily": {
+                        "label-caps": ["Manrope"],
+                        "body-lg": ["Manrope"],
+                        "h1": ["Noto Serif"],
+                        "h2": ["Noto Serif"],
+                        "body-md": ["Manrope"],
+                        "h3": ["Noto Serif"]
+                    },
+                    "fontSize": {
+                        "label-caps": ["12px", {"lineHeight": "1.0", "letterSpacing": "0.1em", "fontWeight": "700"}],
+                        "body-lg": ["18px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                        "h1": ["48px", {"lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "h2": ["36px", {"lineHeight": "1.25", "letterSpacing": "-0.01em", "fontWeight": "700"}],
+                        "body-md": ["16px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                        "h3": ["24px", {"lineHeight": "1.3", "fontWeight": "600"}]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .ambient-card {
+            box-shadow: 0px 4px 20px rgba(15, 23, 42, 0.05);
+        }
+        .toggle-checkbox:checked + .toggle-label {
+            background-color: #006c49;
+        }
+        .toggle-checkbox:checked + .toggle-label::after {
+            transform: translateX(100%);
+        }
+    </style>
+</head>
+<body class="bg-background font-body-md text-on-background min-h-screen flex">
+<!-- SideNavBar (Authority Source: JSON) -->
+<aside class="fixed left-0 top-0 h-screen flex flex-col p-6 z-40 bg-slate-50 border-r border-slate-200 w-64">
+<div class="mb-10">
+<h1 class="font-serif font-black text-slate-900 text-xl tracking-tight">Commerce Admin</h1>
+<p class="font-label-caps text-on-tertiary-container mt-1">Premium Tier</p>
+</div>
+<nav class="flex-1 space-y-2">
+<!-- Channel Hub -->
+<a class="flex items-center gap-3 px-4 py-3 rounded text-slate-600 hover:bg-slate-100 transition-all duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="hub">hub</span>
+<span class="font-serif text-sm">Channel Hub</span>
+</a>
+<!-- Meta & Facebook (Active) -->
+<a class="flex items-center gap-3 px-4 py-3 rounded bg-white text-emerald-700 font-bold border-r-4 border-emerald-600 translate-x-1 transition-transform" href="#">
+<span class="material-symbols-outlined" data-icon="storefront">storefront</span>
+<span class="font-serif text-sm">Meta &amp; Facebook</span>
+</a>
+<!-- WhatsApp API -->
+<a class="flex items-center gap-3 px-4 py-3 rounded text-slate-600 hover:bg-slate-100 transition-all duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="chat">chat</span>
+<span class="font-serif text-sm">WhatsApp API</span>
+</a>
+<!-- X Social -->
+<a class="flex items-center gap-3 px-4 py-3 rounded text-slate-600 hover:bg-slate-100 transition-all duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="share">share</span>
+<span class="font-serif text-sm">X Social</span>
+</a>
+</nav>
+<div class="mt-auto space-y-4">
+<button class="w-full bg-primary text-white py-3 rounded-lg font-label-caps hover:bg-secondary transition-colors">
+                Add New Channel
+            </button>
+<div class="pt-6 border-t border-slate-200 space-y-2">
+<a class="flex items-center gap-3 px-4 py-2 text-slate-600 text-sm" href="#">
+<span class="material-symbols-outlined text-base" data-icon="help">help</span>
+<span>Help Center</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2 text-slate-600 text-sm" href="#">
+<span class="material-symbols-outlined text-base" data-icon="description">description</span>
+<span>API Docs</span>
+</a>
+</div>
+</div>
+</aside>
+<!-- Main Content Canvas -->
+<main class="ml-64 flex-1">
+<!-- TopAppBar (Authority Source: JSON) -->
+<header class="sticky top-0 z-50 flex justify-between items-center px-8 py-4 w-full bg-white/80 backdrop-blur-md border-b border-slate-100 shadow-sm">
+<div class="flex items-center gap-8">
+<span class="text-xl font-bold font-serif text-slate-900">Integration Console</span>
+<nav class="hidden md:flex gap-6">
+<a class="font-serif text-slate-500 font-medium hover:text-emerald-600 transition-colors" href="#">Dashboard</a>
+<a class="font-serif text-slate-500 font-medium hover:text-emerald-600 transition-colors" href="#">Analytics</a>
+<a class="font-serif text-slate-500 font-medium hover:text-emerald-600 transition-colors" href="#">Security</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<div class="relative group">
+<span class="material-symbols-outlined p-2 text-slate-900 cursor-pointer active:scale-95 transition-all" data-icon="notifications">notifications</span>
+</div>
+<span class="material-symbols-outlined p-2 text-slate-900 cursor-pointer active:scale-95 transition-all" data-icon="settings">settings</span>
+<div class="h-8 w-8 rounded-full bg-surface-container-high overflow-hidden border border-slate-200">
+<img alt="Administrator Profile" data-alt="Close-up professional portrait of a woman in a modern office with soft bokeh background and clean lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAHgzr-srvIGkmo6lBMA_zLXnsH5kToRIiELq2IFwNIRhq4-7bwYu8u6kZQO5KFU182Ud96u2s-KwZTHYo8ShQPr6YvaAoeOKCKpCnO4QsWhRD2zwVd1uz9wE6hn49fEUW8g-y_W1pMS7CC8R8qXoUUitavI43rpNoP3sNxusJKDvB-vuBJ42G8-orT1UeX3_Rjf8CCb-0prn8oaCjAyEi282jbuBj_q3_MLod76xtVjiDs_QPsCplM13Da4YjWY_fSaJDi5Y8h8mw"/>
+</div>
+</div>
+</header>
+<!-- Screen Content -->
+<div class="p-stack-lg max-w-container-max mx-auto">
+<div class="mb-12">
+<h2 class="font-h2 text-h2 text-on-background mb-2">Meta Commerce Manager</h2>
+<p class="font-body-lg text-on-primary-container max-w-2xl">Manage your Facebook and Instagram shop presence, synchronize product catalogs, and automate social distribution through a unified editorial dashboard.</p>
+</div>
+<!-- Bento Grid Layout -->
+<div class="grid grid-cols-12 gap-gutter">
+<!-- Catalog Sync (6 Columns) -->
+<section class="col-span-12 lg:col-span-7 bg-white rounded-xl ambient-card p-stack-md flex flex-col justify-between overflow-hidden relative">
+<div class="absolute top-0 right-0 p-8 opacity-5">
+<span class="material-symbols-outlined text-[120px]" data-icon="sync">sync</span>
+</div>
+<div class="relative z-10">
+<div class="flex items-center gap-3 mb-6">
+<div class="p-2 bg-surface-container-low rounded-lg text-secondary">
+<span class="material-symbols-outlined" data-icon="database">database</span>
+</div>
+<h3 class="font-h3 text-h3">Catalog Sync</h3>
+</div>
+<div class="grid grid-cols-2 gap-stack-md mb-8">
+<div class="p-4 bg-surface-container-lowest border border-slate-100 rounded-lg">
+<p class="font-label-caps text-on-tertiary-container mb-2">Sync Status</p>
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-secondary"></div>
+<span class="font-body-md font-bold">Healthy &amp; Live</span>
+</div>
+</div>
+<div class="p-4 bg-surface-container-lowest border border-slate-100 rounded-lg">
+<p class="font-label-caps text-on-tertiary-container mb-2">Total Items</p>
+<span class="font-body-md font-bold">1,248 Products</span>
+</div>
+</div>
+<div class="flex items-center justify-between p-4 bg-surface-bright rounded-lg mb-8">
+<div>
+<p class="font-body-md font-semibold">Last sync completed</p>
+<p class="text-sm text-on-primary-container">Today at 10:42 AM</p>
+</div>
+<div class="flex -space-x-2">
+<img alt="team" class="h-8 w-8 rounded-full border-2 border-white" data-alt="Professional headshot of a smiling man for team profile icon" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBMf3Gb4zbtXFpQDFllHrKYvJynGuGGSD8SizD5lC438ac_J4PTqv-uaZQJ3P_26cARFgDch_-mbsigzuMIRx0nB1LVN5o3Z5ReY5KJ_NtcDvGB4-RAmbC7lgOuf9gUCh2eyJab6KR5_xuUZYC1E5CThamlNMmosx9DkFgOtVlyLSoBPBiRP0ewksYVQvS9jv8SxGffYHuMzwvLBh-68h9lLrjHLQfdU9CpFDqyhMZYxjvNkWcFR2OsUqnrkXzhnOciofnehtY5WSY"/>
+<img alt="team" class="h-8 w-8 rounded-full border-2 border-white" data-alt="Professional headshot of a smiling woman for team profile icon" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDPT3rQNIMeF3fy7x-51cVrkUvKbbb2uwRv2H8FRl-zyzdhoC-gS7uBTT4vlYhKv5cH0UWQQPay7dpkW3snqKcJYu9OaYHOJ5ecYEnznWFVjhWZ0wWtSS7AmFl-Bi6w0NjVyEtDXjPLX82lr74iyWIDF-3GNyzEjYtrbFC66TNg9Tx5cE1_Na3GYckjBwRRyhSu0SCKuvHX5L1wnhpHDEFtb9eUMG0eIjicDcqLRTcUim41RuYihlyJAG26Cqr07mmNzIV_5b8CGfk"/>
+</div>
+</div>
+</div>
+<div class="flex gap-4">
+<button class="bg-primary text-white px-6 py-3 rounded-lg font-label-caps flex items-center gap-2 hover:bg-secondary transition-all">
+<span class="material-symbols-outlined text-sm" data-icon="refresh">refresh</span>
+                            Run Manual Sync
+                        </button>
+<button class="border border-outline-variant text-on-background px-6 py-3 rounded-lg font-label-caps hover:bg-surface-container-low transition-all">
+                            View Sync Logs
+                        </button>
+</div>
+</section>
+<!-- Facebook Shop Settings (5 Columns) -->
+<section class="col-span-12 lg:col-span-5 bg-white rounded-xl ambient-card p-stack-md">
+<div class="flex items-center gap-3 mb-8">
+<div class="p-2 bg-surface-container-low rounded-lg text-primary">
+<span class="material-symbols-outlined" data-icon="settings_applications">settings_applications</span>
+</div>
+<h3 class="font-h3 text-h3">Shop Settings</h3>
+</div>
+<div class="space-y-8">
+<div class="flex items-center justify-between">
+<div>
+<p class="font-body-md font-bold mb-1">Enable Facebook Shop</p>
+<p class="text-sm text-on-primary-container">Make your catalog visible on Facebook</p>
+</div>
+<label class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only toggle-checkbox" type="checkbox"/>
+<div class="toggle-label w-12 h-6 bg-slate-200 rounded-full transition-colors relative after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+</label>
+</div>
+<div>
+<p class="font-body-md font-bold mb-4">Primary Call-To-Action</p>
+<div class="space-y-3">
+<div class="flex items-center gap-3 p-3 border border-secondary bg-secondary-container/10 rounded-lg cursor-pointer">
+<span class="material-symbols-outlined text-secondary" data-icon="shopping_bag" data-weight="fill">shopping_bag</span>
+<span class="text-sm font-semibold">View on Website</span>
+<span class="material-symbols-outlined ml-auto text-secondary" data-icon="check_circle">check_circle</span>
+</div>
+<div class="flex items-center gap-3 p-3 border border-outline-variant rounded-lg cursor-pointer hover:border-primary transition-colors">
+<span class="material-symbols-outlined text-on-primary-container" data-icon="chat_bubble">chat_bubble</span>
+<span class="text-sm font-medium">Message to Buy</span>
+</div>
+<div class="flex items-center gap-3 p-3 border border-outline-variant rounded-lg cursor-pointer hover:border-primary transition-colors">
+<span class="material-symbols-outlined text-on-primary-container" data-icon="person_play">person_play</span>
+<span class="text-sm font-medium">Checkout on Facebook</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Social Sharing (Full Width / Grid) -->
+<section class="col-span-12 bg-white rounded-xl ambient-card p-stack-md">
+<div class="flex items-center gap-3 mb-10">
+<div class="p-2 bg-surface-container-low rounded-lg text-secondary">
+<span class="material-symbols-outlined" data-icon="auto_awesome">auto_awesome</span>
+</div>
+<h3 class="font-h3 text-h3">Automated Social Sharing</h3>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-12">
+<!-- Product Auto-Share -->
+<div class="flex gap-6 items-start">
+<div class="w-24 h-24 rounded-lg bg-surface-container overflow-hidden flex-shrink-0">
+<img alt="Product" data-alt="Minimalist product photography of a premium watch on a light grey stone surface with soft shadows" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDyDWrCLAxb9nR4aNYYsgcPGeYErUI3KwCZIESS0dZA7CPBbNxfbOpfXtNb_SfUhnBltY8zGksNX82VI1bHbqxultTT6KOoNVU7hLZ96a_j9FcJ8e9L1Zz_ex_Sqgxp9a_kZrRDhL-q14cZtVMgMjptMWNmhMd2hMCbe82QD0p2Jrc8LSsOJ988V3D6vvQXyGUDJfEJNvgrW8V-lBj7-LZhm_mOE42vgmRvL2WCsN2EwxInnTL1XmDlD70LNA8djWkxBRLHtG4bBDQ"/>
+</div>
+<div class="flex-1">
+<div class="flex items-center justify-between mb-2">
+<p class="font-body-md font-bold">New Product Alerts</p>
+<label class="relative inline-flex items-center cursor-pointer scale-90">
+<input checked="" class="sr-only toggle-checkbox" type="checkbox"/>
+<div class="toggle-label w-12 h-6 bg-slate-200 rounded-full transition-colors relative after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+</label>
+</div>
+<p class="text-sm text-on-primary-container mb-4">Automatically post a high-quality carousel to your Facebook page whenever a new item is added to the catalog.</p>
+<div class="flex gap-2">
+<span class="px-3 py-1 bg-surface-container-low text-[10px] font-bold rounded-full text-on-tertiary-fixed-variant uppercase tracking-wider">Carousel</span>
+<span class="px-3 py-1 bg-surface-container-low text-[10px] font-bold rounded-full text-on-tertiary-fixed-variant uppercase tracking-wider">Tags Included</span>
+</div>
+</div>
+</div>
+<!-- Blog Auto-Share -->
+<div class="flex gap-6 items-start">
+<div class="w-24 h-24 rounded-lg bg-surface-container overflow-hidden flex-shrink-0">
+<img alt="Blog" data-alt="Overhead view of a clean workspace with a laptop, journal, and a cup of coffee on a white desk with natural morning light" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCCwhZu2TqlQr9qgWRRmPahFvHvBoXmJ8EkNiw1otAB2FBGoexAKk9rkEEdGbH28dcARGpwTGicAEf4JcNHqAg6ViD46rAEp5mYLA1nzSR7S5lAEJykd21CMvJvtHZkr5NH9_Zp4snSykmz53qHIYaZGi8dA2nBo2TosK4e5onwlcqAV2JcNeLaeZB3noA7o6xCmKyfPCWkYB3oBut21htbkE9RvLp3U5iGqa7feR8QCOMWDfExUe3S5PtRYjzDUHKNgCyvbNWxjmM"/>
+</div>
+<div class="flex-1">
+<div class="flex items-center justify-between mb-2">
+<p class="font-body-md font-bold">Editorial Blog Posts</p>
+<label class="relative inline-flex items-center cursor-pointer scale-90">
+<input class="sr-only toggle-checkbox" type="checkbox"/>
+<div class="toggle-label w-12 h-6 bg-slate-200 rounded-full transition-colors relative after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+</label>
+</div>
+<p class="text-sm text-on-primary-container mb-4">Share your latest brand stories and lifestyle blog posts directly to your timeline to drive organic traffic.</p>
+<div class="flex gap-2">
+<span class="px-3 py-1 bg-surface-container-low text-[10px] font-bold rounded-full text-on-tertiary-fixed-variant uppercase tracking-wider">Link Preview</span>
+<span class="px-3 py-1 bg-surface-container-low text-[10px] font-bold rounded-full text-on-tertiary-fixed-variant uppercase tracking-wider">Schedule Ready</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Quick Action Footer -->
+<div class="col-span-12 flex justify-end gap-4 mt-4">
+<button class="px-8 py-3 text-on-primary-container font-label-caps hover:text-primary transition-colors">Discard Changes</button>
+<button class="bg-primary text-white px-10 py-3 rounded-lg font-label-caps shadow-lg hover:bg-secondary transition-all">Save Global Settings</button>
+</div>
+</div>
+</div>
+</main>
+</body></html>
