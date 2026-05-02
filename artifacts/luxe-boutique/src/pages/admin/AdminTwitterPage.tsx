@@ -359,6 +359,31 @@ export default function AdminTwitterPage() {
 
             {/* API CREDENTIALS */}
             {activeTab === "credentials" && (
+              <div className="flex flex-col items-center justify-center py-20 gap-6 text-center">
+                <div className="w-16 h-16 rounded-2xl bg-[#eff4ff] flex items-center justify-center">
+                  <span className="material-symbols-outlined text-[#006c49] text-3xl">settings</span>
+                </div>
+                <div>
+                  <h3 className="font-serif text-[22px] font-semibold mb-2">Credentials moved to Settings</h3>
+                  <p className="text-sm font-[Manrope] text-[#7c839b] max-w-sm">
+                    X (Twitter) API credentials are now managed centrally in Settings → Channels → X (Twitter).
+                  </p>
+                </div>
+                <Link href="/admin/settings?section=twitter">
+                  <button className="px-8 py-3 bg-black text-white font-[Manrope] font-bold text-xs tracking-widest uppercase hover:bg-[#006c49] transition-all rounded-lg flex items-center gap-2">
+                    <span className="material-symbols-outlined text-sm">arrow_forward</span>
+                    Go to Settings → X (Twitter)
+                  </button>
+                </Link>
+                {configuredCredsCount > 0 && (
+                  <p className="text-xs font-[Manrope] text-[#006c49] font-bold flex items-center gap-1">
+                    <span className="material-symbols-outlined text-sm">check_circle</span>
+                    {configuredCredsCount}/{TW_CRED_FIELDS.length} credentials already saved
+                  </p>
+                )}
+              </div>
+            )}
+            {false && (
               <div className="grid grid-cols-12 gap-8">
                 <div className="col-span-12 lg:col-span-7 space-y-5">
                   <div className="flex items-center justify-between">
