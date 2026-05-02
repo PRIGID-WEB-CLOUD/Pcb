@@ -4,6 +4,8 @@ import './globals.css';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import AuthProvider from '@/components/AuthProvider';
+import CookieBanner from '@/components/CookieBanner';
+import { CurrencyProvider } from '@/components/CurrencyContext';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -25,11 +27,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={`${inter.variable} ${playfair.variable}`}>
       <body suppressHydrationWarning className="bg-white min-h-screen flex flex-col font-sans antialiased text-slate-900 selection:bg-slate-900 selection:text-white">
         <AuthProvider>
-          <Header />
-          <main className="flex-grow">
-            {children}
-          </main>
-          <Footer />
+          <CurrencyProvider>
+            <Header />
+            <main className="flex-grow">
+              {children}
+            </main>
+            <Footer />
+            <CookieBanner />
+          </CurrencyProvider>
         </AuthProvider>
       </body>
     </html>

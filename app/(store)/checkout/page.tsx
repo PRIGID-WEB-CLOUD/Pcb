@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { Lock, ChevronLeft } from "lucide-react";
 import Link from "next/link";
+import { useCurrency } from "@/components/CurrencyContext";
 
 export default function CheckoutPage() {
   const router = useRouter();
@@ -12,6 +13,7 @@ export default function CheckoutPage() {
   const [loading, setLoading] = useState(true);
   const [shippingAddress, setShippingAddress] = useState("");
   const [processing, setProcessing] = useState(false);
+  const { formatPrice } = useCurrency();
 
   useEffect(() => {
     fetch("/api/cart")
@@ -103,7 +105,7 @@ export default function CheckoutPage() {
                 disabled={processing || total === 0}
                 className="w-full bg-slate-900 text-white py-5 rounded-none font-bold uppercase tracking-widest text-xs flex items-center justify-center space-x-3 hover:bg-emerald-600 transition-all shadow-xl disabled:bg-slate-300"
               >
-                {processing ? "Processing..." : `Pay $${total.toFixed(2)} Now`}
+                {processing ? "Processing..." : `Pay ${formatPrice(total)} Now`}
               </button>
             </form>
           </section>
@@ -127,7 +129,7 @@ export default function CheckoutPage() {
                     <div className="flex-1 flex flex-col justify-center py-1">
                       <h4 className="font-bold text-sm">{item.product.name}</h4>
                       <p className="text-xs text-slate-500 mt-1">Qty: {item.quantity}</p>
-                      <p className="font-bold text-xs mt-2 text-emerald-600">${(item.product.price * item.quantity).toFixed(2)}</p>
+                      <p className="font-bold text-xs mt-2 text-emerald-600">{formatPrice(item.product.price * item.quantity)}</p>
                     </div>
                   </div>
                 ))}
@@ -135,7 +137,7 @@ export default function CheckoutPage() {
               <div className="pt-8 border-t border-slate-200 space-y-4">
                  <div className="flex justify-between text-sm">
                     <span className="text-slate-500 uppercase tracking-widest text-[10px] font-bold">Subtotal</span>
-                    <span className="font-bold">${total.toFixed(2)}</span>
+                    <span className="font-bold">{formatPrice(total)}</span>
                  </div>
                  <div className="flex justify-between text-sm">
                     <span className="text-slate-500 uppercase tracking-widest text-[10px] font-bold">Shipping</span>
@@ -143,7 +145,7 @@ export default function CheckoutPage() {
                  </div>
                  <div className="flex justify-between items-end pt-4 border-t border-slate-200">
                     <span className="text-lg font-bold">Total</span>
-                    <span className="text-2xl font-bold text-slate-900">${total.toFixed(2)}</span>
+                    <span className="text-2xl font-bold text-slate-900">{formatPrice(total)}</span>
                  </div>
               </div>
            </div>

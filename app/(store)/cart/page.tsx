@@ -5,10 +5,12 @@ import Image from "next/image";
 import Link from "next/link";
 import { Minus, Plus, Trash2, ArrowRight } from "lucide-react";
 import { motion } from "motion/react";
+import { useCurrency } from "@/components/CurrencyContext";
 
 export default function CartPage() {
   const [cart, setCart] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const { formatPrice } = useCurrency();
 
   const fetchCart = async () => {
     const res = await fetch("/api/cart");
@@ -81,7 +83,7 @@ export default function CartPage() {
                       <h3 className="text-xl font-bold text-slate-900">{item.product.name}</h3>
                       <p className="text-xs uppercase tracking-widest text-slate-400 mt-1">One Size / Standard Edition</p>
                     </div>
-                    <span className="text-lg font-bold">${(item.product.price * item.quantity).toFixed(2)}</span>
+                    <span className="text-lg font-bold">{formatPrice(item.product.price * item.quantity)}</span>
                   </div>
                   
                   <div className="flex justify-between items-end mt-8">
@@ -110,7 +112,7 @@ export default function CartPage() {
               <div className="space-y-4 border-t border-slate-200 pt-6">
                 <div className="flex justify-between text-slate-600">
                   <span>Subtotal</span>
-                  <span className="font-bold text-slate-900">${subtotal.toFixed(2)}</span>
+                  <span className="font-bold text-slate-900">{formatPrice(subtotal)}</span>
                 </div>
                 <div className="flex justify-between text-slate-600">
                   <span>Shipping</span>
@@ -118,7 +120,7 @@ export default function CartPage() {
                 </div>
                 <div className="flex justify-between text-slate-600 pt-4 border-t border-slate-200">
                   <span className="text-lg font-bold text-slate-900">Total</span>
-                  <span className="text-xl font-bold text-slate-900">${subtotal.toFixed(2)}</span>
+                  <span className="text-xl font-bold text-slate-900">{formatPrice(subtotal)}</span>
                 </div>
               </div>
               <Link 

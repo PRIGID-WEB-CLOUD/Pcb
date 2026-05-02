@@ -8,6 +8,7 @@ import { motion } from "motion/react";
 import { Package, User, MapPin, LogOut, ChevronRight, ShoppingBag } from "lucide-react";
 import { signOut } from "next-auth/react";
 import Image from "next/image";
+import { useCurrency } from "@/components/CurrencyContext";
 
 import AccountSidebar from "@/components/AccountSidebar";
 
@@ -16,6 +17,7 @@ export default function AccountPage() {
   const router = useRouter();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const { formatPrice } = useCurrency();
 
   const fetchOrders = async () => {
     try {
@@ -121,7 +123,7 @@ export default function AccountPage() {
                         </div>
                         <div className="text-right">
                           <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Total</p>
-                          <p className="text-lg font-serif text-slate-900">${order.total.toFixed(2)}</p>
+                          <p className="text-lg font-serif text-slate-900">{formatPrice(order.total)}</p>
                         </div>
                       </div>
                     </div>

@@ -8,12 +8,14 @@ import Image from "next/image";
 import { motion } from "motion/react";
 import { Heart, ShoppingBag, X } from "lucide-react";
 import AccountSidebar from "@/components/AccountSidebar";
+import { useCurrency } from "@/components/CurrencyContext";
 
 export default function WishlistPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [wishlist, setWishlist] = useState([]);
   const [loading, setLoading] = useState(true);
+  const { formatPrice } = useCurrency();
 
   const fetchWishlist = async () => {
     try {
@@ -90,7 +92,7 @@ export default function WishlistPage() {
                           {item.product?.category?.name || "Boutique"}
                         </p>
                         <h3 className="text-lg font-serif text-slate-900">{item.product?.name}</h3>
-                        <p className="text-sm font-bold text-slate-900 mt-2">${item.product?.price.toFixed(2)}</p>
+                        <p className="text-sm font-bold text-slate-900 mt-2">{formatPrice(item.product?.price || 0)}</p>
                       </div>
                       <button className="w-full bg-slate-900 text-white text-[10px] font-bold uppercase tracking-widest py-4 rounded-full flex items-center justify-center gap-2 hover:bg-slate-800 transition-all leading-none">
                         <ShoppingBag size={14} />

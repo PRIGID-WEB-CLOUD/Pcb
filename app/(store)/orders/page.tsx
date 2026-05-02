@@ -3,10 +3,12 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Package, Clock, CheckCircle, Ship } from "lucide-react";
+import { useCurrency } from "@/components/CurrencyContext";
 
 export default function OrderHistoryPage() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const { formatPrice } = useCurrency();
 
   useEffect(() => {
     fetch("/api/orders")
@@ -42,7 +44,7 @@ export default function OrderHistoryPage() {
                      </div>
                      <div className="space-y-1">
                         <p className="text-[10px] uppercase tracking-widest font-bold text-slate-400">Total Value</p>
-                        <p className="font-bold text-sm">${order.total.toFixed(2)}</p>
+                        <p className="font-bold text-sm">{formatPrice(order.total)}</p>
                      </div>
                   </div>
                   <div className="flex items-center gap-2 bg-emerald-50 text-emerald-700 px-4 py-2 rounded-full text-xs font-bold uppercase tracking-widest">
@@ -60,7 +62,7 @@ export default function OrderHistoryPage() {
                         </div>
                         <div className="space-y-1">
                            <h4 className="font-bold text-sm text-slate-900">{item.product.name}</h4>
-                           <p className="text-xs text-slate-500">Qty: {item.quantity} × ${item.price.toFixed(2)}</p>
+                           <p className="text-xs text-slate-500">Qty: {item.quantity} × {formatPrice(item.price)}</p>
                         </div>
                       </div>
                     ))}

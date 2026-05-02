@@ -6,11 +6,13 @@ import Image from "next/image";
 import { motion } from "motion/react";
 import { ChevronRight, Minus, Plus, ShoppingBag } from "lucide-react";
 import { useSession } from "next-auth/react";
+import { useCurrency } from "@/components/CurrencyContext";
 
 export default function ProductDetailPage() {
   const { id } = useParams();
   const router = useRouter();
   const { data: session } = useSession();
+  const { formatPrice } = useCurrency();
   const [product, setProduct] = useState<any>(null);
   const [quantity, setQuantity] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -82,7 +84,7 @@ export default function ProductDetailPage() {
               {product.category?.name || "Exclusive Edition"}
             </span>
             <h1 className="text-5xl font-serif text-slate-900">{product.name}</h1>
-            <p className="text-2xl text-slate-900">${product.price.toFixed(2)}</p>
+            <p className="text-2xl text-slate-900">{formatPrice(product.price)}</p>
           </header>
 
           <p className="text-slate-600 text-base leading-relaxed">

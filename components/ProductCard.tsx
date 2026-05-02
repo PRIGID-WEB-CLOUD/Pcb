@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { motion } from "motion/react";
+import { useCurrency } from "./CurrencyContext";
 
 interface ProductCardProps {
   id: string;
@@ -13,6 +14,8 @@ interface ProductCardProps {
 }
 
 export default function ProductCard({ id, name, price, imageUrl, category }: ProductCardProps) {
+  const { formatPrice } = useCurrency();
+
   return (
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
@@ -41,7 +44,7 @@ export default function ProductCard({ id, name, price, imageUrl, category }: Pro
             <p className="text-[10px] uppercase tracking-widest text-slate-400">{category}</p>
             <h3 className="text-sm font-medium text-slate-900 group-hover:text-slate-500 transition-colors uppercase tracking-wide truncate max-w-[180px]">{name}</h3>
           </div>
-          <span className="text-sm font-bold text-slate-900">${price.toFixed(2)}</span>
+          <span className="text-sm font-bold text-slate-900">{formatPrice(price)}</span>
         </div>
       </Link>
     </motion.div>
