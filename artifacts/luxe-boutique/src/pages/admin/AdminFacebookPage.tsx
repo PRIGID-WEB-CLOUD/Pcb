@@ -65,6 +65,7 @@ export default function AdminFacebookPage() {
   const [posts,          setPosts]          = useState<PagePost[]>([]);
   const [postTemplates,  setPostTemplates]  = useState<PostTemplate[]>([]);
   const [loading,        setLoading]        = useState(true);
+  const [loadError,      setLoadError]      = useState(false);
 
   const [activeTab,   setActiveTab]   = useState<ActiveTab>("posts");
   const [syncState,   setSyncState]   = useState<"idle"|"syncing"|"done">("idle");
@@ -114,23 +115,29 @@ export default function AdminFacebookPage() {
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 2800); };
 
   const loadAll = useCallback(async () => {
-    const [cRes, catRes, pxRes, audRes, postsRes, tplRes, credRes] = await Promise.all([
-      fetch("/api/facebook/connections"),
-      fetch("/api/facebook/catalog"),
-      fetch("/api/facebook/pixel-events"),
-      fetch("/api/facebook/audiences"),
-      fetch("/api/facebook/posts"),
-      fetch("/api/facebook/post-templates"),
-      fetch("/api/channels/credentials/facebook"),
-    ]);
-    if (cRes.ok)     setConnections(await cRes.json());
-    if (catRes.ok)   setCatalog(await catRes.json());
-    if (pxRes.ok)    setPixelEvents(await pxRes.json());
-    if (audRes.ok)   setAudiences(await audRes.json());
-    if (postsRes.ok) setPosts(await postsRes.json());
-    if (tplRes.ok)   setPostTemplates(await tplRes.json());
-    if (credRes.ok)  { const d = await credRes.json(); setFbCreds(d); setCredsDirty(d); }
-    setLoading(false);
+    try {
+      const [cRes, catRes, pxRes, audRes, postsRes, tplRes, credRes] = await Promise.all([
+        fetch("/api/facebook/connections"),
+        fetch("/api/facebook/catalog"),
+        fetch("/api/facebook/pixel-events"),
+        fetch("/api/facebook/audiences"),
+        fetch("/api/facebook/posts"),
+        fetch("/api/facebook/post-templates"),
+        fetch("/api/channels/credentials/facebook"),
+      ]);
+      if (cRes.ok)     setConnections(await cRes.json());
+      if (catRes.ok)   setCatalog(await catRes.json());
+      if (pxRes.ok)    setPixelEvents(await pxRes.json());
+      if (audRes.ok)   setAudiences(await audRes.json());
+      if (postsRes.ok) setPosts(await postsRes.json());
+      if (tplRes.ok)   setPostTemplates(await tplRes.json());
+      if (credRes.ok)  { const d = await credRes.json(); setFbCreds(d); setCredsDirty(d); }
+      if (!cRes.ok && !postsRes.ok) setLoadError(true);
+    } catch {
+      setLoadError(true);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => { loadAll(); }, [loadAll]);
@@ -270,6 +277,20 @@ export default function AdminFacebookPage() {
     <AdminLayout sidebar="channels">
       <div className="flex items-center justify-center min-h-screen">
         <span className="material-symbols-outlined animate-spin text-[#006c49] text-3xl">refresh</span>
+      </div>
+    </AdminLayout>
+  );
+
+  if (loadError) return (
+    <AdminLayout sidebar="channels">
+      <div className="flex flex-col items-center justify-center min-h-screen gap-4">
+        <span className="material-symbols-outlined text-red-400 text-5xl">cloud_off</span>
+        <h2 className="font-serif text-2xl font-semibold text-[#0b1c30]">Could not load Facebook data</h2>
+        <p className="font-[Manrope] text-[#7c839b] text-sm">This usually means your session has expired or the API server is restarting.</p>
+        <button onClick={() => { setLoadError(false); setLoading(true); loadAll(); }}
+          className="mt-2 px-6 py-3 bg-black text-white font-[Manrope] font-bold text-xs tracking-widest uppercase hover:bg-[#006c49] transition-colors rounded-lg flex items-center gap-2">
+          <span className="material-symbols-outlined text-sm">refresh</span> Try Again
+        </button>
       </div>
     </AdminLayout>
   );
