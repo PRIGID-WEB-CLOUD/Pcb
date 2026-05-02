@@ -88,6 +88,10 @@ export default function AdminChannelHubPage() {
         {/* Header */}
         <header className="mb-12 flex justify-between items-end">
           <div>
+            <Link href="/admin" className="inline-flex items-center gap-1.5 text-[#7c839b] hover:text-[#006c49] transition-colors font-[Manrope] font-bold text-xs tracking-widest uppercase mb-4 no-underline">
+              <span className="material-symbols-outlined text-base">arrow_back</span>
+              Back to Dashboard
+            </Link>
             <h1 className="text-[48px] font-serif font-bold text-[#0b1c30] mb-2">Omnichannel Hub</h1>
             <p className="text-[18px] font-[Manrope] text-[#7c839b] max-w-2xl">Manage your global brand presence across integrated ecosystems. Real-time synchronization and status monitoring for all retail endpoints.</p>
           </div>
