@@ -13,6 +13,8 @@
     "@google/genai": "^1.17.0",
     "@hookform/resolvers": "^5.2.1",
     "@prisma/client": "^5.22.0",
+    "@tiptap/react": "^3.22.5",
+    "@tiptap/starter-kit": "^3.22.5",
     "autoprefixer": "^10.4.21",
     "axios": "^1.15.2",
     "bcryptjs": "^3.0.3",
@@ -27,6 +29,7 @@
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
     "react-markdown": "^10.1.0",
+    "resend": "^6.12.2",
     "tailwind-merge": "^3.3.1"
   },
   "devDependencies": {

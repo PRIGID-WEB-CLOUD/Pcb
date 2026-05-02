@@ -2,6 +2,7 @@
 
 import { Mail, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
+import Link from "next/link";
 
 export default function NewsletterPage() {
   const [subscribers, setSubscribers] = useState([
@@ -16,9 +17,9 @@ export default function NewsletterPage() {
           <h1 className="font-serif text-4xl text-slate-900 mb-2">Newsletter</h1>
           <p className="text-slate-500 font-serif">Manage customer newsletter subscriptions.</p>
         </div>
-        <button className="flex items-center gap-2 bg-slate-900 text-white px-6 py-3 rounded-lg font-bold text-[10px] uppercase tracking-widest hover:bg-emerald-600 transition-colors">
+        <Link href="/admin/newsletter/compose" className="flex items-center gap-2 bg-slate-900 text-white px-6 py-3 rounded-lg font-bold text-[10px] uppercase tracking-widest hover:bg-emerald-600 transition-colors">
           <Plus size={14} /> Compose Campaign
-        </button>
+        </Link>
       </header>
       <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
         <table className="w-full text-left">
