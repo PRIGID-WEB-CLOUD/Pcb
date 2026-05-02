@@ -21,17 +21,19 @@ enum OrderStatus {
 }
 
 model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String    @unique
-  password      String
-  role          Role      @default(USER)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  reviews       Review[]
-  orders        Order[]
-  wishlist      Wishlist?
-  cart          Cart?
+  id               String    @id @default(cuid())
+  name             String?
+  email            String    @unique
+  password         String
+  role             Role      @default(USER)
+  resetToken       String?   @unique
+  resetTokenExpiry DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  reviews          Review[]
+  orders           Order[]
+  wishlist         Wishlist?
+  cart             Cart?
 }
 
 model Category {
