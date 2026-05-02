@@ -4,12 +4,14 @@ import { motion } from "motion/react";
 import { ChevronRight, Minus, Plus, ShoppingBag, Heart, Star } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCurrency } from "@/contexts/CurrencyContext";
+import { useCart } from "@/contexts/CartContext";
 
 export default function ProductDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [, navigate] = useLocation();
   const { user } = useAuth();
   const { formatPrice } = useCurrency();
+  const { refreshCart } = useCart();
   const [product, setProduct] = useState<any>(null);
   const [quantity, setQuantity] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -35,7 +37,7 @@ export default function ProductDetailPage() {
     setAddingToCart(true);
     try {
       const res = await fetch("/api/cart", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ productId: id, quantity }) });
-      if (res.ok) navigate("/cart");
+      if (res.ok) { await refreshCart(); navigate("/cart"); }
     } finally { setAddingToCart(false); }
   };
 

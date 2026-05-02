@@ -2,11 +2,13 @@ import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { Minus, Plus, Trash2, ArrowRight } from "lucide-react";
 import { useCurrency } from "@/contexts/CurrencyContext";
+import { useCart } from "@/contexts/CartContext";
 
 export default function CartPage() {
   const [cart, setCart] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const { formatPrice } = useCurrency();
+  const { refreshCart } = useCart();
 
   const fetchCart = async () => {
     const res = await fetch("/api/cart");
@@ -19,13 +21,13 @@ export default function CartPage() {
 
   const updateQuantity = async (productId: string, newQty: number) => {
     if (newQty < 1) return;
-    await fetch(`/api/cart/${productId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ quantity: newQty }) });
-    fetchCart();
+    const res = await fetch(`/api/cart/${productId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ quantity: newQty }) });
+    if (res.ok) { fetchCart(); await refreshCart(); }
   };
 
   const removeItem = async (productId: string) => {
-    await fetch(`/api/cart/${productId}`, { method: "DELETE" });
-    fetchCart();
+    const res = await fetch(`/api/cart/${productId}`, { method: "DELETE" });
+    if (res.ok) { fetchCart(); await refreshCart(); }
   };
 
   const subtotal = cart?.items?.reduce((acc: number, item: any) => acc + (item.product.price * item.quantity), 0) || 0;

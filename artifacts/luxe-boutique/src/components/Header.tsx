@@ -3,9 +3,11 @@ import { ShoppingBag, User, Search, Menu, X } from "lucide-react";
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCart } from "@/contexts/CartContext";
 
 export default function Header() {
   const { user } = useAuth();
+  const { cartCount } = useCart();
   const [, navigate] = useLocation();
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -69,7 +71,7 @@ export default function Header() {
           </div>
           <Link href="/cart" className="relative group">
             <ShoppingBag size={18} strokeWidth={1.5} />
-            <span className="absolute -top-2 -right-2 text-[8px] bg-slate-900 text-white w-4 h-4 rounded-full flex items-center justify-center font-bold">0</span>
+            <span className="absolute -top-2 -right-2 text-[8px] bg-slate-900 text-white w-4 h-4 rounded-full flex items-center justify-center font-bold">{cartCount}</span>
           </Link>
           <Link href={user ? "/account" : "/login"} className="hidden sm:block hover:opacity-50 transition-opacity">
             <User size={18} strokeWidth={1.5} />
