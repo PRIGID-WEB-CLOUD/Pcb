@@ -109,10 +109,10 @@ export default function HomePage() {
             <span className="text-slate-400 text-[10px] font-bold uppercase tracking-[0.6em]">Most Wanted</span>
             <h2 className="text-5xl font-serif text-slate-900 leading-tight tracking-tight">Trending <span className="italic font-light text-slate-400 text-6xl">Now</span></h2>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12">
-            {products.length > 6 ? products.slice(6, 10).map((p: any) => (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-12">
+            {products.length > 6 ? products.slice(6, 11).map((p: any) => (
               <ProductCard key={p.id} id={p.id} name={p.name} price={p.price} imageUrl={p.imageUrl} category={p.category?.name || "Collection"} />
-            )) : [1,2,3,4].map(i => <div key={i} className="space-y-6 animate-pulse"><div className="aspect-[3/4] bg-slate-100" /><div className="h-4 bg-slate-100 w-3/4" /></div>)}
+            )) : [1,2,3,4,5].map(i => <div key={i} className="space-y-6 animate-pulse"><div className="aspect-[3/4] bg-slate-100" /><div className="h-4 bg-slate-100 w-3/4" /></div>)}
           </div>
         </div>
       </section>
