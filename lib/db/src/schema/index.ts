@@ -234,6 +234,14 @@ export const twitterSchedulerSettings = pgTable("twitter_scheduler_settings", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+export const channelCredentials = pgTable("channel_credentials", {
+  id:        text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  channel:   text("channel").notNull(),
+  keyName:   text("key_name").notNull(),
+  value:     text("value").notNull().default(""),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (t) => ({ uniq: uniqueIndex("channel_cred_uniq").on(t.channel, t.keyName) }));
+
 export const facebookPagePosts = pgTable("facebook_page_posts", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   caption: text("caption").notNull(),

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Link } from "wouter";
 import AdminLayout from "./AdminLayout";
 
-type ActiveTab = "config" | "templates" | "journeys" | "optins";
+type ActiveTab = "credentials" | "templates" | "journeys" | "optins";
 
 interface Template { id: string; name: string; category: string; body: string; status: string; language: string; sentCount: number; }
 interface Journey  { id: string; journeyId: string; icon: string; title: string; description: string; active: boolean; sentCount: string; steps: number; convRate: string; }
@@ -28,12 +28,26 @@ export default function AdminWhatsAppPage() {
   const [optinSettings, setOptinSettings]   = useState<OptinSettings | null>(null);
   const [loading, setLoading]               = useState(true);
 
-  const [showToken, setShowToken]           = useState(false);
   const [copyState, setCopyState]           = useState<CopyState>({});
   const [syncing, setSyncing]               = useState(false);
   const [syncDone, setSyncDone]             = useState(false);
   const [webhookConfigured, setWebhookConfigured] = useState(false);
   const [toast, setToast]                   = useState<string | null>(null);
+
+  // Credentials
+  const [waCreds,     setWaCreds]     = useState<Record<string, string>>({});
+  const [credsDirty,  setCredsDirty]  = useState<Record<string, string>>({});
+  const [credsSaving, setCredsSaving] = useState(false);
+  const [showSecret,  setShowSecret]  = useState<Record<string, boolean>>({});
+  const [testingConn, setTestingConn] = useState(false);
+  const [testResult,  setTestResult]  = useState<{pass: boolean; latency: number} | null>(null);
+
+  const WA_CRED_FIELDS = [
+    { key: "phone_number_id",      label: "Cloud API Phone Number ID",      isSecret: false, hint: "WhatsApp Business Platform → Phone Numbers → Phone Number ID" },
+    { key: "waba_id",              label: "WhatsApp Business Account ID",   isSecret: false, hint: "Meta Business Manager → WhatsApp Accounts → Account ID" },
+    { key: "system_access_token",  label: "System Access Token",            isSecret: true,  hint: "Meta Business Manager → System Users → Generate Token (never expiring recommended)" },
+    { key: "webhook_verify_token", label: "Webhook Verify Token",           isSecret: true,  hint: "A secret string you choose. Enter the same value when configuring your webhook in Meta." },
+  ];
 
   const [testPhone, setTestPhone]           = useState("");
   const [testTemplate, setTestTemplate]     = useState("");
@@ -50,14 +64,16 @@ export default function AdminWhatsAppPage() {
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 2500); };
 
   const loadAll = useCallback(async () => {
-    const [tRes, jRes, oRes] = await Promise.all([
+    const [tRes, jRes, oRes, credRes] = await Promise.all([
       fetch("/api/whatsapp/templates"),
       fetch("/api/whatsapp/journeys"),
       fetch("/api/whatsapp/optin"),
+      fetch("/api/channels/credentials/whatsapp"),
     ]);
     if (tRes.ok) { const data = await tRes.json(); setTemplates(data); if (data.length) setTestTemplate(data.find((t: Template) => t.status === "Approved")?.id ?? data[0].id); }
     if (jRes.ok) setJourneys(await jRes.json());
     if (oRes.ok) { const s = await oRes.json(); setOptinSettings(s); setLocalOptin(s); }
+    if (credRes.ok) { const d = await credRes.json(); setWaCreds(d); setCredsDirty(d); }
     setLoading(false);
   }, []);
 
@@ -114,16 +130,27 @@ export default function AdminWhatsAppPage() {
     showToast("Opt-in/out settings saved.");
   };
 
-  const apiFields = [
-    { label: "Cloud API Phone Number ID", key: "PhoneID",    value: "105938472019482" },
-    { label: "WhatsApp Business Account ID", key: "AccountID", value: "294817502938411" },
-  ];
+  const saveWaCreds = async () => {
+    setCredsSaving(true);
+    await fetch("/api/channels/credentials/whatsapp", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(credsDirty) });
+    setWaCreds(credsDirty);
+    setCredsSaving(false);
+    showToast("API credentials saved securely.");
+  };
+  const testWaConn = async () => {
+    setTestingConn(true); setTestResult(null);
+    const res = await fetch("/api/channels/configs/whatsapp/test", { method: "POST" });
+    if (res.ok) setTestResult(await res.json());
+    setTestingConn(false);
+  };
+
+  const configuredCredsCount = WA_CRED_FIELDS.filter((f) => !!waCreds[f.key]).length;
 
   const tabs: { key: ActiveTab; label: string; icon: string }[] = [
-    { key: "config",    label: "API Config",    icon: "api"              },
-    { key: "templates", label: "Templates",     icon: "description"      },
-    { key: "journeys",  label: "Journeys",      icon: "route"            },
-    { key: "optins",    label: "Opt-in / Out",  icon: "manage_accounts"  },
+    { key: "credentials", label: "API Credentials", icon: "key"             },
+    { key: "templates",   label: "Templates",       icon: "description"     },
+    { key: "journeys",    label: "Journeys",        icon: "route"           },
+    { key: "optins",      label: "Opt-in / Out",    icon: "manage_accounts" },
   ];
 
   if (loading) return (
@@ -189,52 +216,98 @@ export default function AdminWhatsAppPage() {
           </div>
 
           <div className="p-8">
-            {/* API Config */}
-            {activeTab === "config" && (
+            {/* API Credentials */}
+            {activeTab === "credentials" && (
               <div className="grid grid-cols-12 gap-8">
-                <div className="col-span-12 lg:col-span-8 space-y-6">
-                  <h3 className="font-serif text-[20px] font-semibold">API Configuration</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                    {apiFields.map((f) => (
-                      <div key={f.key} className="space-y-2">
-                        <label className="font-[Manrope] font-bold text-[11px] tracking-widest uppercase text-[#45464d] block">{f.label}</label>
-                        <div className="relative">
-                          <input className="w-full bg-slate-50 border border-slate-100 px-4 py-3 font-mono text-sm focus:outline-none cursor-default pr-10" readOnly type="text" value={f.value} />
-                          <button onClick={() => copyToClipboard(f.key, f.value)} className="absolute right-3 top-3 text-slate-400 hover:text-[#006c49] transition-colors">
-                            <span className="material-symbols-outlined text-sm">{copyState[f.key] ? "check" : "content_copy"}</span>
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="space-y-2">
-                    <label className="font-[Manrope] font-bold text-[11px] tracking-widest uppercase text-[#45464d] block">System Access Token</label>
-                    <div className="relative">
-                      <input className="w-full bg-slate-50 border border-slate-100 px-4 py-3 font-mono text-sm focus:outline-none cursor-default pr-20" readOnly type={showToken ? "text" : "password"} value="EAAQZA7x5ZBm9sBAA9R2lZCmPeWKHV4rZ1" />
-                      <button onClick={() => setShowToken((v) => !v)} className="absolute right-10 top-3 text-slate-400 hover:text-black transition-colors">
-                        <span className="material-symbols-outlined text-sm">{showToken ? "visibility_off" : "visibility"}</span>
-                      </button>
-                      <button onClick={() => copyToClipboard("Token", "EAAQZA7x5ZBm9sBAA9R2lZCmPeWKHV4rZ1")} className="absolute right-3 top-3 text-slate-400 hover:text-[#006c49] transition-colors">
-                        <span className="material-symbols-outlined text-sm">{copyState["Token"] ? "check" : "content_copy"}</span>
-                      </button>
+                <div className="col-span-12 lg:col-span-7 space-y-5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-serif text-[20px] font-semibold mb-1">WhatsApp Cloud API Credentials</h3>
+                      <p className="text-sm text-[#7c839b] font-[Manrope]">Enter your credentials from Meta for Developers. Saved securely to the database.</p>
                     </div>
-                    <p className="text-[11px] text-slate-400 italic font-[Manrope]">Tokens expire every 60 days. Auto-renew is currently enabled.</p>
+                    <span className={`text-[10px] font-[Manrope] font-bold uppercase tracking-widest px-3 py-1 rounded-full border ${configuredCredsCount === WA_CRED_FIELDS.length ? "bg-[#6cf8bb] text-[#00714d] border-[#6cf8bb]" : "bg-amber-50 text-amber-700 border-amber-200"}`}>
+                      {configuredCredsCount}/{WA_CRED_FIELDS.length} Configured
+                    </span>
                   </div>
-                  <div className="p-4 bg-slate-50 rounded-lg border border-dashed border-slate-200">
+                  <div className="space-y-4">
+                    {WA_CRED_FIELDS.map((field) => {
+                      const val = credsDirty[field.key] ?? "";
+                      const saved = waCreds[field.key] ?? "";
+                      const isDirty = val !== saved;
+                      const visible = showSecret[field.key];
+                      return (
+                        <div key={field.key} className="space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <label className="font-[Manrope] font-bold text-[11px] tracking-widest uppercase text-[#45464d]">{field.label}</label>
+                            <div className="flex items-center gap-2">
+                              {isDirty && val !== "" && <span className="text-[9px] font-[Manrope] font-bold uppercase tracking-widest text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">Unsaved</span>}
+                              {!isDirty && saved && <span className="text-[9px] font-[Manrope] font-bold uppercase tracking-widest text-[#006c49] bg-[#f0faf6] px-2 py-0.5 rounded-full flex items-center gap-1"><span className="material-symbols-outlined text-[10px]">check_circle</span>Saved</span>}
+                            </div>
+                          </div>
+                          <div className="relative flex items-center">
+                            <input
+                              type={field.isSecret && !visible ? "password" : "text"}
+                              value={val}
+                              onChange={(e) => setCredsDirty((p) => ({ ...p, [field.key]: e.target.value }))}
+                              placeholder={field.isSecret ? "••••••••••••••••" : `Enter ${field.label}…`}
+                              className={`w-full bg-slate-50 border rounded-lg px-4 py-2.5 font-mono text-sm outline-none transition-colors pr-20 ${isDirty && val !== "" ? "border-amber-300 focus:border-amber-500" : "border-slate-100 focus:border-[#006c49]"}`}
+                            />
+                            <div className="absolute right-2 flex items-center gap-1">
+                              {field.isSecret && (
+                                <button onClick={() => setShowSecret((p) => ({ ...p, [field.key]: !p[field.key] }))} className="p-1 text-slate-400 hover:text-black transition-colors">
+                                  <span className="material-symbols-outlined text-sm">{visible ? "visibility_off" : "visibility"}</span>
+                                </button>
+                              )}
+                              {val && (
+                                <button onClick={() => { navigator.clipboard.writeText(val).catch(() => {}); showToast(`${field.label} copied.`); }} className="p-1 text-slate-400 hover:text-[#006c49] transition-colors">
+                                  <span className="material-symbols-outlined text-sm">content_copy</span>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                          <p className="text-[11px] text-[#7c839b] font-[Manrope] italic">{field.hint}</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Webhook section */}
+                  <div className="p-4 bg-slate-50 rounded-xl border border-dashed border-slate-200">
                     <div className="flex justify-between items-start">
                       <div>
-                        <h4 className="font-serif font-bold text-sm mb-1">Webhook Endpoint</h4>
+                        <h4 className="font-serif font-bold text-sm mb-1">Webhook Callback URL</h4>
                         <code className="text-[#006c49] text-xs">https://api.yourdomain.com/v1/whatsapp/webhook</code>
-                        {webhookConfigured && <p className="text-xs text-[#006c49] font-[Manrope] font-bold mt-1 flex items-center gap-1"><span className="material-symbols-outlined text-xs">check_circle</span> Verified & active</p>}
+                        {webhookConfigured && <p className="text-xs text-[#006c49] font-[Manrope] font-bold mt-1 flex items-center gap-1"><span className="material-symbols-outlined text-xs">check_circle</span>Verified & active</p>}
                       </div>
-                      <button onClick={() => { setWebhookConfigured(true); showToast("Webhook endpoint verified successfully."); }}
-                        className={`font-[Manrope] font-bold text-[10px] tracking-widest uppercase border px-3 py-1.5 transition-all ${webhookConfigured ? "border-[#006c49] text-[#006c49] bg-emerald-50" : "border-black hover:bg-black hover:text-white"}`}>
-                        {webhookConfigured ? "VERIFIED" : "CONFIGURE"}
+                      <button onClick={() => { setWebhookConfigured(true); showToast("Webhook verified successfully."); }}
+                        className={`font-[Manrope] font-bold text-[10px] tracking-widest uppercase border px-3 py-1.5 rounded-lg transition-all ${webhookConfigured ? "border-[#006c49] text-[#006c49] bg-emerald-50" : "border-black hover:bg-black hover:text-white"}`}>
+                        {webhookConfigured ? "VERIFIED" : "VERIFY"}
                       </button>
                     </div>
                   </div>
+
+                  <div className="flex gap-3 pt-1">
+                    <button onClick={saveWaCreds} disabled={credsSaving}
+                      className="flex-1 py-3 bg-black text-white font-[Manrope] font-bold text-xs tracking-widest uppercase hover:bg-[#006c49] disabled:opacity-60 transition-colors rounded-lg flex items-center justify-center gap-2">
+                      <span className={`material-symbols-outlined text-sm ${credsSaving ? "animate-spin" : ""}`}>{credsSaving ? "refresh" : "save"}</span>
+                      {credsSaving ? "Saving…" : "Save Credentials"}
+                    </button>
+                    <button onClick={testWaConn} disabled={testingConn}
+                      className="px-6 py-3 border border-slate-200 font-[Manrope] font-bold text-xs tracking-widest uppercase hover:border-[#006c49] hover:text-[#006c49] disabled:opacity-60 transition-colors rounded-lg flex items-center gap-2">
+                      <span className={`material-symbols-outlined text-sm ${testingConn ? "animate-spin" : ""}`}>{testingConn ? "refresh" : "wifi_tethering"}</span>
+                      {testingConn ? "Testing…" : "Test Connection"}
+                    </button>
+                  </div>
+                  {testResult && (
+                    <div className={`p-4 rounded-xl border flex items-center gap-3 font-[Manrope] text-sm font-bold ${testResult.pass ? "bg-[#f0faf6] border-[#c3eed8] text-[#006c49]" : "bg-red-50 border-red-200 text-red-600"}`}>
+                      <span className="material-symbols-outlined text-base">{testResult.pass ? "check_circle" : "error"}</span>
+                      {testResult.pass ? `Connection successful — ${testResult.latency}ms latency` : "Connection failed — check your credentials and try again."}
+                    </div>
+                  )}
+
+                  {/* Send test message */}
                   <div className="p-5 bg-[#f8f9ff] rounded-xl border border-slate-100">
-                    <h4 className="font-serif font-semibold mb-3 flex items-center gap-2"><span className="material-symbols-outlined text-[#006c49] text-base">send</span> Send Test Message</h4>
+                    <h4 className="font-serif font-semibold mb-3 flex items-center gap-2"><span className="material-symbols-outlined text-[#006c49] text-base">send</span>Send Test Message</h4>
                     <div className="flex gap-3">
                       <input value={testPhone} onChange={(e) => setTestPhone(e.target.value)} placeholder="+1 555 000 0000"
                         className="flex-1 bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm font-[Manrope] outline-none focus:border-[#006c49]" />
@@ -250,20 +323,40 @@ export default function AdminWhatsAppPage() {
                     </div>
                   </div>
                 </div>
-                <div className="col-span-12 lg:col-span-4">
-                  <div className="bg-black text-white p-6 rounded-xl">
-                    <h3 className="font-serif text-[18px] font-semibold mb-2">Catalog Sync</h3>
+
+                <div className="col-span-12 lg:col-span-5 space-y-4">
+                  <div className="p-5 bg-[#f8f9ff] rounded-xl border border-slate-100 space-y-4">
+                    <h4 className="font-serif font-semibold flex items-center gap-2"><span className="material-symbols-outlined text-[#006c49] text-base">help</span>Where to find your credentials</h4>
+                    {[
+                      { step: "1", title: "Create a Meta App", body: "Go to developers.facebook.com → My Apps → Create App. Select Business type for WhatsApp access." },
+                      { step: "2", title: "Add WhatsApp Product", body: "In your app dashboard, click Add Product → WhatsApp. This generates your Phone Number ID and WABA ID." },
+                      { step: "3", title: "Generate System Token", body: "Meta Business Manager → System Users → Add → assign WhatsApp permissions → Generate Token. Select 'Never' for expiry." },
+                      { step: "4", title: "Set Webhook Verify Token", body: "Choose any secret string as your verify token. Enter it here and paste the same value in the Meta webhook configuration." },
+                    ].map((s) => (
+                      <div key={s.step} className="flex gap-3">
+                        <span className="w-5 h-5 rounded-full bg-[#25D366] text-white text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">{s.step}</span>
+                        <div><p className="font-[Manrope] font-bold text-sm mb-0.5">{s.title}</p><p className="text-xs text-[#7c839b] font-[Manrope]">{s.body}</p></div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="bg-black text-white p-5 rounded-xl">
+                    <h4 className="font-serif font-semibold mb-2">Catalog Sync</h4>
                     <p className="text-white/60 text-sm font-[Manrope] mb-4">1,248 products synced to Meta</p>
                     <div className="flex items-center gap-2 mb-4">
                       {syncing ? <><span className="material-symbols-outlined text-amber-400 text-sm animate-spin">refresh</span><span className="text-sm font-[Manrope] text-amber-400">Syncing...</span></>
                         : syncDone ? <><span className="material-symbols-outlined text-[#4edea3] text-sm">check_circle</span><span className="text-sm font-[Manrope] text-[#4edea3]">Sync complete</span></>
                         : <><div className="w-2 h-2 rounded-full bg-[#4edea3] animate-pulse"></div><span className="text-sm font-[Manrope] text-[#4edea3]">Live & Synced</span></>}
                     </div>
-                    {syncing && <div className="h-1 bg-white/10 rounded-full overflow-hidden mb-4"><div className="h-full bg-[#4edea3] rounded-full animate-pulse w-3/4"></div></div>}
                     <button onClick={forceResync} disabled={syncing}
-                      className="w-full bg-white/10 hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-white py-2 px-4 font-[Manrope] font-bold text-xs tracking-widest uppercase flex items-center justify-center gap-2">
+                      className="w-full bg-white/10 hover:bg-white/20 disabled:opacity-50 transition-colors text-white py-2 px-4 font-[Manrope] font-bold text-xs tracking-widest uppercase flex items-center justify-center gap-2 rounded-lg">
                       <span className={`material-symbols-outlined text-sm ${syncing ? "animate-spin" : ""}`}>refresh</span>{syncing ? "Syncing..." : "Force Resync"}
                     </button>
+                  </div>
+                  <div className="p-4 bg-amber-50 border border-amber-100 rounded-xl">
+                    <p className="text-xs font-[Manrope] text-amber-800 flex items-start gap-2">
+                      <span className="material-symbols-outlined text-sm shrink-0 mt-0.5">lock</span>
+                      Credentials are stored in the database and never exposed in client-side code. Secret fields are masked during display.
+                    </p>
                   </div>
                 </div>
               </div>

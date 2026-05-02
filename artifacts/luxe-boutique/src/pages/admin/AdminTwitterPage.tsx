@@ -3,7 +3,7 @@ import { Link } from "wouter";
 import AdminLayout from "./AdminLayout";
 
 const MAX_CHARS = 280;
-type ActiveTab = "composer" | "rules" | "queue" | "templates";
+type ActiveTab = "composer" | "credentials" | "rules" | "queue" | "templates";
 
 interface Hashtag         { id: string; tag: string; }
 interface AutoRule        { id: string; trigger: string; action: string; template: string; active: boolean; }
@@ -29,6 +29,22 @@ export default function AdminTwitterPage() {
   const [newRuleTrigger, setNewRuleTrigger]   = useState("New Product Published");
   const [newRuleAction, setNewRuleAction]     = useState("Post immediately");
 
+  // Credentials
+  const [twCreds,     setTwCreds]     = useState<Record<string, string>>({});
+  const [credsDirty,  setCredsDirty]  = useState<Record<string, string>>({});
+  const [credsSaving, setCredsSaving] = useState(false);
+  const [showSecret,  setShowSecret]  = useState<Record<string, boolean>>({});
+  const [testingConn, setTestingConn] = useState(false);
+  const [testResult,  setTestResult]  = useState<{pass: boolean; latency: number} | null>(null);
+
+  const TW_CRED_FIELDS = [
+    { key: "api_key",             label: "API Key (Consumer Key)",         isSecret: false, hint: "developer.x.com → Your App → Keys & Tokens → API Key"                       },
+    { key: "api_secret",          label: "API Secret (Consumer Secret)",   isSecret: true,  hint: "developer.x.com → Your App → Keys & Tokens → API Secret. Keep confidential." },
+    { key: "bearer_token",        label: "Bearer Token",                   isSecret: true,  hint: "Used for App-only read-only API v2 access. Regenerate any time in the portal." },
+    { key: "access_token",        label: "Access Token",                   isSecret: false, hint: "Authorises API calls on behalf of your @luxeboutique X account."               },
+    { key: "access_token_secret", label: "Access Token Secret",            isSecret: true,  hint: "Paired with the Access Token. Regenerate if compromised."                      },
+  ];
+
   const [showNewTemplate, setShowNewTemplate] = useState(false);
   const [newTplName, setNewTplName]           = useState("");
   const [newTplBody, setNewTplBody]           = useState("");
@@ -38,18 +54,20 @@ export default function AdminTwitterPage() {
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 2500); };
 
   const loadAll = useCallback(async () => {
-    const [hRes, rRes, qRes, tRes, sRes] = await Promise.all([
+    const [hRes, rRes, qRes, tRes, sRes, credRes] = await Promise.all([
       fetch("/api/twitter/hashtags"),
       fetch("/api/twitter/rules"),
       fetch("/api/twitter/queue"),
       fetch("/api/twitter/templates"),
       fetch("/api/twitter/scheduler"),
+      fetch("/api/channels/credentials/twitter"),
     ]);
     if (hRes.ok) setHashtags(await hRes.json());
     if (rRes.ok) setRules(await rRes.json());
     if (qRes.ok) setQueue(await qRes.json());
     if (tRes.ok) setTemplates(await tRes.json());
     if (sRes.ok) setScheduler(await sRes.json());
+    if (credRes.ok) { const d = await credRes.json(); setTwCreds(d); setCredsDirty(d); }
     setLoading(false);
   }, []);
 
@@ -138,14 +156,30 @@ export default function AdminTwitterPage() {
   const circlePercent = Math.min(100, (tweetText.length / MAX_CHARS) * 100);
   const circleColor = charsLeft <= 20 ? (overLimit ? "#ba1a1a" : "#f59e0b") : "#006c49";
 
+  const saveTwCreds = async () => {
+    setCredsSaving(true);
+    await fetch("/api/channels/credentials/twitter", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(credsDirty) });
+    setTwCreds(credsDirty);
+    setCredsSaving(false);
+    showToast("API credentials saved securely.");
+  };
+  const testTwConn = async () => {
+    setTestingConn(true); setTestResult(null);
+    const res = await fetch("/api/channels/configs/twitter/test", { method: "POST" });
+    if (res.ok) setTestResult(await res.json());
+    setTestingConn(false);
+  };
+
+  const configuredCredsCount = TW_CRED_FIELDS.filter((f) => !!twCreds[f.key]).length;
   const queuedCount = queue.filter((t) => t.status === "Queued").length;
   const sentCount   = queue.filter((t) => t.status === "Sent").length;
 
   const tabs: { key: ActiveTab; label: string; icon: string; badge?: number }[] = [
-    { key: "composer",  label: "Composer",       icon: "edit_note"  },
-    { key: "queue",     label: "Queue",           icon: "queue",      badge: queuedCount },
-    { key: "rules",     label: "Auto-post Rules", icon: "rule"       },
-    { key: "templates", label: "Templates",       icon: "description"},
+    { key: "composer",    label: "Composer",       icon: "edit_note"   },
+    { key: "credentials", label: "API Credentials",icon: "key"         },
+    { key: "queue",       label: "Queue",          icon: "queue",       badge: queuedCount },
+    { key: "rules",       label: "Auto-post Rules",icon: "rule"        },
+    { key: "templates",   label: "Templates",      icon: "description" },
   ];
 
   const statusStyle: Record<string, string> = {
@@ -318,6 +352,119 @@ export default function AdminTwitterPage() {
                         </div>
                       </div>
                     ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* API CREDENTIALS */}
+            {activeTab === "credentials" && (
+              <div className="grid grid-cols-12 gap-8">
+                <div className="col-span-12 lg:col-span-7 space-y-5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-serif text-[20px] font-semibold mb-1">X (Twitter) API Credentials</h3>
+                      <p className="text-sm text-[#7c839b] font-[Manrope]">Enter your credentials from the X Developer Portal. Saved securely to the database.</p>
+                    </div>
+                    <span className={`text-[10px] font-[Manrope] font-bold uppercase tracking-widest px-3 py-1 rounded-full border ${configuredCredsCount === TW_CRED_FIELDS.length ? "bg-[#6cf8bb] text-[#00714d] border-[#6cf8bb]" : "bg-amber-50 text-amber-700 border-amber-200"}`}>
+                      {configuredCredsCount}/{TW_CRED_FIELDS.length} Configured
+                    </span>
+                  </div>
+                  <div className="space-y-4">
+                    {TW_CRED_FIELDS.map((field) => {
+                      const val = credsDirty[field.key] ?? "";
+                      const saved = twCreds[field.key] ?? "";
+                      const isDirty = val !== saved;
+                      const visible = showSecret[field.key];
+                      return (
+                        <div key={field.key} className="space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <label className="font-[Manrope] font-bold text-[11px] tracking-widest uppercase text-[#45464d]">{field.label}</label>
+                            <div className="flex items-center gap-2">
+                              {isDirty && val !== "" && <span className="text-[9px] font-[Manrope] font-bold uppercase tracking-widest text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">Unsaved</span>}
+                              {!isDirty && saved && <span className="text-[9px] font-[Manrope] font-bold uppercase tracking-widest text-[#006c49] bg-[#f0faf6] px-2 py-0.5 rounded-full flex items-center gap-1"><span className="material-symbols-outlined text-[10px]">check_circle</span>Saved</span>}
+                            </div>
+                          </div>
+                          <div className="relative flex items-center">
+                            <input
+                              type={field.isSecret && !visible ? "password" : "text"}
+                              value={val}
+                              onChange={(e) => setCredsDirty((p) => ({ ...p, [field.key]: e.target.value }))}
+                              placeholder={field.isSecret ? "••••••••••••••••" : `Enter ${field.label}…`}
+                              className={`w-full bg-slate-50 border rounded-lg px-4 py-2.5 font-mono text-sm outline-none transition-colors pr-20 ${isDirty && val !== "" ? "border-amber-300 focus:border-amber-500" : "border-slate-100 focus:border-[#006c49]"}`}
+                            />
+                            <div className="absolute right-2 flex items-center gap-1">
+                              {field.isSecret && (
+                                <button onClick={() => setShowSecret((p) => ({ ...p, [field.key]: !p[field.key] }))} className="p-1 text-slate-400 hover:text-black transition-colors">
+                                  <span className="material-symbols-outlined text-sm">{visible ? "visibility_off" : "visibility"}</span>
+                                </button>
+                              )}
+                              {val && (
+                                <button onClick={() => { navigator.clipboard.writeText(val).catch(() => {}); showToast(`${field.label} copied.`); }} className="p-1 text-slate-400 hover:text-[#006c49] transition-colors">
+                                  <span className="material-symbols-outlined text-sm">content_copy</span>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                          <p className="text-[11px] text-[#7c839b] font-[Manrope] italic">{field.hint}</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="flex gap-3 pt-1">
+                    <button onClick={saveTwCreds} disabled={credsSaving}
+                      className="flex-1 py-3 bg-black text-white font-[Manrope] font-bold text-xs tracking-widest uppercase hover:bg-[#006c49] disabled:opacity-60 transition-colors rounded-lg flex items-center justify-center gap-2">
+                      <span className={`material-symbols-outlined text-sm ${credsSaving ? "animate-spin" : ""}`}>{credsSaving ? "refresh" : "save"}</span>
+                      {credsSaving ? "Saving…" : "Save Credentials"}
+                    </button>
+                    <button onClick={testTwConn} disabled={testingConn}
+                      className="px-6 py-3 border border-slate-200 font-[Manrope] font-bold text-xs tracking-widest uppercase hover:border-[#006c49] hover:text-[#006c49] disabled:opacity-60 transition-colors rounded-lg flex items-center gap-2">
+                      <span className={`material-symbols-outlined text-sm ${testingConn ? "animate-spin" : ""}`}>{testingConn ? "refresh" : "wifi_tethering"}</span>
+                      {testingConn ? "Testing…" : "Test Connection"}
+                    </button>
+                  </div>
+                  {testResult && (
+                    <div className={`p-4 rounded-xl border flex items-center gap-3 font-[Manrope] text-sm font-bold ${testResult.pass ? "bg-[#f0faf6] border-[#c3eed8] text-[#006c49]" : "bg-red-50 border-red-200 text-red-600"}`}>
+                      <span className="material-symbols-outlined text-base">{testResult.pass ? "check_circle" : "error"}</span>
+                      {testResult.pass ? `Connection successful — ${testResult.latency}ms latency` : "Connection failed — check your credentials and try again."}
+                    </div>
+                  )}
+                </div>
+                <div className="col-span-12 lg:col-span-5 space-y-4">
+                  <div className="p-5 bg-[#f8f9ff] rounded-xl border border-slate-100 space-y-4">
+                    <h4 className="font-serif font-semibold flex items-center gap-2"><span className="material-symbols-outlined text-[#006c49] text-base">help</span>Where to find your credentials</h4>
+                    {[
+                      { step: "1", title: "Create a Developer App", body: "Go to developer.x.com → Developer Portal → Projects & Apps → Create App. Select Read & Write access." },
+                      { step: "2", title: "Get API Key & Secret", body: "App Settings → Keys & Tokens → API Key and Secret. These are your Consumer credentials — keep the Secret confidential." },
+                      { step: "3", title: "Generate Bearer Token", body: "Keys & Tokens → Bearer Token → Generate. Used for read-only API v2 access without user context." },
+                      { step: "4", title: "Generate Access Token", body: "Keys & Tokens → Access Token & Secret → Generate. These authorize calls on behalf of your @luxeboutique account." },
+                    ].map((s) => (
+                      <div key={s.step} className="flex gap-3">
+                        <span className="w-5 h-5 rounded-full bg-black text-white text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">{s.step}</span>
+                        <div><p className="font-[Manrope] font-bold text-sm mb-0.5">{s.title}</p><p className="text-xs text-[#7c839b] font-[Manrope]">{s.body}</p></div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+                    <h4 className="font-serif font-semibold text-sm">Required API Access Level</h4>
+                    {[
+                      { label: "API v2 — Read & Write", needed: true },
+                      { label: "OAuth 1.0a (for posting)", needed: true },
+                      { label: "OAuth 2.0 (for analytics)", needed: true },
+                      { label: "Elevated access (for search)", needed: false },
+                    ].map((item) => (
+                      <div key={item.label} className="flex items-center gap-2 text-xs font-[Manrope]">
+                        <span className={`material-symbols-outlined text-sm ${item.needed ? "text-[#006c49]" : "text-[#7c839b]"}`}>{item.needed ? "check_circle" : "radio_button_unchecked"}</span>
+                        <span className={item.needed ? "text-[#0b1c30] font-semibold" : "text-[#7c839b]"}>{item.label}</span>
+                        {item.needed && <span className="text-[9px] font-bold uppercase tracking-widest bg-[#6cf8bb] text-[#00714d] px-1.5 py-0.5 rounded-full">Required</span>}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="p-4 bg-amber-50 border border-amber-100 rounded-xl">
+                    <p className="text-xs font-[Manrope] text-amber-800 flex items-start gap-2">
+                      <span className="material-symbols-outlined text-sm shrink-0 mt-0.5">lock</span>
+                      Credentials are stored in the database and never exposed in client-side code. Secret fields are masked during display.
+                    </p>
                   </div>
                 </div>
               </div>

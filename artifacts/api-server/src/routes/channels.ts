@@ -1,9 +1,9 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import {
-  channelConfigs, channelEventLogs, channelWebhooks,
+  channelConfigs, channelEventLogs, channelWebhooks, channelCredentials,
 } from "@workspace/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 import { getSession } from "../lib/auth";
 
 const router = Router();
@@ -161,6 +161,42 @@ router.put("/webhooks/:webhookId", async (req, res) => {
       .returning();
     res.json(updated);
   } catch { res.status(500).json({ error: "Failed to update webhook" }); }
+});
+
+// GET /api/channels/credentials/:channel
+router.get("/credentials/:channel", async (req, res) => {
+  try {
+    const user = await getSession(req);
+    if (!user || user.role !== "ADMIN") return res.status(401).json({ error: "Unauthorized" });
+    const creds = await db.select().from(channelCredentials)
+      .where(eq(channelCredentials.channel, req.params.channel));
+    // Return as { keyName: value } map
+    const map: Record<string, string> = {};
+    for (const c of creds) map[c.keyName] = c.value;
+    res.json(map);
+  } catch { res.status(500).json({ error: "Failed" }); }
+});
+
+// PUT /api/channels/credentials/:channel
+router.put("/credentials/:channel", async (req, res) => {
+  try {
+    const user = await getSession(req);
+    if (!user || user.role !== "ADMIN") return res.status(401).json({ error: "Unauthorized" });
+    const entries = Object.entries(req.body as Record<string, string>);
+    for (const [keyName, value] of entries) {
+      const existing = await db.select().from(channelCredentials)
+        .where(and(eq(channelCredentials.channel, req.params.channel), eq(channelCredentials.keyName, keyName)))
+        .limit(1);
+      if (existing.length) {
+        await db.update(channelCredentials)
+          .set({ value, updatedAt: new Date() })
+          .where(eq(channelCredentials.id, existing[0].id));
+      } else {
+        await db.insert(channelCredentials).values({ channel: req.params.channel, keyName, value });
+      }
+    }
+    res.json({ ok: true });
+  } catch { res.status(500).json({ error: "Failed" }); }
 });
 
 export default router;

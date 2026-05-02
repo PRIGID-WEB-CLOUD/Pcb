@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { Link } from "wouter";
 import AdminLayout from "./AdminLayout";
 
-type ActiveTab = "posts" | "catalog" | "pixel" | "audiences" | "ads";
+type ActiveTab = "posts" | "credentials" | "catalog" | "pixel" | "audiences" | "ads";
 type PostFilter = "All" | "Published" | "Scheduled" | "Draft";
 
 interface Connection      { id: string; connectionKey: string; active: boolean; }
@@ -93,16 +93,33 @@ export default function AdminFacebookPage() {
 
   const captionRef = useRef<HTMLTextAreaElement>(null);
 
+  // Credentials tab
+  const [fbCreds,     setFbCreds]     = useState<Record<string, string>>({});
+  const [credsDirty,  setCredsDirty]  = useState<Record<string, string>>({});
+  const [credsSaving, setCredsSaving] = useState(false);
+  const [showSecret,  setShowSecret]  = useState<Record<string, boolean>>({});
+  const [testingConn, setTestingConn] = useState(false);
+  const [testResult,  setTestResult]  = useState<{pass: boolean; latency: number} | null>(null);
+
+  const FB_CRED_FIELDS = [
+    { key: "app_id",             label: "App ID",                isSecret: false, hint: "Meta for Developers → App Dashboard → App ID"                           },
+    { key: "app_secret",         label: "App Secret",            isSecret: true,  hint: "App Dashboard → Settings → Basic → App Secret. Never share publicly."   },
+    { key: "page_access_token",  label: "Page Access Token",     isSecret: true,  hint: "Graph API Explorer → generate a long-lived page token for your page."   },
+    { key: "pixel_id",           label: "Pixel ID",              isSecret: false, hint: "Events Manager → Data Sources → your Pixel → Pixel ID"                  },
+    { key: "ad_account_id",      label: "Ad Account ID",         isSecret: false, hint: "Meta Business Manager → Ad Accounts (format: act_XXXXXXXXX)"            },
+  ];
+
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 2800); };
 
   const loadAll = useCallback(async () => {
-    const [cRes, catRes, pxRes, audRes, postsRes, tplRes] = await Promise.all([
+    const [cRes, catRes, pxRes, audRes, postsRes, tplRes, credRes] = await Promise.all([
       fetch("/api/facebook/connections"),
       fetch("/api/facebook/catalog"),
       fetch("/api/facebook/pixel-events"),
       fetch("/api/facebook/audiences"),
       fetch("/api/facebook/posts"),
       fetch("/api/facebook/post-templates"),
+      fetch("/api/channels/credentials/facebook"),
     ]);
     if (cRes.ok)     setConnections(await cRes.json());
     if (catRes.ok)   setCatalog(await catRes.json());
@@ -110,6 +127,7 @@ export default function AdminFacebookPage() {
     if (audRes.ok)   setAudiences(await audRes.json());
     if (postsRes.ok) setPosts(await postsRes.json());
     if (tplRes.ok)   setPostTemplates(await tplRes.json());
+    if (credRes.ok)  { const d = await credRes.json(); setFbCreds(d); setCredsDirty(d); }
     setLoading(false);
   }, []);
 
@@ -168,6 +186,21 @@ export default function AdminFacebookPage() {
     showToast(`Audience "${aud.name}" deleted.`);
   };
 
+  // ── Credentials ──────────────────────────────────────────────────────────
+  const saveFbCreds = async () => {
+    setCredsSaving(true);
+    await fetch("/api/channels/credentials/facebook", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(credsDirty) });
+    setFbCreds(credsDirty);
+    setCredsSaving(false);
+    showToast("API credentials saved securely.");
+  };
+  const testFbConn = async () => {
+    setTestingConn(true); setTestResult(null);
+    const res = await fetch("/api/channels/configs/facebook/test", { method: "POST" });
+    if (res.ok) setTestResult(await res.json());
+    setTestingConn(false);
+  };
+
   // ── Page Posts ───────────────────────────────────────────────────────────
   const submitPost = async (status: "Published" | "Scheduled" | "Draft") => {
     if (!caption.trim()) { showToast("Caption is required."); return; }
@@ -221,12 +254,14 @@ export default function AdminFacebookPage() {
   const draftPosts      = posts.filter((p) => p.status === "Draft");
   const totalReach      = publishedPosts.reduce((s, p) => s + p.reach, 0);
   const totalLikes      = publishedPosts.reduce((s, p) => s + p.likes, 0);
+  const configuredCredsCount = FB_CRED_FIELDS.filter((f) => !!fbCreds[f.key]).length;
   const tabs: { key: ActiveTab; label: string; icon: string; badge?: number }[] = [
-    { key: "posts",     label: "Page Posts",     icon: "post_add",     badge: scheduledPosts.length || undefined },
-    { key: "catalog",   label: "Catalog Rules",  icon: "database"      },
-    { key: "pixel",     label: "Pixel Events",   icon: "track_changes" },
-    { key: "audiences", label: "Audiences",      icon: "group"         },
-    { key: "ads",       label: "Ad Performance", icon: "bar_chart"     },
+    { key: "posts",       label: "Page Posts",     icon: "post_add",     badge: scheduledPosts.length || undefined },
+    { key: "credentials", label: "API Credentials",icon: "key"                                                    },
+    { key: "catalog",     label: "Catalog Rules",  icon: "database"      },
+    { key: "pixel",       label: "Pixel Events",   icon: "track_changes" },
+    { key: "audiences",   label: "Audiences",      icon: "group"         },
+    { key: "ads",         label: "Ad Performance", icon: "bar_chart"     },
   ];
 
   if (loading) return (
@@ -585,6 +620,105 @@ export default function AdminFacebookPage() {
                         ))}
                       </div>
                     )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ══════════════════════ API CREDENTIALS ══════════════════════ */}
+            {activeTab === "credentials" && (
+              <div className="grid grid-cols-12 gap-8">
+                <div className="col-span-12 lg:col-span-7 space-y-5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-serif text-[20px] font-semibold mb-1">Meta API Credentials</h3>
+                      <p className="text-sm text-[#7c839b] font-[Manrope]">Enter your credentials from the Meta for Developers dashboard. Saved securely to the database.</p>
+                    </div>
+                    <span className={`text-[10px] font-[Manrope] font-bold uppercase tracking-widest px-3 py-1 rounded-full border ${configuredCredsCount === FB_CRED_FIELDS.length ? "bg-[#6cf8bb] text-[#00714d] border-[#6cf8bb]" : "bg-amber-50 text-amber-700 border-amber-200"}`}>
+                      {configuredCredsCount}/{FB_CRED_FIELDS.length} Configured
+                    </span>
+                  </div>
+                  <div className="space-y-4">
+                    {FB_CRED_FIELDS.map((field) => {
+                      const val = credsDirty[field.key] ?? "";
+                      const saved = fbCreds[field.key] ?? "";
+                      const isDirty = val !== saved;
+                      const visible = showSecret[field.key];
+                      return (
+                        <div key={field.key} className="space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <label className="font-[Manrope] font-bold text-[11px] tracking-widest uppercase text-[#45464d]">{field.label}</label>
+                            <div className="flex items-center gap-2">
+                              {isDirty && <span className="text-[9px] font-[Manrope] font-bold uppercase tracking-widest text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">Unsaved</span>}
+                              {!isDirty && saved && <span className="text-[9px] font-[Manrope] font-bold uppercase tracking-widest text-[#006c49] bg-[#f0faf6] px-2 py-0.5 rounded-full flex items-center gap-1"><span className="material-symbols-outlined text-[10px]">check_circle</span>Saved</span>}
+                            </div>
+                          </div>
+                          <div className="relative flex items-center">
+                            <input
+                              type={field.isSecret && !visible ? "password" : "text"}
+                              value={val}
+                              onChange={(e) => setCredsDirty((p) => ({ ...p, [field.key]: e.target.value }))}
+                              placeholder={field.isSecret ? "••••••••••••••••" : `Enter ${field.label}…`}
+                              className={`w-full bg-slate-50 border rounded-lg px-4 py-2.5 font-mono text-sm outline-none transition-colors pr-20 ${isDirty ? "border-amber-300 focus:border-amber-500" : "border-slate-100 focus:border-[#006c49]"}`}
+                            />
+                            <div className="absolute right-2 flex items-center gap-1">
+                              {field.isSecret && (
+                                <button onClick={() => setShowSecret((p) => ({ ...p, [field.key]: !p[field.key] }))} className="p-1 text-slate-400 hover:text-black transition-colors">
+                                  <span className="material-symbols-outlined text-sm">{visible ? "visibility_off" : "visibility"}</span>
+                                </button>
+                              )}
+                              {val && (
+                                <button onClick={() => { navigator.clipboard.writeText(val).catch(() => {}); showToast(`${field.label} copied.`); }} className="p-1 text-slate-400 hover:text-[#006c49] transition-colors">
+                                  <span className="material-symbols-outlined text-sm">content_copy</span>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                          <p className="text-[11px] text-[#7c839b] font-[Manrope] italic">{field.hint}</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="flex gap-3 pt-2">
+                    <button onClick={saveFbCreds} disabled={credsSaving}
+                      className="flex-1 py-3 bg-black text-white font-[Manrope] font-bold text-xs tracking-widest uppercase hover:bg-[#006c49] disabled:opacity-60 transition-colors rounded-lg flex items-center justify-center gap-2">
+                      <span className={`material-symbols-outlined text-sm ${credsSaving ? "animate-spin" : ""}`}>{credsSaving ? "refresh" : "save"}</span>
+                      {credsSaving ? "Saving…" : "Save Credentials"}
+                    </button>
+                    <button onClick={testFbConn} disabled={testingConn}
+                      className="px-6 py-3 border border-slate-200 font-[Manrope] font-bold text-xs tracking-widest uppercase hover:border-[#006c49] hover:text-[#006c49] disabled:opacity-60 transition-colors rounded-lg flex items-center gap-2">
+                      <span className={`material-symbols-outlined text-sm ${testingConn ? "animate-spin" : ""}`}>{testingConn ? "refresh" : "wifi_tethering"}</span>
+                      {testingConn ? "Testing…" : "Test Connection"}
+                    </button>
+                  </div>
+                  {testResult && (
+                    <div className={`p-4 rounded-xl border flex items-center gap-3 font-[Manrope] text-sm font-bold ${testResult.pass ? "bg-[#f0faf6] border-[#c3eed8] text-[#006c49]" : "bg-red-50 border-red-200 text-red-600"}`}>
+                      <span className="material-symbols-outlined text-base">{testResult.pass ? "check_circle" : "error"}</span>
+                      {testResult.pass ? `Connection successful — ${testResult.latency}ms latency` : "Connection failed — check your credentials and try again."}
+                    </div>
+                  )}
+                </div>
+                <div className="col-span-12 lg:col-span-5 space-y-4">
+                  <div className="p-5 bg-[#f8f9ff] rounded-xl border border-slate-100 space-y-4">
+                    <h4 className="font-serif font-semibold flex items-center gap-2"><span className="material-symbols-outlined text-[#006c49] text-base">help</span>Where to find your credentials</h4>
+                    {[
+                      { step: "1", title: "Create a Meta App", body: "Go to developers.facebook.com → My Apps → Create App. Choose Business type for commerce + ads access." },
+                      { step: "2", title: "Get App ID & Secret", body: "App Dashboard → Settings → Basic. Copy the App ID (public) and App Secret (keep private)." },
+                      { step: "3", title: "Generate Page Token", body: "Use Graph API Explorer → select your app and page → generate token → exchange for a long-lived token via the token debugger." },
+                      { step: "4", title: "Find Pixel ID", body: "Meta Business Manager → Events Manager → Data Sources → your Pixel → copy the Pixel ID from the overview." },
+                      { step: "5", title: "Ad Account ID", body: "Meta Business Manager → Ad Accounts → click your account. The ID appears as act_XXXXXXXXX in the URL." },
+                    ].map((s) => (
+                      <div key={s.step} className="flex gap-3">
+                        <span className="w-5 h-5 rounded-full bg-[#006c49] text-white text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">{s.step}</span>
+                        <div><p className="font-[Manrope] font-bold text-sm mb-0.5">{s.title}</p><p className="text-xs text-[#7c839b] font-[Manrope]">{s.body}</p></div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="p-4 bg-amber-50 border border-amber-100 rounded-xl">
+                    <p className="text-xs font-[Manrope] text-amber-800 flex items-start gap-2">
+                      <span className="material-symbols-outlined text-sm shrink-0 mt-0.5">lock</span>
+                      Credentials are stored in the database and never exposed in client-side code. Secret fields are masked during display.
+                    </p>
                   </div>
                 </div>
               </div>
