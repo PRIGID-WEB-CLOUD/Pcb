@@ -9,5 +9,6 @@ export const config = {
   matcher: [
     // Protected routes requiring authentication
     '/admin/:path*',
+    '/verify-otp',
   ],
 };
