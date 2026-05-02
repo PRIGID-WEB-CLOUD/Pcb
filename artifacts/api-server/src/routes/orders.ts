@@ -58,6 +58,9 @@ router.put("/", async (req, res) => {
     const { orderId, status } = req.body;
     if (!orderId || !status) return res.status(400).json({ error: "Missing orderId or status" });
 
+    const ALLOWED_STATUSES = ["PENDING", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED"];
+    if (!ALLOWED_STATUSES.includes(status)) return res.status(400).json({ error: `Invalid status. Must be one of: ${ALLOWED_STATUSES.join(", ")}` });
+
     const [updated] = await db.update(orders).set({ status }).where(eq(orders.id, orderId)).returning();
     res.json(updated);
   } catch { res.status(500).json({ error: "Failed to update order" }); }

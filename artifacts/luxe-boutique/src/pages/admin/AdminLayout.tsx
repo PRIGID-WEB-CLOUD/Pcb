@@ -9,6 +9,7 @@ interface AdminLayoutProps {
 const mainNavItems = [
   { icon: "dashboard", label: "Dashboard", href: "/admin" },
   { icon: "inventory_2", label: "Catalog", href: "/admin/catalog" },
+  { icon: "category", label: "Categories", href: "/admin/categories" },
   { icon: "shopping_bag", label: "Orders", href: "/admin/orders" },
   { icon: "group", label: "Customers", href: "/admin/customers" },
   { icon: "analytics", label: "Analytics", href: "/admin/analytics" },

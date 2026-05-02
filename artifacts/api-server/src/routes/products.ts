@@ -69,4 +69,35 @@ router.post("/", async (req, res) => {
   } catch { res.status(500).json({ error: "Failed to create product" }); }
 });
 
+router.put("/:id", async (req, res) => {
+  try {
+    const user = await getSession(req);
+    if (!user || user.role !== "ADMIN") return res.status(401).json({ error: "Unauthorized" });
+
+    const { id } = req.params;
+    const { name, description, price, imageUrl, categoryId } = req.body;
+    if (!name || !description || !price || !categoryId) return res.status(400).json({ error: "Missing required fields" });
+
+    const [product] = await db.update(products)
+      .set({ name, description, price: parseFloat(price), imageUrl, categoryId, updatedAt: new Date() })
+      .where(eq(products.id, id))
+      .returning();
+
+    if (!product) return res.status(404).json({ error: "Product not found" });
+    res.json(product);
+  } catch { res.status(500).json({ error: "Failed to update product" }); }
+});
+
+router.delete("/:id", async (req, res) => {
+  try {
+    const user = await getSession(req);
+    if (!user || user.role !== "ADMIN") return res.status(401).json({ error: "Unauthorized" });
+
+    const { id } = req.params;
+    const [deleted] = await db.delete(products).where(eq(products.id, id)).returning();
+    if (!deleted) return res.status(404).json({ error: "Product not found" });
+    res.json({ success: true });
+  } catch { res.status(500).json({ error: "Failed to delete product" }); }
+});
+
 export default router;

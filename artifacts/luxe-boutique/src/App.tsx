@@ -8,6 +8,7 @@ import { CartProvider } from "@/contexts/CartContext";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import CookieBanner from "@/components/CookieBanner";
+import AdminGuard from "@/components/AdminGuard";
 import HomePage from "@/pages/HomePage";
 import ProductsPage from "@/pages/ProductsPage";
 import ProductDetailPage from "@/pages/ProductDetailPage";
@@ -35,6 +36,7 @@ import AdminOrdersPage from "@/pages/admin/AdminOrdersPage";
 import AdminProductEditorPage from "@/pages/admin/AdminProductEditorPage";
 import AdminAnalyticsPage from "@/pages/admin/AdminAnalyticsPage";
 import AdminCustomersPage from "@/pages/admin/AdminCustomersPage";
+import AdminCategoriesPage from "@/pages/admin/AdminCategoriesPage";
 import AdminChannelHubPage from "@/pages/admin/AdminChannelHubPage";
 import AdminFacebookPage from "@/pages/admin/AdminFacebookPage";
 import AdminTwitterPage from "@/pages/admin/AdminTwitterPage";
@@ -87,17 +89,19 @@ function Router() {
       <Route path="/login" component={() => <AuthLayout><LoginPage /></AuthLayout>} />
       <Route path="/forgot-password" component={() => <AuthLayout><ForgotPasswordPage /></AuthLayout>} />
       <Route path="/register" component={() => <AuthLayout><RegisterPage /></AuthLayout>} />
-      <Route path="/admin" component={() => <AdminDashboardPage />} />
-      <Route path="/admin/catalog" component={() => <AdminCatalogPage />} />
-      <Route path="/admin/orders" component={() => <AdminOrdersPage />} />
-      <Route path="/admin/products/edit" component={() => <AdminProductEditorPage />} />
-      <Route path="/admin/customers" component={() => <AdminCustomersPage />} />
-      <Route path="/admin/analytics" component={() => <AdminAnalyticsPage />} />
-      <Route path="/admin/channels" component={() => <AdminChannelHubPage />} />
-      <Route path="/admin/channels/facebook" component={() => <AdminFacebookPage />} />
-      <Route path="/admin/channels/whatsapp" component={() => <AdminWhatsAppPage />} />
-      <Route path="/admin/channels/twitter" component={() => <AdminTwitterPage />} />
-      <Route path="/admin/channels/analytics" component={() => <AdminSocialAnalyticsPage />} />
+      <Route path="/admin" component={() => <AdminGuard><AdminDashboardPage /></AdminGuard>} />
+      <Route path="/admin/catalog" component={() => <AdminGuard><AdminCatalogPage /></AdminGuard>} />
+      <Route path="/admin/categories" component={() => <AdminGuard><AdminCategoriesPage /></AdminGuard>} />
+      <Route path="/admin/orders" component={() => <AdminGuard><AdminOrdersPage /></AdminGuard>} />
+      <Route path="/admin/products/new" component={() => <AdminGuard><AdminProductEditorPage /></AdminGuard>} />
+      <Route path="/admin/products/edit" component={() => <AdminGuard><AdminProductEditorPage /></AdminGuard>} />
+      <Route path="/admin/customers" component={() => <AdminGuard><AdminCustomersPage /></AdminGuard>} />
+      <Route path="/admin/analytics" component={() => <AdminGuard><AdminAnalyticsPage /></AdminGuard>} />
+      <Route path="/admin/channels" component={() => <AdminGuard><AdminChannelHubPage /></AdminGuard>} />
+      <Route path="/admin/channels/facebook" component={() => <AdminGuard><AdminFacebookPage /></AdminGuard>} />
+      <Route path="/admin/channels/whatsapp" component={() => <AdminGuard><AdminWhatsAppPage /></AdminGuard>} />
+      <Route path="/admin/channels/twitter" component={() => <AdminGuard><AdminTwitterPage /></AdminGuard>} />
+      <Route path="/admin/channels/analytics" component={() => <AdminGuard><AdminSocialAnalyticsPage /></AdminGuard>} />
       <Route component={NotFound} />
     </Switch>
   );

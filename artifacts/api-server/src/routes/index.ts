@@ -15,6 +15,7 @@ import channelsRouter from "./channels";
 import facebookRouter from "./facebook";
 import whatsappRouter from "./whatsapp";
 import twitterRouter from "./twitter";
+import usersRouter from "./users";
 
 const router: IRouter = Router();
 
@@ -34,5 +35,6 @@ router.use("/channels", channelsRouter);
 router.use("/facebook", facebookRouter);
 router.use("/whatsapp", whatsappRouter);
 router.use("/twitter", twitterRouter);
+router.use("/users", usersRouter);
 
 export default router;
