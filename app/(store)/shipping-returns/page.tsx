@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "motion/react";
+import Link from "next/link";
 
 export default function ShippingReturnsPage() {
   const sections = [
@@ -65,9 +66,12 @@ export default function ShippingReturnsPage() {
               <h4 className="text-2xl font-serif mb-4">Request a Return</h4>
               <p className="text-white/60 text-sm leading-relaxed">Our automated portal will guide you through the return process. For complex requests or multiple items, our concierge team is available.</p>
             </div>
-            <button className="bg-white text-slate-900 text-[10px] font-bold uppercase tracking-[0.3em] px-12 py-5 rounded-full hover:bg-slate-100 transition-all font-serif italic">
+            <Link 
+              href="/account/orders"
+              className="bg-white text-slate-900 text-[10px] font-bold uppercase tracking-[0.3em] px-12 py-5 rounded-full hover:bg-slate-100 transition-all font-serif italic"
+            >
               Access Portal
-            </button>
+            </Link>
           </div>
         </div>
       </section>

@@ -52,7 +52,7 @@ export default function SustainabilityPage() {
           <div className="max-w-3xl mx-auto text-center mb-32 space-y-8">
             <h2 className="text-[10px] font-bold uppercase tracking-[0.4em] text-slate-400">Our Manifesto</h2>
             <p className="text-xl md:text-2xl font-serif text-slate-900 leading-relaxed italic">
-              "We do not inherit the earth from our ancestors; we borrow it from our children. Luxury is the ultimate expression of care for the world we inhabit."
+              &quot;We do not inherit the earth from our ancestors; we borrow it from our children. Luxury is the ultimate expression of care for the world we inhabit.&quot;
             </p>
           </div>
 

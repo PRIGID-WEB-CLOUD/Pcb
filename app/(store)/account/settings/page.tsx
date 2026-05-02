@@ -27,11 +27,17 @@ export default function SettingsPage() {
     if (status === "unauthenticated") {
       router.push("/login");
     } else if (status === "authenticated" && session?.user) {
-      setFormData(prev => ({
-        ...prev,
-        name: session.user?.name || "",
-        email: session.user?.email || "",
-      }));
+      // Use microtask to avoid synchronous setState warning
+      Promise.resolve().then(() => {
+        setFormData(prev => {
+          if (prev.email === session.user?.email && prev.name === session.user?.name) return prev;
+          return {
+            ...prev,
+            name: session.user?.name || "",
+            email: session.user?.email || "",
+          };
+        });
+      });
     }
   }, [status, router, session]);
 

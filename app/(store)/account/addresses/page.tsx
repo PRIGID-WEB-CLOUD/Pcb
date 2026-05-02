@@ -24,17 +24,14 @@ export default function AddressesPage() {
       isDefault: true
     }
   ]);
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/login");
-    } else if (status === "authenticated") {
-      setLoading(false);
     }
   }, [status, router]);
 
-  if (status === "loading" || loading) {
+  if (status === "loading" || status === "unauthenticated") {
     return (
       <div className="min-h-screen flex items-center justify-center bg-white">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-slate-900"></div>

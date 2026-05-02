@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export default function Footer() {
   return (
     <footer className="bg-slate-50 border-t border-slate-100 pt-32 pb-16 overflow-hidden">
@@ -21,19 +23,19 @@ export default function Footer() {
             <div className="space-y-8">
               <h4 className="text-[10px] font-bold uppercase tracking-[0.4em] text-slate-900">Collections</h4>
               <ul className="space-y-4 text-[10px] text-slate-500 font-medium uppercase tracking-widest">
-                <li><a href="/products?category=Monochrome" className="hover:text-slate-900 transition-colors">Monochrome</a></li>
-                <li><a href="/products?category=Accessories" className="hover:text-slate-900 transition-colors">Accessories</a></li>
-                <li><a href="/products?category=Footwear" className="hover:text-slate-900 transition-colors">Footwear</a></li>
-                <li><a href="/products" className="hover:text-slate-900 transition-colors">All Arrivals</a></li>
+                <li><Link href="/products?category=Monochrome" className="hover:text-slate-900 transition-colors">Monochrome</Link></li>
+                <li><Link href="/products?category=Accessories" className="hover:text-slate-900 transition-colors">Accessories</Link></li>
+                <li><Link href="/products?category=Footwear" className="hover:text-slate-900 transition-colors">Footwear</Link></li>
+                <li><Link href="/products" className="hover:text-slate-900 transition-colors">All Arrivals</Link></li>
               </ul>
             </div>
             <div className="space-y-8">
               <h4 className="text-[10px] font-bold uppercase tracking-[0.4em] text-slate-900">Customer Care</h4>
               <ul className="space-y-4 text-[10px] text-slate-500 font-medium uppercase tracking-widest">
-                <li><a href="/shipping-returns" className="hover:text-slate-900 transition-colors">Shipping & Returns</a></li>
-                <li><a href="/contact" className="hover:text-slate-900 transition-colors">Contact Us</a></li>
-                <li><a href="/privacy" className="hover:text-slate-900 transition-colors">Privacy Policy</a></li>
-                <li><a href="/sustainability" className="hover:text-slate-900 transition-colors">Sustainability</a></li>
+                <li><Link href="/shipping-returns" className="hover:text-slate-900 transition-colors">Shipping & Returns</Link></li>
+                <li><Link href="/contact" className="hover:text-slate-900 transition-colors">Contact Us</Link></li>
+                <li><Link href="/privacy" className="hover:text-slate-900 transition-colors">Privacy Policy</Link></li>
+                <li><Link href="/terms" className="hover:text-slate-900 transition-colors">Terms of Service</Link></li>
               </ul>
             </div>
           </div>

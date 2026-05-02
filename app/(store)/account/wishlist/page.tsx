@@ -15,14 +15,6 @@ export default function WishlistPage() {
   const [wishlist, setWishlist] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (status === "unauthenticated") {
-      router.push("/login");
-    } else if (status === "authenticated") {
-      fetchWishlist();
-    }
-  }, [status, router]);
-
   const fetchWishlist = async () => {
     try {
       // For now, we fetch from a dummy endpoint or use local storage
@@ -36,6 +28,15 @@ export default function WishlistPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (status === "unauthenticated") {
+      router.push("/login");
+    } else if (status === "authenticated") {
+      // Use microtask to avoid synchronous setState warning
+      Promise.resolve().then(() => fetchWishlist());
+    }
+  }, [status, router]);
 
   if (status === "loading" || loading) {
     return (

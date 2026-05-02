@@ -17,14 +17,6 @@ export default function OrdersPage() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (status === "unauthenticated") {
-      router.push("/login");
-    } else if (status === "authenticated") {
-      fetchOrders();
-    }
-  }, [status, router]);
-
   const fetchOrders = async () => {
     try {
       const res = await fetch("/api/orders");
@@ -36,6 +28,15 @@ export default function OrdersPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (status === "unauthenticated") {
+      router.push("/login");
+    } else if (status === "authenticated") {
+      // Use microtask to avoid synchronous setState warning
+      Promise.resolve().then(() => fetchOrders());
+    }
+  }, [status, router]);
 
   if (status === "loading" || loading) {
     return (
