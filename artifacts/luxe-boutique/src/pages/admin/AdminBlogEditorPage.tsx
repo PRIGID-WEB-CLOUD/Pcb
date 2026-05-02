@@ -302,10 +302,17 @@ export default function AdminBlogEditorPage() {
                 {form.coverImage ? (
                   <div className="relative group overflow-hidden rounded-lg aspect-[16/7]">
                     <img src={form.coverImage} alt="Cover preview" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
-                    <div className="absolute bottom-4 left-4">
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent pointer-events-none" />
+                    <div className="absolute bottom-4 left-4 pointer-events-none">
                       <span className="text-[10px] font-[Manrope] font-bold uppercase tracking-widest text-white/70 bg-black/40 px-2 py-1 rounded">Cover Image</span>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => setForm(f => ({ ...f, coverImage: "" }))}
+                      title="Remove cover image"
+                      className="absolute top-3 right-3 w-7 h-7 bg-white/90 hover:bg-[#ffdad6] rounded-full flex items-center justify-center shadow opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                      <span className="material-symbols-outlined text-[#ba1a1a] text-base leading-none">close</span>
+                    </button>
                   </div>
                 ) : (
                   <div className="border-2 border-dashed border-[#c6c6cd] rounded-lg flex flex-col items-center justify-center gap-3 py-16 text-[#7c839b] hover:bg-[#eff4ff] transition-colors">

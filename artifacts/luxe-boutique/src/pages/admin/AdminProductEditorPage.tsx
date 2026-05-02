@@ -442,25 +442,34 @@ export default function AdminProductEditorPage() {
                         style={i === 0 ? { aspectRatio: "1/1" } : {}}>
                         <img src={url} alt={`Product image ${i + 1}`}
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                        <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                          {i !== 0 && (
+
+                        {/* Always-visible Primary badge */}
+                        {i === 0 && (
+                          <div className="absolute top-2 left-2 bg-black/70 text-white text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded pointer-events-none">
+                            Primary
+                          </div>
+                        )}
+
+                        {/* Always-visible remove × button */}
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); removeImage(url); }}
+                          title="Remove image"
+                          className="absolute top-2 right-2 w-6 h-6 bg-white/90 hover:bg-[#ffdad6] rounded-full flex items-center justify-center shadow opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                          <span className="material-symbols-outlined text-[#ba1a1a] text-sm leading-none">close</span>
+                        </button>
+
+                        {/* Hover overlay — star (set primary) for non-primary images */}
+                        {i !== 0 && (
+                          <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                             <button type="button" onClick={() => {
                               setImages(imgs => [url, ...imgs.filter(x => x !== url)]);
                               setForm(f => ({ ...f, imageUrl: url }));
-                            }} title="Set as primary" className="w-8 h-8 bg-white/90 rounded-full flex items-center justify-center">
+                            }} title="Set as primary" className="w-8 h-8 bg-white/90 rounded-full flex items-center justify-center shadow">
                               <span className="material-symbols-outlined text-black text-sm">star</span>
                             </button>
-                          )}
-                          {i === 0 && (
-                            <div className="absolute top-2 left-2 bg-black/70 text-white text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded">
-                              Primary
-                            </div>
-                          )}
-                          <button type="button" onClick={() => removeImage(url)}
-                            className="w-8 h-8 bg-white/90 rounded-full flex items-center justify-center">
-                            <span className="material-symbols-outlined text-[#ba1a1a] text-sm">delete</span>
-                          </button>
-                        </div>
+                          </div>
+                        )}
                       </div>
                     ))}
                     {/* Upload slot */}
