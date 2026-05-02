@@ -53,7 +53,7 @@ export default function Header() {
             <ShoppingBag size={18} strokeWidth={1.5} />
             <span className="absolute -top-2 -right-2 text-[8px] bg-slate-900 text-white w-4 h-4 rounded-full flex items-center justify-center font-bold">0</span>
           </Link>
-          <Link href={session ? "/admin/products" : "/login"} className="hidden sm:block hover:opacity-50 transition-opacity">
+          <Link href={session ? "/account" : "/login"} className="hidden sm:block hover:opacity-50 transition-opacity">
             <User size={18} strokeWidth={1.5} />
           </Link>
           <button 
@@ -86,8 +86,8 @@ export default function Header() {
                 </Link>
               ))}
               <div className="flex space-x-8 pt-4">
-                 <Link href="/login" className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Account</Link>
-                 <Link href="/cart" className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Global Bag (0)</Link>
+                 <Link href={session ? "/account" : "/login"} onClick={() => setIsMobileMenuOpen(false)} className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Account</Link>
+                 <Link href="/cart" onClick={() => setIsMobileMenuOpen(false)} className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Bag</Link>
               </div>
             </div>
           </motion.div>
