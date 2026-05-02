@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { motion } from "motion/react";
 import Image from "next/image";
 import Link from "next/link";
@@ -113,19 +114,76 @@ export default function BlogPage() {
           <div className="max-w-2xl mx-auto space-y-8">
             <h3 className="text-2xl font-serif text-slate-900">Subscribe for Priority <span className="italic">Insights</span></h3>
             <p className="text-slate-500 text-xs uppercase tracking-widest leading-loose">JOIN OUR PRIVATE LIST FOR EXCLUSIVE EDITORIAL CONTENT AND EARLY ACCESS TO NEW ARRIVALS.</p>
-            <form className="flex flex-col sm:flex-row gap-4 max-w-md mx-auto pt-4">
-              <input 
-                type="email" 
-                placeholder="EMAIL ADDRESS" 
-                className="flex-1 bg-white border border-slate-100 rounded-full px-8 py-5 text-[10px] font-bold tracking-widest focus:ring-1 focus:ring-slate-900 transition-all outline-none"
-              />
-              <button className="bg-slate-900 text-white text-[10px] font-bold uppercase tracking-[0.3em] px-10 py-5 rounded-full hover:bg-slate-800 transition-all">
-                Join
-              </button>
-            </form>
+            <NewsletterSignup />
           </div>
         </div>
       </section>
+    </div>
+  );
+}
+
+function NewsletterSignup() {
+  const [email, setEmail] = useState("");
+  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [message, setMessage] = useState("");
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email) return;
+
+    setStatus("loading");
+    setMessage("");
+
+    try {
+      const res = await fetch("/api/newsletter", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        setStatus("success");
+        setMessage(data.message);
+        setEmail("");
+      } else {
+        setStatus("error");
+        setMessage(data.error || "Failed to subscribe");
+      }
+    } catch (error) {
+      setStatus("error");
+      setMessage("An unexpected error occurred.");
+    }
+  };
+
+  return (
+    <div className="max-w-md mx-auto pt-4">
+      <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-4">
+        <input 
+          type="email" 
+          placeholder="EMAIL ADDRESS" 
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          disabled={status === "loading" || status === "success"}
+          className="flex-1 bg-white border border-slate-100 rounded-full px-8 py-5 text-[10px] font-bold tracking-widest focus:ring-1 focus:ring-slate-900 transition-all outline-none disabled:opacity-50"
+          required
+        />
+        <button 
+          type="submit"
+          disabled={status === "loading" || status === "success"}
+          className="bg-slate-900 text-white text-[10px] font-bold uppercase tracking-[0.3em] px-10 py-5 rounded-full hover:bg-slate-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {status === "loading" ? "..." : "Join"}
+        </button>
+      </form>
+      {message && (
+        <p className={`mt-4 text-[10px] font-bold uppercase tracking-widest ${status === "success" ? "text-emerald-600" : "text-rose-600"}`}>
+          {message}
+        </p>
+      )}
     </div>
   );
 }

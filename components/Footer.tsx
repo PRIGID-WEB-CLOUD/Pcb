@@ -1,4 +1,5 @@
 import Link from "next/link";
+import NewsletterForm from "./NewsletterForm";
 
 export default function Footer() {
   return (
@@ -11,6 +12,9 @@ export default function Footer() {
             <p className="text-sm text-slate-500 font-light leading-relaxed max-w-xs uppercase tracking-[0.1em]">
               Defining the landscape of modern luxury through conscious design, impeccable quality, and architectural precision.
             </p>
+            <div className="py-2">
+              <NewsletterForm />
+            </div>
             <div className="flex gap-6">
               <a href="https://instagram.com" target="_blank" rel="noopener noreferrer" className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 hover:text-slate-900 transition-colors">Instagram</a>
               <a href="https://pinterest.com" target="_blank" rel="noopener noreferrer" className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 hover:text-slate-900 transition-colors">Pinterest</a>
