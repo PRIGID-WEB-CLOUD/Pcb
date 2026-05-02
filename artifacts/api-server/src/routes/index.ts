@@ -9,6 +9,7 @@ import ordersRouter from "./orders";
 import reviewsRouter from "./reviews";
 import newsletterRouter from "./newsletter";
 import paymentsRouter from "./payments";
+import postsRouter from "./posts";
 import seedRouter from "./seed";
 
 const router: IRouter = Router();
@@ -23,6 +24,7 @@ router.use("/orders", ordersRouter);
 router.use("/reviews", reviewsRouter);
 router.use("/newsletter", newsletterRouter);
 router.use("/payments", paymentsRouter);
+router.use("/posts", postsRouter);
 router.use("/seed", seedRouter);
 
 export default router;
