@@ -25,6 +25,14 @@ import AccountPage from "@/pages/AccountPage";
 import OrdersPage from "@/pages/OrdersPage";
 import WishlistPage from "@/pages/WishlistPage";
 import AdminPage from "@/pages/AdminPage";
+import AdminDashboardPage from "@/pages/admin/AdminDashboardPage";
+import AdminCatalogPage from "@/pages/admin/AdminCatalogPage";
+import AdminOrdersPage from "@/pages/admin/AdminOrdersPage";
+import AdminProductEditorPage from "@/pages/admin/AdminProductEditorPage";
+import CheckoutVerifyPage from "@/pages/CheckoutVerifyPage";
+import AccountSettingsPage from "@/pages/AccountSettingsPage";
+import AccountAddressesPage from "@/pages/AccountAddressesPage";
+import ForgotPasswordPage from "@/pages/ForgotPasswordPage";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -66,8 +74,15 @@ function Router() {
       <Route path="/account" component={() => <StoreLayout><AccountPage /></StoreLayout>} />
       <Route path="/account/orders" component={() => <StoreLayout><OrdersPage /></StoreLayout>} />
       <Route path="/account/wishlist" component={() => <StoreLayout><WishlistPage /></StoreLayout>} />
-      <Route path="/admin" component={() => <StoreLayout><AdminPage /></StoreLayout>} />
+      <Route path="/account/settings" component={() => <StoreLayout><AccountSettingsPage /></StoreLayout>} />
+      <Route path="/account/addresses" component={() => <StoreLayout><AccountAddressesPage /></StoreLayout>} />
+      <Route path="/checkout/verify" component={() => <StoreLayout><div className="pt-24"><CheckoutVerifyPage /></div></StoreLayout>} />
+      <Route path="/admin" component={() => <AdminDashboardPage />} />
+      <Route path="/admin/catalog" component={() => <AdminCatalogPage />} />
+      <Route path="/admin/orders" component={() => <AdminOrdersPage />} />
+      <Route path="/admin/products/edit" component={() => <AdminProductEditorPage />} />
       <Route path="/login" component={() => <AuthLayout><LoginPage /></AuthLayout>} />
+      <Route path="/forgot-password" component={() => <AuthLayout><ForgotPasswordPage /></AuthLayout>} />
       <Route path="/register" component={() => <AuthLayout><RegisterPage /></AuthLayout>} />
       <Route component={NotFound} />
     </Switch>

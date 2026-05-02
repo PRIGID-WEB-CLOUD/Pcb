@@ -44,11 +44,9 @@ router.post("/", async (req, res) => {
     const categoryMap: Record<string, string> = {};
     for (const cat of SEED_CATEGORIES) {
       const [inserted] = await db.insert(categories).values(cat).onConflictDoNothing().returning();
-      const existing = inserted || (await db.select().from(categories).where((t) => {
-        const { eq } = require("drizzle-orm");
-        return eq(t.name, cat.name);
-      }).limit(1))[0];
-      if (existing) categoryMap[cat.name] = existing.id;
+      if (inserted) {
+        categoryMap[cat.name] = inserted.id;
+      }
     }
 
     const allCats = await db.select().from(categories);
