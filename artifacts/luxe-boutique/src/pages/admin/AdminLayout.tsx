@@ -24,7 +24,7 @@ const channelNavItems = [
 
 export default function AdminLayout({ children, sidebar = "main" }: AdminLayoutProps) {
   const [location] = useLocation();
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
   const navItems = sidebar === "channels" ? channelNavItems : mainNavItems;
 
   const sidebarW = collapsed ? "w-[68px]" : "w-64";
