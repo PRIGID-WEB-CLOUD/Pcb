@@ -15,6 +15,7 @@ import LoginPage from "@/pages/LoginPage";
 import RegisterPage from "@/pages/RegisterPage";
 import BlogPage from "@/pages/BlogPage";
 import CheckoutPage from "@/pages/CheckoutPage";
+import CheckoutVerifyPage from "@/pages/CheckoutVerifyPage";
 import SearchPage from "@/pages/SearchPage";
 import ContactPage from "@/pages/ContactPage";
 import SustainabilityPage from "@/pages/SustainabilityPage";
@@ -24,21 +25,20 @@ import ShippingReturnsPage from "@/pages/ShippingReturnsPage";
 import AccountPage from "@/pages/AccountPage";
 import OrdersPage from "@/pages/OrdersPage";
 import WishlistPage from "@/pages/WishlistPage";
+import AccountSettingsPage from "@/pages/AccountSettingsPage";
+import AccountAddressesPage from "@/pages/AccountAddressesPage";
+import ForgotPasswordPage from "@/pages/ForgotPasswordPage";
 import AdminDashboardPage from "@/pages/admin/AdminDashboardPage";
 import AdminCatalogPage from "@/pages/admin/AdminCatalogPage";
 import AdminOrdersPage from "@/pages/admin/AdminOrdersPage";
 import AdminProductEditorPage from "@/pages/admin/AdminProductEditorPage";
-import AdminCustomersPage from "@/pages/admin/AdminCustomersPage";
 import AdminAnalyticsPage from "@/pages/admin/AdminAnalyticsPage";
+import AdminCustomersPage from "@/pages/admin/AdminCustomersPage";
 import AdminChannelHubPage from "@/pages/admin/AdminChannelHubPage";
 import AdminFacebookPage from "@/pages/admin/AdminFacebookPage";
-import AdminWhatsAppPage from "@/pages/admin/AdminWhatsAppPage";
 import AdminTwitterPage from "@/pages/admin/AdminTwitterPage";
+import AdminWhatsAppPage from "@/pages/admin/AdminWhatsAppPage";
 import AdminSocialAnalyticsPage from "@/pages/admin/AdminSocialAnalyticsPage";
-import CheckoutVerifyPage from "@/pages/CheckoutVerifyPage";
-import AccountSettingsPage from "@/pages/AccountSettingsPage";
-import AccountAddressesPage from "@/pages/AccountAddressesPage";
-import ForgotPasswordPage from "@/pages/ForgotPasswordPage";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -69,6 +69,7 @@ function Router() {
       <Route path="/products" component={() => <StoreLayout><ProductsPage /></StoreLayout>} />
       <Route path="/products/:id" component={() => <StoreLayout><div className="pt-24"><ProductDetailPage /></div></StoreLayout>} />
       <Route path="/cart" component={() => <StoreLayout><div className="pt-24"><CartPage /></div></StoreLayout>} />
+      <Route path="/checkout/verify" component={() => <StoreLayout><div className="pt-24"><CheckoutVerifyPage /></div></StoreLayout>} />
       <Route path="/checkout" component={() => <StoreLayout><div className="pt-24"><CheckoutPage /></div></StoreLayout>} />
       <Route path="/blog" component={() => <StoreLayout><BlogPage /></StoreLayout>} />
       <Route path="/search" component={() => <StoreLayout><div className="pt-24"><SearchPage /></div></StoreLayout>} />
@@ -82,7 +83,9 @@ function Router() {
       <Route path="/account/wishlist" component={() => <StoreLayout><WishlistPage /></StoreLayout>} />
       <Route path="/account/settings" component={() => <StoreLayout><AccountSettingsPage /></StoreLayout>} />
       <Route path="/account/addresses" component={() => <StoreLayout><AccountAddressesPage /></StoreLayout>} />
-      <Route path="/checkout/verify" component={() => <StoreLayout><div className="pt-24"><CheckoutVerifyPage /></div></StoreLayout>} />
+      <Route path="/login" component={() => <AuthLayout><LoginPage /></AuthLayout>} />
+      <Route path="/forgot-password" component={() => <AuthLayout><ForgotPasswordPage /></AuthLayout>} />
+      <Route path="/register" component={() => <AuthLayout><RegisterPage /></AuthLayout>} />
       <Route path="/admin" component={() => <AdminDashboardPage />} />
       <Route path="/admin/catalog" component={() => <AdminCatalogPage />} />
       <Route path="/admin/orders" component={() => <AdminOrdersPage />} />
@@ -94,9 +97,6 @@ function Router() {
       <Route path="/admin/channels/whatsapp" component={() => <AdminWhatsAppPage />} />
       <Route path="/admin/channels/twitter" component={() => <AdminTwitterPage />} />
       <Route path="/admin/channels/analytics" component={() => <AdminSocialAnalyticsPage />} />
-      <Route path="/login" component={() => <AuthLayout><LoginPage /></AuthLayout>} />
-      <Route path="/forgot-password" component={() => <AuthLayout><ForgotPasswordPage /></AuthLayout>} />
-      <Route path="/register" component={() => <AuthLayout><RegisterPage /></AuthLayout>} />
       <Route component={NotFound} />
     </Switch>
   );
