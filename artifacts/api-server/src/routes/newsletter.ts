@@ -1,8 +1,9 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { newsletter } from "@workspace/db/schema";
-import { eq, desc, gte, sql } from "drizzle-orm";
+import { newsletter, newsletterCampaigns } from "@workspace/db/schema";
+import { eq, desc } from "drizzle-orm";
 import { getSession } from "../lib/auth";
+import { sendCampaignEmail, isSmtpConfigured } from "../lib/email";
 
 const router = Router();
 
@@ -42,7 +43,14 @@ router.get("/", async (req, res) => {
       .slice(-6)
       .map(([month, count]) => ({ month, count }));
 
-    res.json({ subscribers: rows, total: rows.length, thisMonth, thisWeek, growth });
+    res.json({
+      subscribers: rows,
+      total: rows.length,
+      thisMonth,
+      thisWeek,
+      growth,
+      smtpConfigured: isSmtpConfigured(),
+    });
   } catch { res.status(500).json({ error: "Internal server error" }); }
 });
 
@@ -57,6 +65,55 @@ router.get("/export", async (req, res) => {
     res.setHeader("Content-Type", "text/csv");
     res.setHeader("Content-Disposition", `attachment; filename="newsletter-subscribers-${Date.now()}.csv"`);
     res.send(csv);
+  } catch { res.status(500).json({ error: "Internal server error" }); }
+});
+
+router.get("/campaigns", async (req, res) => {
+  try {
+    const session = await getSession(req);
+    if (!session || session.role !== "ADMIN") return res.status(401).json({ error: "Unauthorized" });
+    const campaigns = await db.select().from(newsletterCampaigns).orderBy(desc(newsletterCampaigns.sentAt));
+    res.json(campaigns);
+  } catch { res.status(500).json({ error: "Internal server error" }); }
+});
+
+router.post("/send", async (req, res) => {
+  try {
+    const session = await getSession(req);
+    if (!session || session.role !== "ADMIN") return res.status(401).json({ error: "Unauthorized" });
+
+    const { subject, body } = req.body;
+    if (!subject?.trim() || !body?.trim())
+      return res.status(400).json({ error: "Subject and body are required" });
+
+    const subscribers = await db.select().from(newsletter).orderBy(desc(newsletter.createdAt));
+    if (subscribers.length === 0)
+      return res.status(400).json({ error: "No subscribers to send to" });
+
+    const [campaign] = await db.insert(newsletterCampaigns).values({
+      subject: subject.trim(),
+      body: body.trim(),
+      recipientCount: subscribers.length,
+      sentCount: 0,
+      status: "SENDING",
+    }).returning();
+
+    res.json({ message: "Campaign queued", campaignId: campaign.id, recipientCount: subscribers.length });
+
+    let sentCount = 0;
+    for (const sub of subscribers) {
+      try {
+        await sendCampaignEmail(sub.email, subject.trim(), body.trim());
+        sentCount++;
+      } catch (err) {
+        console.error(`Failed to send to ${sub.email}:`, err);
+      }
+    }
+
+    await db.update(newsletterCampaigns)
+      .set({ sentCount, status: sentCount === subscribers.length ? "SENT" : "PARTIAL" })
+      .where(eq(newsletterCampaigns.id, campaign.id));
+
   } catch { res.status(500).json({ error: "Internal server error" }); }
 });
 

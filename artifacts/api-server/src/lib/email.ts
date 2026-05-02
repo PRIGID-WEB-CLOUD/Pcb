@@ -13,6 +13,62 @@ function getTransport() {
   });
 }
 
+export function isSmtpConfigured(): boolean {
+  return !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+}
+
+export async function sendCampaignEmail(
+  to: string,
+  subject: string,
+  body: string,
+): Promise<void> {
+  const transport = getTransport();
+  const from = process.env.SMTP_FROM ?? `Luxe Boutique <${process.env.SMTP_USER}>`;
+
+  const html = `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/></head>
+<body style="margin:0;padding:0;background:#f8f9ff;font-family:Manrope,Helvetica,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="padding:48px 0;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+        <tr>
+          <td style="background:#080e0b;padding:28px 40px;text-align:center;">
+            <span style="color:#fff;font-size:13px;font-weight:700;letter-spacing:0.2em;text-transform:uppercase;">✦ Luxe Boutique</span>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:40px 40px 32px;">
+            <div style="font-size:15px;color:#2d3748;line-height:1.8;white-space:pre-wrap;">${body}</div>
+          </td>
+        </tr>
+        <tr>
+          <td style="background:#f8f9ff;padding:20px 40px;border-top:1px solid #f1f3f9;text-align:center;">
+            <p style="font-size:11px;color:#b0b8cc;margin:0;">
+              You're receiving this because you subscribed at Luxe Boutique.<br/>
+              © ${new Date().getFullYear()} Luxe Boutique · All rights reserved.
+            </p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+  if (!transport) {
+    console.log(`\n${"─".repeat(50)}`);
+    console.log(`  CAMPAIGN EMAIL (dev — no SMTP configured)`);
+    console.log(`  To:      ${to}`);
+    console.log(`  Subject: ${subject}`);
+    console.log(`  Body:    ${body.slice(0, 80)}…`);
+    console.log(`${"─".repeat(50)}\n`);
+    return;
+  }
+
+  await transport.sendMail({ from, to, subject, html });
+}
+
 export async function sendAdminOtp(email: string, code: string, name?: string | null): Promise<{ dev: boolean }> {
   const transport = getTransport();
   const from = process.env.SMTP_FROM ?? "Luxe Boutique Admin <admin@luxeboutique.com>";
