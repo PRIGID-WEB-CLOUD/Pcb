@@ -99,7 +99,7 @@ export default function AdminFacebookPage() {
   const [credsSaving, setCredsSaving] = useState(false);
   const [showSecret,  setShowSecret]  = useState<Record<string, boolean>>({});
   const [testingConn, setTestingConn] = useState(false);
-  const [testResult,  setTestResult]  = useState<{pass: boolean; latency: number} | null>(null);
+  const [testResult,  setTestResult]  = useState<{pass: boolean; latency: number; missing?: string[]} | null>(null);
 
   const FB_CRED_FIELDS = [
     { key: "page_id",            label: "Facebook Page ID",      isSecret: false, hint: "Go to your Facebook Page → About → scroll to the bottom → Page ID. Required to publish posts and use Messenger." },
@@ -694,9 +694,19 @@ export default function AdminFacebookPage() {
                     </button>
                   </div>
                   {testResult && (
-                    <div className={`p-4 rounded-xl border flex items-center gap-3 font-[Manrope] text-sm font-bold ${testResult.pass ? "bg-[#f0faf6] border-[#c3eed8] text-[#006c49]" : "bg-red-50 border-red-200 text-red-600"}`}>
-                      <span className="material-symbols-outlined text-base">{testResult.pass ? "check_circle" : "error"}</span>
-                      {testResult.pass ? `Connection successful — ${testResult.latency}ms latency` : "Connection failed — check your credentials and try again."}
+                    <div className={`p-4 rounded-xl border font-[Manrope] text-sm ${testResult.pass ? "bg-[#f0faf6] border-[#c3eed8] text-[#006c49]" : "bg-red-50 border-red-200 text-red-700"}`}>
+                      <div className="flex items-center gap-2 font-bold mb-1">
+                        <span className="material-symbols-outlined text-base">{testResult.pass ? "check_circle" : "error"}</span>
+                        {testResult.pass ? `All credentials present — ${testResult.latency}ms` : "Missing required credentials"}
+                      </div>
+                      {!testResult.pass && testResult.missing && testResult.missing.length > 0 && (
+                        <ul className="mt-2 space-y-1 pl-6 list-disc text-xs text-red-600">
+                          {testResult.missing.map((k) => {
+                            const field = FB_CRED_FIELDS.find((f) => f.key === k);
+                            return <li key={k} className="font-semibold">{field?.label ?? k}</li>;
+                          })}
+                        </ul>
+                      )}
                     </div>
                   )}
                 </div>
