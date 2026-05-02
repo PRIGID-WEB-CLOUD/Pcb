@@ -48,6 +48,7 @@ import AdminSocialAnalyticsPage from "@/pages/admin/AdminSocialAnalyticsPage";
 import AdminMediaPage from "@/pages/admin/AdminMediaPage";
 import AdminNewsletterPage from "@/pages/admin/AdminNewsletterPage";
 import AdminSettingsPage from "@/pages/admin/AdminSettingsPage";
+import AdminTeamPage from "@/pages/admin/AdminTeamPage";
 import AdminLoginPage from "@/pages/admin/AdminLoginPage";
 import NotFound from "@/pages/NotFound";
 
@@ -117,6 +118,7 @@ function Router() {
       <Route path="/admin/media" component={() => <AdminGuard><AdminMediaPage /></AdminGuard>} />
       <Route path="/admin/newsletter" component={() => <AdminGuard><AdminNewsletterPage /></AdminGuard>} />
       <Route path="/admin/settings" component={() => <AdminGuard><AdminSettingsPage /></AdminGuard>} />
+      <Route path="/admin/team" component={() => <AdminGuard><AdminTeamPage /></AdminGuard>} />
       <Route component={NotFound} />
     </Switch>
   );

@@ -18,6 +18,7 @@ import twitterRouter from "./twitter";
 import usersRouter from "./users";
 import settingsRouter from "./settings";
 import mediaRouter from "./media";
+import teamRouter from "./team";
 
 const router: IRouter = Router();
 
@@ -40,5 +41,6 @@ router.use("/twitter", twitterRouter);
 router.use("/users", usersRouter);
 router.use("/settings", settingsRouter);
 router.use("/media", mediaRouter);
+router.use("/team", teamRouter);
 
 export default router;

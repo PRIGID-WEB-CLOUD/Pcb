@@ -344,6 +344,20 @@ export const facebookPostTemplates = pgTable("facebook_post_templates", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const teamMembers = pgTable("team_members", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  email: text("email").notNull(),
+  name: text("name"),
+  role: text("role").notNull().default("Editor"),
+  status: text("status").notNull().default("pending"),
+  invitedBy: text("invited_by"),
+  inviteToken: text("invite_token"),
+  inviteExpiresAt: timestamp("invite_expires_at"),
+  lastLoginAt: timestamp("last_login_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 // ─── Zod / Type exports ───────────────────────────────────────────────────────
 
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true, updatedAt: true });
