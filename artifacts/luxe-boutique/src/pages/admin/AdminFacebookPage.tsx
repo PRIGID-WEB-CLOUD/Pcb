@@ -102,6 +102,7 @@ export default function AdminFacebookPage() {
   const [testResult,  setTestResult]  = useState<{pass: boolean; latency: number} | null>(null);
 
   const FB_CRED_FIELDS = [
+    { key: "catalog_id",         label: "Commerce Catalog ID",   isSecret: false, hint: "Facebook Commerce Manager → Catalog → Settings → Catalog ID. Required to sync your product feed to Facebook Shop." },
     { key: "app_id",             label: "App ID",                isSecret: false, hint: "Meta for Developers → App Dashboard → App ID"                           },
     { key: "app_secret",         label: "App Secret",            isSecret: true,  hint: "App Dashboard → Settings → Basic → App Secret. Never share publicly."   },
     { key: "page_access_token",  label: "Page Access Token",     isSecret: true,  hint: "Graph API Explorer → generate a long-lived page token for your page."   },
@@ -726,6 +727,26 @@ export default function AdminFacebookPage() {
 
             {/* ══════════════════════ CATALOG RULES ══════════════════════ */}
             {activeTab === "catalog" && catalog && (
+              <div className="space-y-6">
+                {/* Catalog ID banner */}
+                <div className={`flex items-center gap-4 p-4 rounded-xl border ${fbCreds["catalog_id"] ? "bg-[#f0faf6] border-[#c3eed8]" : "bg-amber-50 border-amber-200"}`}>
+                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${fbCreds["catalog_id"] ? "bg-[#006c49]" : "bg-amber-400"}`}>
+                    <span className="material-symbols-outlined text-white text-base">database</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-[Manrope] font-bold text-[10px] tracking-widest uppercase text-[#7c839b] mb-0.5">Facebook Commerce Catalog ID</p>
+                    {fbCreds["catalog_id"] ? (
+                      <code className="font-mono text-sm font-bold text-[#006c49]">{fbCreds["catalog_id"]}</code>
+                    ) : (
+                      <p className="font-[Manrope] text-sm text-amber-700 font-semibold">Not configured — enter your Catalog ID in the API Credentials tab to enable product sync.</p>
+                    )}
+                  </div>
+                  <button onClick={() => setActiveTab("credentials")}
+                    className={`shrink-0 px-4 py-2 rounded-lg font-[Manrope] font-bold text-xs tracking-widest uppercase transition-colors ${fbCreds["catalog_id"] ? "border border-[#006c49] text-[#006c49] hover:bg-[#006c49] hover:text-white" : "bg-amber-600 text-white hover:bg-amber-700"}`}>
+                    {fbCreds["catalog_id"] ? "Edit" : "Set Catalog ID"}
+                  </button>
+                </div>
+
               <div className="grid grid-cols-12 gap-8">
                 <div className="col-span-12 lg:col-span-7 space-y-6">
                   <div>
@@ -779,6 +800,7 @@ export default function AdminFacebookPage() {
                     </button>
                   </div>
                 </div>
+              </div>
               </div>
             )}
 
