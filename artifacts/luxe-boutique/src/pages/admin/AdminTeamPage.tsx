@@ -77,6 +77,7 @@ export default function AdminTeamPage() {
   const [newLink,     setNewLink]     = useState<string | null>(null);
   const [copied,      setCopied]      = useState(false);
 
+  const [smtpWarning, setSmtpWarning] = useState<string | null>(null);
   const [editingId,   setEditingId]   = useState<string | null>(null);
   const [editRole,    setEditRole]    = useState<Role>("Editor");
   const [removeId,    setRemoveId]    = useState<string | null>(null);
@@ -101,11 +102,12 @@ export default function AdminTeamPage() {
         body: JSON.stringify({ email: inviteEmail, name: inviteName || undefined, role: inviteRole }),
       });
       if (!r.ok) { const d = await r.json(); throw new Error(d.error ?? "Failed"); }
-      return r.json() as Promise<TeamMember & { inviteLink: string }>;
+      return r.json() as Promise<TeamMember & { inviteLink: string; emailSent: boolean; emailError?: string }>;
     },
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ["team"] });
       setNewLink(data.inviteLink);
+      setSmtpWarning(data.emailError ?? (data.emailSent ? null : null));
       setInviteEmail(""); setInviteName(""); setInviteRole("Editor"); setInviteError(null);
     },
     onError: (e: Error) => setInviteError(e.message),
@@ -152,13 +154,14 @@ export default function AdminTeamPage() {
     mutationFn: async (id: string) => {
       const r = await fetch(`/api/team/${id}/resend`, { method: "POST" });
       if (!r.ok) throw new Error("Failed");
-      return r.json() as Promise<TeamMember & { inviteLink: string }>;
+      return r.json() as Promise<TeamMember & { inviteLink: string; emailSent: boolean; emailError?: string }>;
     },
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ["team"] });
       setNewLink(data.inviteLink);
+      setSmtpWarning(data.emailError ?? null);
       setShowInvite(true);
-      showToast("Invite resent.");
+      showToast(data.emailSent ? "Invite resent via email." : "Invite refreshed — copy the link below.");
     },
   });
 
@@ -405,17 +408,40 @@ export default function AdminTeamPage() {
             {newLink ? (
               <div className="p-8 space-y-5">
                 <div className="flex flex-col items-center gap-4 py-4 text-center">
-                  <div className="w-16 h-16 rounded-2xl bg-[#e6f7f1] flex items-center justify-center">
-                    <span className="material-symbols-outlined text-[#006c49] text-3xl">mark_email_read</span>
+                  <div className={`w-16 h-16 rounded-2xl flex items-center justify-center ${smtpWarning ? "bg-amber-50" : "bg-[#e6f7f1]"}`}>
+                    <span className={`material-symbols-outlined text-3xl ${smtpWarning ? "text-amber-600" : "text-[#006c49]"}`}>
+                      {smtpWarning ? "mail_off" : "mark_email_read"}
+                    </span>
                   </div>
                   <div>
-                    <p className="font-serif text-[20px] font-semibold mb-1">Invite Created!</p>
-                    <p className="text-sm font-[Manrope] text-[#7c839b]">Share this link with the new team member.</p>
+                    <p className="font-serif text-[20px] font-semibold mb-1">
+                      {smtpWarning ? "Invite Created — Email Failed" : "Invite Created!"}
+                    </p>
+                    <p className="text-sm font-[Manrope] text-[#7c839b]">
+                      {smtpWarning ? "The invite record was saved, but the email could not be sent." : "An invitation email has been sent to the new team member."}
+                    </p>
                   </div>
                 </div>
 
+                {smtpWarning && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                    <div className="flex items-start gap-3">
+                      <span className="material-symbols-outlined text-amber-600 text-base mt-0.5 shrink-0">warning</span>
+                      <div className="min-w-0">
+                        <p className="text-xs font-[Manrope] font-bold text-amber-800 mb-1">SMTP error</p>
+                        <p className="text-[11px] font-[Manrope] text-amber-700 break-words leading-relaxed">{smtpWarning}</p>
+                        <p className="text-[11px] font-[Manrope] text-amber-600 mt-2">
+                          Check your SMTP credentials in <strong>Settings → General → Email</strong>. Common Brevo settings: host <code className="bg-amber-100 px-1 rounded">smtp-relay.brevo.com</code>, port <code className="bg-amber-100 px-1 rounded">587</code>, username = your Brevo login email, password = your SMTP API key (not account password).
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div className="bg-[#f8f9ff] border border-[#e5eeff] rounded-xl p-4">
-                  <p className="text-[10px] font-[Manrope] font-bold uppercase tracking-widest text-[#7c839b] mb-2">Invite Link</p>
+                  <p className="text-[10px] font-[Manrope] font-bold uppercase tracking-widest text-[#7c839b] mb-2">
+                    {smtpWarning ? "Share this link manually" : "Invite Link"}
+                  </p>
                   <div className="flex items-center gap-2">
                     <code className="flex-1 text-xs font-mono text-[#006c49] break-all">{window.location.origin}{newLink}</code>
                     <button onClick={() => copyLink(newLink)}
@@ -431,11 +457,11 @@ export default function AdminTeamPage() {
                 </p>
 
                 <div className="flex gap-3">
-                  <button onClick={() => { setNewLink(null); }}
+                  <button onClick={() => { setNewLink(null); setSmtpWarning(null); }}
                     className="flex-1 py-2.5 border border-[#c6c6cd] font-[Manrope] font-bold text-xs tracking-widest uppercase rounded-lg hover:bg-[#f0f2ff] transition-all">
                     Invite Another
                   </button>
-                  <button onClick={() => { setShowInvite(false); setNewLink(null); }}
+                  <button onClick={() => { setShowInvite(false); setNewLink(null); setSmtpWarning(null); }}
                     className="flex-1 py-2.5 bg-black text-white font-[Manrope] font-bold text-xs tracking-widest uppercase rounded-lg hover:bg-[#006c49] transition-all">
                     Done
                   </button>

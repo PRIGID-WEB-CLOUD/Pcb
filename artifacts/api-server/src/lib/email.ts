@@ -4,11 +4,14 @@ import { getSmtpConfig } from "./settings";
 async function buildTransport() {
   const smtp = await getSmtpConfig();
   if (!smtp.host || !smtp.user || !smtp.pass) return null;
+  const secure = smtp.port === 465;
   return {
     transport: nodemailer.createTransport({
       host: smtp.host,
       port: smtp.port,
-      secure: smtp.port === 465,
+      secure,
+      requireTLS: !secure,
+      tls: { rejectUnauthorized: false },
       auth: { user: smtp.user, pass: smtp.pass },
     }),
     from: smtp.from ?? `Luxe Boutique <${smtp.user}>`,

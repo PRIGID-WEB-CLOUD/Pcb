@@ -40,17 +40,26 @@ router.post("/invite", async (req, res) => {
     }).returning();
 
     const inviteLink = `/admin/accept-invite?token=${token}`;
-    const { dev } = await sendTeamInvite(email, {
-      invitedBy: user.name ?? user.email,
-      role,
-      name: name ?? null,
-      inviteLink,
-      expiryDays: 7,
-    });
+    let emailSent = false;
+    let emailError: string | null = null;
+    try {
+      const { dev } = await sendTeamInvite(email, {
+        invitedBy: user.name ?? user.email,
+        role,
+        name: name ?? null,
+        inviteLink,
+        expiryDays: 7,
+      });
+      emailSent = !dev;
+    } catch (mailErr) {
+      emailError = mailErr instanceof Error ? mailErr.message : String(mailErr);
+      console.error("[team/invite] SMTP error:", emailError);
+    }
 
-    res.json({ ...member, inviteLink, emailSent: !dev });
+    res.json({ ...member, inviteLink, emailSent, emailError });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Failed";
+    console.error("[team/invite] error:", msg);
     if (msg.includes("unique") || msg.includes("duplicate")) {
       return res.status(409).json({ error: "A team member with this email already exists" });
     }
@@ -102,16 +111,27 @@ router.post("/:id/resend", async (req, res) => {
     if (!updated) return res.status(404).json({ error: "Member not found" });
 
     const inviteLink = `/admin/accept-invite?token=${token}`;
-    const { dev } = await sendTeamInvite(updated.email, {
-      invitedBy: user.name ?? user.email,
-      role: updated.role,
-      name: updated.name,
-      inviteLink,
-      expiryDays: 7,
-    });
+    let emailSent = false;
+    let emailError: string | null = null;
+    try {
+      const { dev } = await sendTeamInvite(updated.email, {
+        invitedBy: user.name ?? user.email,
+        role: updated.role,
+        name: updated.name,
+        inviteLink,
+        expiryDays: 7,
+      });
+      emailSent = !dev;
+    } catch (mailErr) {
+      emailError = mailErr instanceof Error ? mailErr.message : String(mailErr);
+      console.error("[team/resend] SMTP error:", emailError);
+    }
 
-    res.json({ ...updated, inviteLink, emailSent: !dev });
-  } catch { res.status(500).json({ error: "Failed to resend invite" }); }
+    res.json({ ...updated, inviteLink, emailSent, emailError });
+  } catch (e) {
+    console.error("[team/resend] error:", e instanceof Error ? e.message : e);
+    res.status(500).json({ error: "Failed to resend invite" });
+  }
 });
 
 export default router;
