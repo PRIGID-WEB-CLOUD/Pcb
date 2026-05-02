@@ -1,8 +1,20 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { categories, products } from "@workspace/db/schema";
+import { getSession } from "../lib/auth";
 
 const router = Router();
+
+router.use(async (req, res, next) => {
+  if (process.env.NODE_ENV === "production") {
+    return res.status(404).json({ error: "Not found" });
+  }
+  const user = await getSession(req);
+  if (!user || user.role !== "ADMIN") {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  next();
+});
 
 const SEED_CATEGORIES = [
   { name: "Monochrome" },

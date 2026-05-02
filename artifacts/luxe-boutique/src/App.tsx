@@ -24,6 +24,7 @@ import ShippingReturnsPage from "@/pages/ShippingReturnsPage";
 import AccountPage from "@/pages/AccountPage";
 import OrdersPage from "@/pages/OrdersPage";
 import WishlistPage from "@/pages/WishlistPage";
+import AdminPage from "@/pages/AdminPage";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -65,6 +66,7 @@ function Router() {
       <Route path="/account" component={() => <StoreLayout><AccountPage /></StoreLayout>} />
       <Route path="/account/orders" component={() => <StoreLayout><OrdersPage /></StoreLayout>} />
       <Route path="/account/wishlist" component={() => <StoreLayout><WishlistPage /></StoreLayout>} />
+      <Route path="/admin" component={() => <StoreLayout><AdminPage /></StoreLayout>} />
       <Route path="/login" component={() => <AuthLayout><LoginPage /></AuthLayout>} />
       <Route path="/register" component={() => <AuthLayout><RegisterPage /></AuthLayout>} />
       <Route component={NotFound} />
