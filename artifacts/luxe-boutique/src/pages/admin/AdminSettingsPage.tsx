@@ -874,6 +874,25 @@ export default function AdminSettingsPage() {
                               </p>
                             </div>
                           )}
+                          {smtpProvider === "brevo" && (
+                            <div className="mt-3 p-3 bg-violet-50 border border-violet-200 rounded-lg flex items-start gap-2">
+                              <span className="material-symbols-outlined text-violet-500 text-base mt-0.5 shrink-0">info</span>
+                              <div className="text-[11px] font-[Manrope] text-violet-800 space-y-1.5 leading-relaxed">
+                                <p>
+                                  <strong>Username</strong> — your Brevo account login email (e.g. <code className="bg-violet-100 px-1 rounded">you@company.com</code>).
+                                </p>
+                                <p>
+                                  <strong>Password</strong> — <em>not</em> your Brevo account password. You need an <strong>SMTP key</strong>:
+                                </p>
+                                <ol className="list-decimal ml-4 space-y-0.5">
+                                  <li>Log in to Brevo → click your name (top-right) → <strong>SMTP &amp; API</strong></li>
+                                  <li>Open the <strong>SMTP</strong> tab</li>
+                                  <li>Click <strong>Generate a new SMTP key</strong> → copy it and paste below</li>
+                                </ol>
+                                <p className="text-violet-600">If you see "535 Authentication failed", this is almost always the cause.</p>
+                              </div>
+                            </div>
+                          )}
                         </div>
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
