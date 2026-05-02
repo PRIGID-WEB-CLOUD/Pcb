@@ -234,6 +234,30 @@ export const twitterSchedulerSettings = pgTable("twitter_scheduler_settings", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+export const facebookPagePosts = pgTable("facebook_page_posts", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  caption: text("caption").notNull(),
+  imageUrl: text("image_url"),
+  link: text("link"),
+  postType: text("post_type").notNull().default("Standard"),
+  scheduledFor: text("scheduled_for"),
+  status: text("status").notNull().default("Draft"),
+  likes: integer("likes").notNull().default(0),
+  comments: integer("comments").notNull().default(0),
+  shares: integer("shares").notNull().default(0),
+  reach: integer("reach").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const facebookPostTemplates = pgTable("facebook_post_templates", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  name: text("name").notNull().unique(),
+  body: text("body").notNull(),
+  postType: text("post_type").notNull().default("Standard"),
+  usageCount: integer("usage_count").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // ─── Zod / Type exports ───────────────────────────────────────────────────────
 
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true, updatedAt: true });

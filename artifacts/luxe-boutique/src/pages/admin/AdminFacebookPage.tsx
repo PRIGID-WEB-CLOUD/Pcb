@@ -1,134 +1,232 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Link } from "wouter";
 import AdminLayout from "./AdminLayout";
 
-type ActiveTab = "catalog" | "pixel" | "audiences" | "ads";
+type ActiveTab = "posts" | "catalog" | "pixel" | "audiences" | "ads";
+type PostFilter = "All" | "Published" | "Scheduled" | "Draft";
 
-interface Connection { id: string; connectionKey: string; active: boolean; }
+interface Connection      { id: string; connectionKey: string; active: boolean; }
 interface CatalogSettings { id: string; includedCategories: string[]; minPrice: number; maxPrice: number; }
-interface PixelEvent { id: string; storeEvent: string; fbEvent: string; enabled: boolean; }
-interface Audience { id: string; name: string; size: string; type: string; status: string; }
+interface PixelEvent      { id: string; storeEvent: string; fbEvent: string; enabled: boolean; }
+interface Audience        { id: string; name: string; size: string; type: string; status: string; }
+interface PagePost {
+  id: string; caption: string; imageUrl: string | null; link: string | null;
+  postType: string; scheduledFor: string | null; status: string;
+  likes: number; comments: number; shares: number; reach: number; createdAt: string;
+}
+interface PostTemplate    { id: string; name: string; body: string; postType: string; usageCount: number; }
 
-const ALL_CATEGORIES = ["Ready-to-Wear", "Footwear", "Accessories", "Bags & Luggage", "Jewellery", "Outerwear", "Swimwear"];
+const ALL_CATEGORIES = ["Ready-to-Wear","Footwear","Accessories","Bags & Luggage","Jewellery","Outerwear","Swimwear"];
+const POST_TYPES = ["Standard","Product Spotlight","Collection Launch","Promotion","Brand Story","Event","Teaser"];
 
 const adRanges: Record<string, { impressions: string; ctr: string; cpc: string; roas: string }> = {
   "7":  { impressions: "620K",  ctr: "4.1%", cpc: "$0.38", roas: "4.8x" },
   "30": { impressions: "2.4M",  ctr: "3.8%", cpc: "$0.42", roas: "4.2x" },
   "90": { impressions: "6.8M",  ctr: "3.5%", cpc: "$0.47", roas: "3.9x" },
 };
-
 const audienceTypeStyle: Record<string, string> = {
-  Custom:      "bg-blue-50 text-blue-700",
-  Lookalike:   "bg-purple-50 text-purple-700",
-  Retargeting: "bg-amber-50 text-amber-700",
+  Custom: "bg-blue-50 text-blue-700", Lookalike: "bg-purple-50 text-purple-700", Retargeting: "bg-amber-50 text-amber-700",
 };
 const audienceStatusStyle: Record<string, string> = {
-  Active:   "bg-[#6cf8bb] text-[#00714d]",
-  Building: "bg-amber-100 text-amber-700",
-  Paused:   "bg-slate-100 text-slate-500",
+  Active: "bg-[#6cf8bb] text-[#00714d]", Building: "bg-amber-100 text-amber-700", Paused: "bg-slate-100 text-slate-500",
 };
-
+const postStatusStyle: Record<string, string> = {
+  Published: "bg-[#6cf8bb] text-[#00714d]",
+  Scheduled: "bg-blue-50 text-blue-700",
+  Draft:     "bg-slate-100 text-slate-500",
+  Failed:    "bg-red-100 text-red-600",
+};
+const postTypeColor: Record<string, string> = {
+  "Standard":          "bg-slate-100 text-slate-600",
+  "Product Spotlight": "bg-[#eff4ff] text-[#006c49]",
+  "Collection Launch": "bg-purple-50 text-purple-700",
+  "Promotion":         "bg-amber-50 text-amber-700",
+  "Brand Story":       "bg-pink-50 text-pink-700",
+  "Event":             "bg-cyan-50 text-cyan-700",
+  "Teaser":            "bg-slate-50 text-slate-600",
+};
 const connectionMeta: { key: string; label: string; icon: string }[] = [
-  { key: "facebook",  label: "Facebook Shop",       icon: "storefront"     },
-  { key: "instagram", label: "Instagram Shopping",  icon: "photo_camera"   },
-  { key: "pixel",     label: "Pixel Tracking",      icon: "track_changes"  },
-  { key: "messenger", label: "Messenger Bot",        icon: "chat"           },
+  { key: "facebook",  label: "Facebook Shop",      icon: "storefront"    },
+  { key: "instagram", label: "Instagram Shopping", icon: "photo_camera"  },
+  { key: "pixel",     label: "Pixel Tracking",     icon: "track_changes" },
+  { key: "messenger", label: "Messenger Bot",      icon: "chat"          },
 ];
 
+function fmt(n: number) {
+  if (n >= 1000) return `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}K`;
+  return String(n);
+}
+
 export default function AdminFacebookPage() {
-  const [connections, setConnections]       = useState<Connection[]>([]);
-  const [catalog, setCatalog]               = useState<CatalogSettings | null>(null);
-  const [pixelEvents, setPixelEvents]       = useState<PixelEvent[]>([]);
-  const [audiences, setAudiences]           = useState<Audience[]>([]);
-  const [loading, setLoading]               = useState(true);
-  const [activeTab, setActiveTab]           = useState<ActiveTab>("catalog");
-  const [syncState, setSyncState]           = useState<"idle" | "syncing" | "done">("idle");
-  const [adRange, setAdRange]               = useState<"7" | "30" | "90">("30");
-  const [toast, setToast]                   = useState<string | null>(null);
-  const [newAudName, setNewAudName]         = useState("");
-  const [newAudType, setNewAudType]         = useState("Custom");
+  const [connections,    setConnections]    = useState<Connection[]>([]);
+  const [catalog,        setCatalog]        = useState<CatalogSettings | null>(null);
+  const [pixelEvents,    setPixelEvents]    = useState<PixelEvent[]>([]);
+  const [audiences,      setAudiences]      = useState<Audience[]>([]);
+  const [posts,          setPosts]          = useState<PagePost[]>([]);
+  const [postTemplates,  setPostTemplates]  = useState<PostTemplate[]>([]);
+  const [loading,        setLoading]        = useState(true);
+
+  const [activeTab,   setActiveTab]   = useState<ActiveTab>("posts");
+  const [syncState,   setSyncState]   = useState<"idle"|"syncing"|"done">("idle");
+  const [adRange,     setAdRange]     = useState<"7"|"30"|"90">("30");
+  const [toast,       setToast]       = useState<string | null>(null);
+  const [postFilter,  setPostFilter]  = useState<PostFilter>("All");
+
+  // Audiences
+  const [newAudName, setNewAudName] = useState("");
+  const [newAudType, setNewAudType] = useState("Custom");
+
+  // Post composer
+  const [caption,       setCaption]       = useState("");
+  const [postType,      setPostType]      = useState("Standard");
+  const [imageUrl,      setImageUrl]      = useState("");
+  const [linkUrl,       setLinkUrl]       = useState("");
+  const [scheduleWhen,  setScheduleWhen]  = useState<"now"|"schedule">("now");
+  const [scheduleTime,  setScheduleTime]  = useState("");
+  const [postSubmitting, setPostSubmitting] = useState<"idle"|"posting"|"scheduling"|"drafting">("idle");
+  const [publishingId,  setPublishingId]  = useState<string | null>(null);
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [newTplName,    setNewTplName]    = useState("");
+  const [newTplBody,    setNewTplBody]    = useState("");
+  const [newTplType,    setNewTplType]    = useState("Standard");
+  const [showNewTpl,    setShowNewTpl]    = useState(false);
+
+  const captionRef = useRef<HTMLTextAreaElement>(null);
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 2800); };
 
   const loadAll = useCallback(async () => {
-    const [cRes, catRes, pxRes, audRes] = await Promise.all([
+    const [cRes, catRes, pxRes, audRes, postsRes, tplRes] = await Promise.all([
       fetch("/api/facebook/connections"),
       fetch("/api/facebook/catalog"),
       fetch("/api/facebook/pixel-events"),
       fetch("/api/facebook/audiences"),
+      fetch("/api/facebook/posts"),
+      fetch("/api/facebook/post-templates"),
     ]);
-    if (cRes.ok)   setConnections(await cRes.json());
-    if (catRes.ok) setCatalog(await catRes.json());
-    if (pxRes.ok)  setPixelEvents(await pxRes.json());
-    if (audRes.ok) setAudiences(await audRes.json());
+    if (cRes.ok)     setConnections(await cRes.json());
+    if (catRes.ok)   setCatalog(await catRes.json());
+    if (pxRes.ok)    setPixelEvents(await pxRes.json());
+    if (audRes.ok)   setAudiences(await audRes.json());
+    if (postsRes.ok) setPosts(await postsRes.json());
+    if (tplRes.ok)   setPostTemplates(await tplRes.json());
     setLoading(false);
   }, []);
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
+  // ── Connections ──────────────────────────────────────────────────────────
   const toggleConnection = async (connectionKey: string, active: boolean) => {
     setConnections((p) => p.map((c) => c.connectionKey === connectionKey ? { ...c, active } : c));
     await fetch(`/api/facebook/connections/${connectionKey}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ active }) });
-    const meta = connectionMeta.find((m) => m.key === connectionKey);
-    showToast(`${meta?.label} ${active ? "activated" : "paused"}.`);
+    showToast(`${connectionMeta.find((m) => m.key === connectionKey)?.label} ${active ? "activated" : "paused"}.`);
   };
 
+  // ── Catalog ──────────────────────────────────────────────────────────────
   const toggleCategory = async (cat: string) => {
     if (!catalog) return;
-    const next = catalog.includedCategories.includes(cat)
-      ? catalog.includedCategories.filter((c) => c !== cat)
-      : [...catalog.includedCategories, cat];
+    const next = catalog.includedCategories.includes(cat) ? catalog.includedCategories.filter((c) => c !== cat) : [...catalog.includedCategories, cat];
     setCatalog((p) => p ? { ...p, includedCategories: next } : p);
     await fetch("/api/facebook/catalog", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...catalog, includedCategories: next }) });
   };
-
   const updatePriceRange = async (min: number, max: number) => {
     if (!catalog) return;
     const updated = { ...catalog, minPrice: min, maxPrice: max };
     setCatalog(updated);
     await fetch("/api/facebook/catalog", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(updated) });
   };
-
   const runSync = () => {
     setSyncState("syncing");
     setTimeout(async () => {
       setSyncState("done");
-      showToast(`Catalog sync complete — ${catalog?.includedCategories.length ?? 0} categories, ${(catalog?.includedCategories.length ?? 0) * 178} products.`);
-      await fetch("/api/facebook/catalog", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(catalog) });
+      showToast(`Catalog sync complete — ${catalog?.includedCategories.length ?? 0} categories.`);
       setTimeout(() => setSyncState("idle"), 3000);
     }, 2500);
   };
 
+  // ── Pixel ────────────────────────────────────────────────────────────────
   const togglePixelEvent = async (ev: PixelEvent) => {
     setPixelEvents((p) => p.map((e) => e.id === ev.id ? { ...e, enabled: !e.enabled } : e));
     await fetch(`/api/facebook/pixel-events/${ev.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled: !ev.enabled }) });
-    showToast(`Pixel event "${ev.storeEvent}" ${ev.enabled ? "disabled" : "enabled"}.`);
+    showToast(`"${ev.storeEvent}" ${ev.enabled ? "disabled" : "enabled"}.`);
   };
 
+  // ── Audiences ────────────────────────────────────────────────────────────
   const createAudience = async () => {
     if (!newAudName.trim()) return;
     const res = await fetch("/api/facebook/audiences", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: newAudName.trim(), type: newAudType }) });
     if (res.ok) { const created = await res.json(); setAudiences((p) => [created, ...p]); setNewAudName(""); showToast(`Audience "${newAudName}" creation started.`); }
   };
-
   const toggleAudience = async (aud: Audience) => {
     const next = aud.status === "Active" ? "Paused" : "Active";
     setAudiences((p) => p.map((a) => a.id === aud.id ? { ...a, status: next } : a));
     await fetch(`/api/facebook/audiences/${aud.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: next }) });
   };
-
   const deleteAudience = async (aud: Audience) => {
     setAudiences((p) => p.filter((a) => a.id !== aud.id));
     await fetch(`/api/facebook/audiences/${aud.id}`, { method: "DELETE" });
     showToast(`Audience "${aud.name}" deleted.`);
   };
 
+  // ── Page Posts ───────────────────────────────────────────────────────────
+  const submitPost = async (status: "Published" | "Scheduled" | "Draft") => {
+    if (!caption.trim()) { showToast("Caption is required."); return; }
+    if (status === "Scheduled" && !scheduleTime) { showToast("Choose a scheduled time."); return; }
+    const key = status === "Published" ? "posting" : status === "Scheduled" ? "scheduling" : "drafting";
+    setPostSubmitting(key);
+    const body = { caption, imageUrl: imageUrl || null, link: linkUrl || null, postType, scheduledFor: status === "Scheduled" ? scheduleTime : null, status };
+    const res = await fetch("/api/facebook/posts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    if (res.ok) {
+      const created = await res.json();
+      setPosts((p) => [created, ...p]);
+      setCaption(""); setImageUrl(""); setLinkUrl(""); setScheduleTime("");
+      showToast(status === "Published" ? "Post published to Facebook Page." : status === "Scheduled" ? `Post scheduled for ${scheduleTime}.` : "Draft saved.");
+    }
+    setPostSubmitting("idle");
+  };
+
+  const publishPost = async (post: PagePost) => {
+    setPublishingId(post.id);
+    const res = await fetch(`/api/facebook/posts/${post.id}/publish`, { method: "POST" });
+    if (res.ok) { const updated = await res.json(); setPosts((p) => p.map((x) => x.id === post.id ? updated : x)); showToast("Post published to Facebook Page."); }
+    setPublishingId(null);
+  };
+
+  const deletePost = async (post: PagePost) => {
+    setPosts((p) => p.filter((x) => x.id !== post.id));
+    await fetch(`/api/facebook/posts/${post.id}`, { method: "DELETE" });
+    showToast("Post deleted.");
+  };
+
+  const useTemplate = async (tpl: PostTemplate) => {
+    setCaption(tpl.body); setPostType(tpl.postType);
+    setShowTemplates(false);
+    await fetch(`/api/facebook/post-templates/${tpl.id}/use`, { method: "PUT" });
+    setPostTemplates((p) => p.map((t) => t.id === tpl.id ? { ...t, usageCount: t.usageCount + 1 } : t));
+    showToast(`Template "${tpl.name}" loaded.`);
+    captionRef.current?.focus();
+  };
+
+  const saveNewTemplate = async () => {
+    if (!newTplName.trim() || !newTplBody.trim()) { showToast("Name and body required."); return; }
+    const res = await fetch("/api/facebook/post-templates", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: newTplName, body: newTplBody, postType: newTplType }) });
+    if (res.ok) { const created = await res.json(); setPostTemplates((p) => [created, ...p]); setNewTplName(""); setNewTplBody(""); setShowNewTpl(false); showToast("Template saved."); }
+  };
+
+  // ── Derived ──────────────────────────────────────────────────────────────
   const adData = adRanges[adRange];
-  const tabs: { key: ActiveTab; label: string; icon: string }[] = [
+  const filteredPosts = postFilter === "All" ? posts : posts.filter((p) => p.status === postFilter);
+  const publishedPosts  = posts.filter((p) => p.status === "Published");
+  const scheduledPosts  = posts.filter((p) => p.status === "Scheduled");
+  const draftPosts      = posts.filter((p) => p.status === "Draft");
+  const totalReach      = publishedPosts.reduce((s, p) => s + p.reach, 0);
+  const totalLikes      = publishedPosts.reduce((s, p) => s + p.likes, 0);
+  const tabs: { key: ActiveTab; label: string; icon: string; badge?: number }[] = [
+    { key: "posts",     label: "Page Posts",     icon: "post_add",     badge: scheduledPosts.length || undefined },
     { key: "catalog",   label: "Catalog Rules",  icon: "database"      },
     { key: "pixel",     label: "Pixel Events",   icon: "track_changes" },
-    { key: "audiences", label: "Audiences",       icon: "group"         },
-    { key: "ads",       label: "Ad Performance",  icon: "bar_chart"     },
+    { key: "audiences", label: "Audiences",      icon: "group"         },
+    { key: "ads",       label: "Ad Performance", icon: "bar_chart"     },
   ];
 
   if (loading) return (
@@ -141,20 +239,21 @@ export default function AdminFacebookPage() {
 
   return (
     <AdminLayout sidebar="channels">
-      <div className="p-10 max-w-[1280px] mx-auto">
+      <div className="p-10 max-w-[1320px] mx-auto">
         {toast && (
           <div className="fixed top-6 right-6 z-50 bg-black text-white px-6 py-3 rounded-lg shadow-2xl font-[Manrope] text-sm font-bold flex items-center gap-3">
             <span className="material-symbols-outlined text-[#6cf8bb] text-base">check_circle</span>{toast}
           </div>
         )}
 
+        {/* Header */}
         <div className="mb-10 flex justify-between items-start">
           <div>
             <Link href="/admin/channels" className="inline-flex items-center gap-1.5 text-[#7c839b] hover:text-[#006c49] transition-colors font-[Manrope] font-bold text-xs tracking-widest uppercase mb-4 no-underline">
               <span className="material-symbols-outlined text-base">arrow_back</span> Channel Hub
             </Link>
-            <h2 className="text-[36px] font-serif font-bold text-[#0b1c30] mb-2">Meta Commerce Manager</h2>
-            <p className="font-[Manrope] text-[16px] text-[#7c839b] max-w-2xl">Manage Facebook & Instagram shop presence, pixel events, catalog rules, and custom audiences.</p>
+            <h2 className="text-[36px] font-serif font-bold text-[#0b1c30] mb-2">Meta & Facebook Manager</h2>
+            <p className="font-[Manrope] text-[16px] text-[#7c839b] max-w-2xl">Compose & schedule page posts, manage catalog rules, pixel events, and custom audiences.</p>
           </div>
           <div className="flex flex-col items-end gap-2 pt-8">
             {connectionMeta.slice(0, 2).map((item) => {
@@ -195,14 +294,303 @@ export default function AdminFacebookPage() {
           <div className="flex border-b border-slate-100 overflow-x-auto">
             {tabs.map((t) => (
               <button key={t.key} onClick={() => setActiveTab(t.key)}
-                className={`flex items-center gap-2 px-6 py-4 font-[Manrope] font-bold text-xs tracking-widest uppercase transition-colors whitespace-nowrap ${activeTab === t.key ? "border-b-2 border-[#006c49] text-[#006c49]" : "text-[#7c839b] hover:text-black"}`}>
+                className={`flex items-center gap-2 px-6 py-4 font-[Manrope] font-bold text-xs tracking-widest uppercase transition-colors whitespace-nowrap relative ${activeTab === t.key ? "border-b-2 border-[#006c49] text-[#006c49]" : "text-[#7c839b] hover:text-black"}`}>
                 <span className="material-symbols-outlined text-sm">{t.icon}</span>{t.label}
+                {t.badge && <span className="bg-blue-500 text-white text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center">{t.badge}</span>}
               </button>
             ))}
           </div>
 
           <div className="p-8">
-            {/* Catalog Rules */}
+
+            {/* ══════════════════════ PAGE POSTS ══════════════════════ */}
+            {activeTab === "posts" && (
+              <div>
+                {/* Stats row */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                  {[
+                    { label: "Published",    value: publishedPosts.length,    icon: "check_circle",  cls: "text-[#006c49]"  },
+                    { label: "Scheduled",    value: scheduledPosts.length,    icon: "schedule",      cls: "text-blue-600"   },
+                    { label: "Drafts",       value: draftPosts.length,        icon: "edit_note",     cls: "text-slate-500"  },
+                    { label: "Total Reach",  value: fmt(totalReach),          icon: "visibility",    cls: "text-[#006c49]"  },
+                  ].map((s) => (
+                    <div key={s.label} className="bg-[#f8f9ff] rounded-xl p-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className={`material-symbols-outlined text-base ${s.cls}`}>{s.icon}</span>
+                        <span className="font-[Manrope] font-bold text-[10px] tracking-widest uppercase text-[#7c839b]">{s.label}</span>
+                      </div>
+                      <p className="text-[26px] font-serif font-semibold">{s.value}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-12 gap-8">
+                  {/* ── LEFT: Composer ── */}
+                  <div className="col-span-12 lg:col-span-5 space-y-5">
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-serif text-[20px] font-semibold">Compose Post</h3>
+                      <button onClick={() => setShowTemplates((v) => !v)}
+                        className="flex items-center gap-1.5 text-xs font-[Manrope] font-bold text-[#006c49] hover:text-black transition-colors">
+                        <span className="material-symbols-outlined text-sm">description</span>
+                        Templates ({postTemplates.length})
+                      </button>
+                    </div>
+
+                    {/* Template picker */}
+                    {showTemplates && (
+                      <div className="bg-[#f8f9ff] rounded-xl border border-dashed border-slate-200 p-4 space-y-3">
+                        <div className="flex justify-between items-center">
+                          <span className="font-[Manrope] font-bold text-xs tracking-widest uppercase text-[#45464d]">Post Templates</span>
+                          <button onClick={() => setShowNewTpl((v) => !v)} className="text-xs font-[Manrope] font-bold text-[#006c49] hover:text-black transition-colors flex items-center gap-1">
+                            <span className="material-symbols-outlined text-xs">add</span> New
+                          </button>
+                        </div>
+                        {showNewTpl && (
+                          <div className="space-y-2 p-3 bg-white rounded-lg border border-slate-200">
+                            <input value={newTplName} onChange={(e) => setNewTplName(e.target.value)} placeholder="Template name…"
+                              className="w-full bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-sm font-[Manrope] outline-none focus:border-[#006c49]" />
+                            <select value={newTplType} onChange={(e) => setNewTplType(e.target.value)}
+                              className="w-full bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-sm font-[Manrope] outline-none focus:border-[#006c49]">
+                              {POST_TYPES.map((t) => <option key={t}>{t}</option>)}
+                            </select>
+                            <textarea value={newTplBody} onChange={(e) => setNewTplBody(e.target.value)} rows={3} placeholder="Caption body with {{variables}}…"
+                              className="w-full bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-sm font-[Manrope] outline-none focus:border-[#006c49] resize-none" />
+                            <div className="flex gap-2">
+                              <button onClick={saveNewTemplate} className="flex-1 bg-black text-white py-1.5 text-xs font-[Manrope] font-bold uppercase tracking-widest hover:bg-[#006c49] transition-colors rounded-lg">Save</button>
+                              <button onClick={() => setShowNewTpl(false)} className="px-4 py-1.5 border border-slate-200 text-xs font-[Manrope] font-bold rounded-lg">Cancel</button>
+                            </div>
+                          </div>
+                        )}
+                        <div className="space-y-2 max-h-52 overflow-y-auto pr-0.5">
+                          {postTemplates.map((tpl) => (
+                            <div key={tpl.id} className="flex items-start gap-3 p-3 bg-white rounded-lg border border-slate-100 hover:border-[#006c49] transition-colors group">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-0.5">
+                                  <code className="font-mono text-xs font-bold text-[#0b1c30]">{tpl.name}</code>
+                                  <span className={`text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-full ${postTypeColor[tpl.postType] ?? "bg-slate-100 text-slate-600"}`}>{tpl.postType}</span>
+                                </div>
+                                <p className="text-xs text-[#7c839b] font-[Manrope] line-clamp-1">{tpl.body}</p>
+                              </div>
+                              <button onClick={() => useTemplate(tpl)}
+                                className="shrink-0 px-3 py-1 bg-black text-white text-[10px] font-[Manrope] font-bold uppercase tracking-widest hover:bg-[#006c49] transition-colors rounded opacity-0 group-hover:opacity-100">
+                                Use
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Caption */}
+                    <div className="space-y-2">
+                      <label className="font-[Manrope] font-bold text-[10px] tracking-widest uppercase text-[#45464d]">Caption</label>
+                      <textarea ref={captionRef} value={caption} onChange={(e) => setCaption(e.target.value)} rows={6}
+                        placeholder="Write your post caption…&#10;&#10;Use {{product_name}}, {{price}}, {{link}} as placeholders."
+                        className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm font-[Manrope] outline-none focus:border-[#006c49] resize-none transition-colors" />
+                      <p className="text-right text-[10px] text-[#7c839b] font-[Manrope]">{caption.length} chars</p>
+                    </div>
+
+                    {/* Post type + Image */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <label className="font-[Manrope] font-bold text-[10px] tracking-widest uppercase text-[#45464d]">Post Type</label>
+                        <select value={postType} onChange={(e) => setPostType(e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-sm font-[Manrope] outline-none focus:border-[#006c49]">
+                          {POST_TYPES.map((t) => <option key={t}>{t}</option>)}
+                        </select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="font-[Manrope] font-bold text-[10px] tracking-widest uppercase text-[#45464d]">Image URL</label>
+                        <input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} placeholder="https://…"
+                          className="w-full bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-sm font-[Manrope] outline-none focus:border-[#006c49]" />
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="font-[Manrope] font-bold text-[10px] tracking-widest uppercase text-[#45464d]">Link URL</label>
+                      <input value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} placeholder="https://luxeboutique.com/…"
+                        className="w-full bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-sm font-[Manrope] outline-none focus:border-[#006c49]" />
+                    </div>
+
+                    {/* Schedule toggle */}
+                    <div className="flex gap-2">
+                      {(["now","schedule"] as const).map((opt) => (
+                        <button key={opt} onClick={() => setScheduleWhen(opt)}
+                          className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-[Manrope] font-bold uppercase tracking-widest border transition-all ${scheduleWhen === opt ? "bg-black text-white border-black" : "bg-white text-[#7c839b] border-slate-200 hover:border-black"}`}>
+                          <span className="material-symbols-outlined text-sm">{opt === "now" ? "send" : "schedule_send"}</span>
+                          {opt === "now" ? "Post Now" : "Schedule"}
+                        </button>
+                      ))}
+                    </div>
+                    {scheduleWhen === "schedule" && (
+                      <div className="space-y-1.5">
+                        <label className="font-[Manrope] font-bold text-[10px] tracking-widest uppercase text-[#45464d]">Scheduled Date & Time</label>
+                        <input type="datetime-local" value={scheduleTime} onChange={(e) => setScheduleTime(e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-sm font-[Manrope] outline-none focus:border-[#006c49]" />
+                      </div>
+                    )}
+
+                    {/* Action buttons */}
+                    <div className="grid grid-cols-3 gap-2 pt-1">
+                      <button onClick={() => submitPost("Draft")} disabled={postSubmitting !== "idle"}
+                        className="py-2.5 border border-slate-200 rounded-lg text-xs font-[Manrope] font-bold uppercase tracking-widest text-[#7c839b] hover:border-black hover:text-black disabled:opacity-50 transition-colors flex items-center justify-center gap-1">
+                        <span className="material-symbols-outlined text-sm">save</span>Draft
+                      </button>
+                      {scheduleWhen === "schedule" ? (
+                        <button onClick={() => submitPost("Scheduled")} disabled={postSubmitting !== "idle"}
+                          className="col-span-2 py-2.5 bg-blue-600 text-white rounded-lg text-xs font-[Manrope] font-bold uppercase tracking-widest hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-1.5">
+                          <span className={`material-symbols-outlined text-sm ${postSubmitting === "scheduling" ? "animate-spin" : ""}`}>{postSubmitting === "scheduling" ? "refresh" : "schedule_send"}</span>
+                          {postSubmitting === "scheduling" ? "Scheduling…" : "Schedule Post"}
+                        </button>
+                      ) : (
+                        <button onClick={() => submitPost("Published")} disabled={postSubmitting !== "idle"}
+                          className="col-span-2 py-2.5 bg-[#006c49] text-white rounded-lg text-xs font-[Manrope] font-bold uppercase tracking-widest hover:bg-black disabled:opacity-50 transition-colors flex items-center justify-center gap-1.5">
+                          <span className={`material-symbols-outlined text-sm ${postSubmitting === "posting" ? "animate-spin" : ""}`}>{postSubmitting === "posting" ? "refresh" : "send"}</span>
+                          {postSubmitting === "posting" ? "Publishing…" : "Publish Now"}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* ── RIGHT: Post Feed ── */}
+                  <div className="col-span-12 lg:col-span-7">
+                    <div className="flex items-center justify-between mb-5">
+                      <h3 className="font-serif text-[20px] font-semibold">Post Feed</h3>
+                      <div className="flex gap-1 bg-slate-100 rounded-lg p-1">
+                        {(["All","Published","Scheduled","Draft"] as PostFilter[]).map((f) => {
+                          const count = f === "All" ? posts.length : posts.filter((p) => p.status === f).length;
+                          return (
+                            <button key={f} onClick={() => setPostFilter(f)}
+                              className={`px-3 py-1 text-xs font-[Manrope] font-bold rounded-md transition-all ${postFilter === f ? "bg-white text-black shadow-sm" : "text-[#7c839b] hover:text-black"}`}>
+                              {f} {count > 0 && <span className="ml-0.5 opacity-60">({count})</span>}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {filteredPosts.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-16 text-[#7c839b] font-[Manrope]">
+                        <span className="material-symbols-outlined text-4xl mb-3 text-slate-200">post_add</span>
+                        No {postFilter === "All" ? "" : postFilter.toLowerCase()} posts yet.
+                      </div>
+                    ) : (
+                      <div className="space-y-4 max-h-[820px] overflow-y-auto pr-1">
+                        {filteredPosts.map((post) => (
+                          <div key={post.id} className={`rounded-xl border overflow-hidden transition-all ${post.status === "Published" ? "border-slate-100" : post.status === "Scheduled" ? "border-blue-100" : "border-dashed border-slate-200"}`}>
+                            {/* FB-style post header */}
+                            <div className="bg-white px-4 pt-4 pb-3">
+                              <div className="flex items-start justify-between mb-3">
+                                <div className="flex items-center gap-2.5">
+                                  <div className="w-9 h-9 rounded-full bg-[#1877F2] flex items-center justify-center text-white text-xs font-bold shrink-0">LB</div>
+                                  <div>
+                                    <p className="font-[Manrope] font-bold text-sm text-[#0b1c30] leading-none">Luxe Boutique</p>
+                                    <div className="flex items-center gap-2 mt-0.5">
+                                      <span className="text-[10px] text-[#7c839b] font-[Manrope]">
+                                        {post.status === "Published" ? "Published" : post.status === "Scheduled" ? `Scheduled · ${post.scheduledFor ?? ""}` : "Draft"}
+                                      </span>
+                                      <span className={`text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-full ${postTypeColor[post.postType] ?? "bg-slate-100 text-slate-600"}`}>{post.postType}</span>
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  <span className={`text-[9px] font-[Manrope] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full ${postStatusStyle[post.status] ?? "bg-slate-100 text-slate-500"}`}>{post.status}</span>
+                                  <button onClick={() => deletePost(post)} className="text-[#7c839b] hover:text-red-500 transition-colors p-1">
+                                    <span className="material-symbols-outlined text-base">delete</span>
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* Caption */}
+                              <p className="text-sm font-[Manrope] text-[#0b1c30] whitespace-pre-line line-clamp-4 mb-3">{post.caption}</p>
+
+                              {/* Image preview */}
+                              {post.imageUrl && (
+                                <div className="rounded-lg overflow-hidden mb-3 bg-slate-100" style={{ maxHeight: 200 }}>
+                                  <img src={post.imageUrl} alt="" className="w-full object-cover" style={{ maxHeight: 200 }} onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                                </div>
+                              )}
+
+                              {/* Link chip */}
+                              {post.link && (
+                                <div className="flex items-center gap-2 text-xs font-[Manrope] text-[#006c49] bg-[#f0faf6] border border-[#c3eed8] rounded-lg px-3 py-1.5 mb-3">
+                                  <span className="material-symbols-outlined text-sm">link</span>
+                                  <span className="truncate">{post.link}</span>
+                                </div>
+                              )}
+
+                              {/* Engagement (published) */}
+                              {post.status === "Published" && (
+                                <div className="flex items-center gap-4 pt-2 border-t border-slate-50">
+                                  {[
+                                    { icon: "thumb_up", val: post.likes,    label: "Likes"    },
+                                    { icon: "comment",  val: post.comments, label: "Comments" },
+                                    { icon: "share",    val: post.shares,   label: "Shares"   },
+                                    { icon: "visibility", val: post.reach,  label: "Reach"    },
+                                  ].map((m) => (
+                                    <div key={m.label} className="flex items-center gap-1 text-xs font-[Manrope] text-[#45464d]">
+                                      <span className="material-symbols-outlined text-sm text-[#7c839b]">{m.icon}</span>
+                                      <span className="font-bold">{fmt(m.val)}</span>
+                                      <span className="text-[#7c839b] hidden sm:inline">{m.label}</span>
+                                    </div>
+                                  ))}
+                                  <div className="ml-auto flex items-center gap-2">
+                                    <div className="flex items-center gap-1 text-[10px] font-[Manrope] font-bold text-[#006c49]">
+                                      <span className="material-symbols-outlined text-xs">trending_up</span>
+                                      {post.reach > 0 ? `${((post.likes / post.reach) * 100).toFixed(1)}% ER` : "—"}
+                                    </div>
+                                    <button className="text-xs font-[Manrope] font-bold text-[#1877F2] border border-[#1877F2]/30 px-3 py-1 rounded hover:bg-blue-50 transition-colors flex items-center gap-1">
+                                      <span className="material-symbols-outlined text-xs">bolt</span>Boost
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Draft / Scheduled actions */}
+                              {post.status !== "Published" && (
+                                <div className="flex gap-2 pt-2 border-t border-slate-50">
+                                  {post.status === "Draft" && (
+                                    <button onClick={() => publishPost(post)} disabled={publishingId === post.id}
+                                      className="flex-1 py-1.5 bg-[#006c49] text-white text-xs font-[Manrope] font-bold uppercase tracking-widest rounded-lg hover:bg-black disabled:opacity-60 transition-colors flex items-center justify-center gap-1">
+                                      <span className={`material-symbols-outlined text-xs ${publishingId === post.id ? "animate-spin" : ""}`}>{publishingId === post.id ? "refresh" : "send"}</span>
+                                      {publishingId === post.id ? "Publishing…" : "Publish Now"}
+                                    </button>
+                                  )}
+                                  {post.status === "Scheduled" && (
+                                    <div className="flex-1 flex items-center gap-1.5 text-xs font-[Manrope] text-blue-600 font-bold">
+                                      <span className="material-symbols-outlined text-sm">schedule</span>
+                                      Scheduled · {post.scheduledFor}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Page-level engagement summary */}
+                    {publishedPosts.length > 0 && (
+                      <div className="mt-6 grid grid-cols-3 gap-3">
+                        {[
+                          { label: "Total Likes",    value: fmt(totalLikes),                       icon: "thumb_up"   },
+                          { label: "Total Reach",    value: fmt(totalReach),                       icon: "visibility" },
+                          { label: "Avg. Eng. Rate", value: totalReach ? `${((totalLikes/totalReach)*100).toFixed(1)}%` : "—", icon: "trending_up" },
+                        ].map((s) => (
+                          <div key={s.label} className="bg-[#f8f9ff] rounded-xl p-3 text-center">
+                            <span className="material-symbols-outlined text-[#006c49] text-lg block mb-1">{s.icon}</span>
+                            <p className="text-[18px] font-serif font-semibold">{s.value}</p>
+                            <p className="text-[10px] font-[Manrope] font-bold uppercase tracking-widest text-[#7c839b]">{s.label}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ══════════════════════ CATALOG RULES ══════════════════════ */}
             {activeTab === "catalog" && catalog && (
               <div className="grid grid-cols-12 gap-8">
                 <div className="col-span-12 lg:col-span-7 space-y-6">
@@ -231,8 +619,7 @@ export default function AdminFacebookPage() {
                           <label className="font-[Manrope] font-bold text-[10px] tracking-widest uppercase text-[#45464d]">{f.label}</label>
                           <div className="flex items-center gap-2 bg-slate-50 border border-slate-100 rounded-lg px-3 py-2">
                             <span className="text-slate-400 font-[Manrope]">$</span>
-                            <input type="number" defaultValue={f.val} onBlur={(e) => f.setVal(Number(e.target.value))}
-                              className="bg-transparent outline-none font-[Manrope] text-sm w-full" />
+                            <input type="number" defaultValue={f.val} onBlur={(e) => f.setVal(Number(e.target.value))} className="bg-transparent outline-none font-[Manrope] text-sm w-full" />
                           </div>
                         </div>
                       ))}
@@ -248,7 +635,7 @@ export default function AdminFacebookPage() {
                       <div className="flex justify-between"><span className="text-[#7c839b]">Price range</span><span className="font-bold">${catalog.minPrice} – ${catalog.maxPrice}</span></div>
                     </div>
                   </div>
-                  <div className="p-4 rounded-xl overflow-hidden relative" style={{ background: "linear-gradient(135deg,#0b1c30,#006c49)" }}>
+                  <div className="p-4 rounded-xl" style={{ background: "linear-gradient(135deg,#0b1c30,#006c49)" }}>
                     <p className="text-white font-serif text-[15px] font-semibold mb-1">Ready to push?</p>
                     <p className="text-white/60 text-xs font-[Manrope] mb-4">Sync {catalog.includedCategories.length} categories to Facebook Commerce.</p>
                     <button onClick={runSync} disabled={syncState === "syncing"}
@@ -261,7 +648,7 @@ export default function AdminFacebookPage() {
               </div>
             )}
 
-            {/* Pixel Events */}
+            {/* ══════════════════════ PIXEL EVENTS ══════════════════════ */}
             {activeTab === "pixel" && (
               <div>
                 <div className="flex justify-between items-center mb-6">
@@ -275,47 +662,32 @@ export default function AdminFacebookPage() {
                   {pixelEvents.map((ev) => (
                     <div key={ev.id} className={`flex items-center gap-4 p-4 rounded-xl border transition-all ${ev.enabled ? "bg-[#f8f9ff] border-slate-100" : "bg-white border-dashed border-slate-200 opacity-60"}`}>
                       <div className="flex-1 grid grid-cols-2 gap-4">
-                        <div>
-                          <p className="font-[Manrope] font-bold text-[10px] tracking-widest uppercase text-[#7c839b] mb-0.5">Store Event</p>
-                          <p className="font-[Manrope] font-semibold text-sm">{ev.storeEvent}</p>
-                        </div>
+                        <div><p className="font-[Manrope] font-bold text-[10px] tracking-widest uppercase text-[#7c839b] mb-0.5">Store Event</p><p className="font-[Manrope] font-semibold text-sm">{ev.storeEvent}</p></div>
                         <div className="flex items-center gap-2">
                           <span className="material-symbols-outlined text-slate-300 text-sm">arrow_forward</span>
-                          <div>
-                            <p className="font-[Manrope] font-bold text-[10px] tracking-widest uppercase text-[#7c839b] mb-0.5">Facebook Event</p>
-                            <code className="font-mono text-sm text-[#006c49]">{ev.fbEvent}</code>
-                          </div>
+                          <div><p className="font-[Manrope] font-bold text-[10px] tracking-widest uppercase text-[#7c839b] mb-0.5">Facebook Event</p><code className="font-mono text-sm text-[#006c49]">{ev.fbEvent}</code></div>
                         </div>
                       </div>
-                      <button onClick={() => togglePixelEvent(ev)}
-                        className={`relative w-10 h-5 rounded-full transition-colors duration-200 shrink-0 ${ev.enabled ? "bg-[#006c49]" : "bg-slate-300"}`}>
+                      <button onClick={() => togglePixelEvent(ev)} className={`relative w-10 h-5 rounded-full transition-colors duration-200 shrink-0 ${ev.enabled ? "bg-[#006c49]" : "bg-slate-300"}`}>
                         <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform duration-200 ${ev.enabled ? "translate-x-5" : "translate-x-0.5"}`}></span>
                       </button>
                     </div>
                   ))}
                 </div>
                 <div className="mt-6 p-4 bg-amber-50 border border-amber-100 rounded-xl">
-                  <p className="text-sm font-[Manrope] text-amber-800 flex items-center gap-2">
-                    <span className="material-symbols-outlined text-sm">info</span>
-                    Changes saved to database. Test events with Facebook Events Manager before going live.
-                  </p>
+                  <p className="text-sm font-[Manrope] text-amber-800 flex items-center gap-2"><span className="material-symbols-outlined text-sm">info</span>Changes saved to database. Verify events in Facebook Events Manager before going live.</p>
                 </div>
               </div>
             )}
 
-            {/* Audiences */}
+            {/* ══════════════════════ AUDIENCES ══════════════════════ */}
             {activeTab === "audiences" && (
               <div>
-                <div className="mb-6">
-                  <h3 className="font-serif text-[20px] font-semibold mb-1">Custom Audiences</h3>
-                  <p className="text-sm text-[#7c839b] font-[Manrope]">Sync customer segments to Facebook for precision ad targeting.</p>
-                </div>
+                <div className="mb-6"><h3 className="font-serif text-[20px] font-semibold mb-1">Custom Audiences</h3><p className="text-sm text-[#7c839b] font-[Manrope]">Sync customer segments to Facebook for precision ad targeting.</p></div>
                 <div className="flex gap-3 mb-6 p-4 bg-[#f8f9ff] rounded-xl">
-                  <input value={newAudName} onChange={(e) => setNewAudName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && createAudience()}
-                    placeholder="Audience name…" className="flex-1 bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm font-[Manrope] outline-none focus:border-[#006c49]" />
-                  <select value={newAudType} onChange={(e) => setNewAudType(e.target.value)}
-                    className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm font-[Manrope] outline-none focus:border-[#006c49]">
-                    {["Custom", "Lookalike", "Retargeting"].map((t) => <option key={t}>{t}</option>)}
+                  <input value={newAudName} onChange={(e) => setNewAudName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && createAudience()} placeholder="Audience name…" className="flex-1 bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm font-[Manrope] outline-none focus:border-[#006c49]" />
+                  <select value={newAudType} onChange={(e) => setNewAudType(e.target.value)} className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm font-[Manrope] outline-none focus:border-[#006c49]">
+                    {["Custom","Lookalike","Retargeting"].map((t) => <option key={t}>{t}</option>)}
                   </select>
                   <button onClick={createAudience} className="px-5 py-2 bg-black text-white font-[Manrope] font-bold text-xs tracking-widest uppercase hover:bg-[#006c49] transition-colors rounded-lg flex items-center gap-2">
                     <span className="material-symbols-outlined text-sm">add</span> Create
@@ -325,9 +697,7 @@ export default function AdminFacebookPage() {
                   {audiences.map((a) => (
                     <div key={a.id} className="flex items-center justify-between p-4 bg-white border border-slate-100 rounded-xl">
                       <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 bg-[#eff4ff] rounded-lg flex items-center justify-center">
-                          <span className="material-symbols-outlined text-[#006c49] text-base">group</span>
-                        </div>
+                        <div className="w-9 h-9 bg-[#eff4ff] rounded-lg flex items-center justify-center"><span className="material-symbols-outlined text-[#006c49] text-base">group</span></div>
                         <div>
                           <p className="font-[Manrope] font-bold text-sm">{a.name}</p>
                           <div className="flex items-center gap-2 mt-0.5">
@@ -338,12 +708,8 @@ export default function AdminFacebookPage() {
                       </div>
                       <div className="flex items-center gap-3">
                         <span className={`text-[10px] font-[Manrope] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full ${audienceStatusStyle[a.status] ?? "bg-slate-100 text-slate-500"}`}>{a.status}</span>
-                        <button onClick={() => toggleAudience(a)} className="text-xs font-[Manrope] text-[#7c839b] hover:text-[#006c49] border border-slate-200 px-3 py-1 rounded transition-colors">
-                          {a.status === "Active" ? "Pause" : "Resume"}
-                        </button>
-                        <button onClick={() => deleteAudience(a)} className="text-[#7c839b] hover:text-red-500 transition-colors">
-                          <span className="material-symbols-outlined text-base">delete</span>
-                        </button>
+                        <button onClick={() => toggleAudience(a)} className="text-xs font-[Manrope] text-[#7c839b] hover:text-[#006c49] border border-slate-200 px-3 py-1 rounded transition-colors">{a.status === "Active" ? "Pause" : "Resume"}</button>
+                        <button onClick={() => deleteAudience(a)} className="text-[#7c839b] hover:text-red-500 transition-colors"><span className="material-symbols-outlined text-base">delete</span></button>
                       </div>
                     </div>
                   ))}
@@ -351,24 +717,23 @@ export default function AdminFacebookPage() {
               </div>
             )}
 
-            {/* Ad Performance */}
+            {/* ══════════════════════ AD PERFORMANCE ══════════════════════ */}
             {activeTab === "ads" && (
               <div>
                 <div className="flex justify-between items-center mb-6">
                   <h3 className="font-serif text-[20px] font-semibold">Ad Performance Overview</h3>
                   <div className="flex gap-1 bg-slate-100 rounded-lg p-1">
-                    {(["7", "30", "90"] as const).map((r) => (
-                      <button key={r} onClick={() => setAdRange(r)}
-                        className={`px-4 py-1.5 text-xs font-[Manrope] font-bold rounded-md transition-all ${adRange === r ? "bg-white text-black shadow-sm" : "text-[#7c839b] hover:text-black"}`}>{r}d</button>
+                    {(["7","30","90"] as const).map((r) => (
+                      <button key={r} onClick={() => setAdRange(r)} className={`px-4 py-1.5 text-xs font-[Manrope] font-bold rounded-md transition-all ${adRange === r ? "bg-white text-black shadow-sm" : "text-[#7c839b] hover:text-black"}`}>{r}d</button>
                     ))}
                   </div>
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-5 mb-8">
                   {[
-                    { label: "Impressions", value: adData.impressions, change: "+12.5%", up: true },
-                    { label: "Click-Through Rate", value: adData.ctr, change: "+0.4%", up: true },
-                    { label: "Cost Per Click", value: adData.cpc, change: "-$0.08", up: false },
-                    { label: "ROAS", value: adData.roas, change: "+0.6x", up: true },
+                    { label: "Impressions",       value: adData.impressions, change: "+12.5%", up: true  },
+                    { label: "Click-Through Rate", value: adData.ctr,        change: "+0.4%",  up: true  },
+                    { label: "Cost Per Click",     value: adData.cpc,        change: "-$0.08", up: false },
+                    { label: "ROAS",               value: adData.roas,       change: "+0.6x",  up: true  },
                   ].map((m) => (
                     <div key={m.label} className="p-5 bg-[#f8f9ff] rounded-xl">
                       <p className="font-[Manrope] font-bold text-[10px] tracking-widest uppercase text-[#7c839b] mb-2">{m.label}</p>
@@ -383,10 +748,10 @@ export default function AdminFacebookPage() {
                   <h4 className="font-serif font-semibold mb-3">Top Performing Campaigns</h4>
                   <div className="space-y-3">
                     {[
-                      { name: "SS25 Collection — Retargeting",    spend: "$4,820", roas: "5.2x", status: "Active"  },
-                      { name: "Lookalike — High LTV Prospecting", spend: "$2,140", roas: "3.8x", status: "Active"  },
-                      { name: "Cart Recovery Automation",          spend: "$980",   roas: "6.1x", status: "Active"  },
-                      { name: "Brand Awareness — Broad",           spend: "$1,560", roas: "2.1x", status: "Paused"  },
+                      { name: "SS25 Collection — Retargeting",    spend: "$4,820", roas: "5.2x", status: "Active" },
+                      { name: "Lookalike — High LTV Prospecting", spend: "$2,140", roas: "3.8x", status: "Active" },
+                      { name: "Cart Recovery Automation",          spend: "$980",   roas: "6.1x", status: "Active" },
+                      { name: "Brand Awareness — Broad",           spend: "$1,560", roas: "2.1x", status: "Paused" },
                     ].map((c) => (
                       <div key={c.name} className="flex items-center justify-between py-2 border-b border-slate-100 last:border-0">
                         <div className="flex items-center gap-3">
@@ -403,6 +768,7 @@ export default function AdminFacebookPage() {
                 </div>
               </div>
             )}
+
           </div>
         </div>
       </div>
