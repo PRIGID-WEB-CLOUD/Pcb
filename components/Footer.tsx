@@ -10,9 +10,9 @@ export default function Footer() {
               Defining the landscape of modern luxury through conscious design, impeccable quality, and architectural precision.
             </p>
             <div className="flex gap-6">
-              {['Instagram', 'Pinterest', 'Journal'].map(social => (
-                <a key={social} href="#" className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 hover:text-slate-900 transition-colors">{social}</a>
-              ))}
+              <a href="https://instagram.com" target="_blank" rel="noopener noreferrer" className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 hover:text-slate-900 transition-colors">Instagram</a>
+              <a href="https://pinterest.com" target="_blank" rel="noopener noreferrer" className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 hover:text-slate-900 transition-colors">Pinterest</a>
+              <a href="/blog" className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 hover:text-slate-900 transition-colors">Journal</a>
             </div>
           </div>
 
@@ -21,19 +21,19 @@ export default function Footer() {
             <div className="space-y-8">
               <h4 className="text-[10px] font-bold uppercase tracking-[0.4em] text-slate-900">Collections</h4>
               <ul className="space-y-4 text-[10px] text-slate-500 font-medium uppercase tracking-widest">
-                <li><a href="/products" className="hover:text-slate-900 transition-colors">Spring / Summer</a></li>
-                <li><a href="/products" className="hover:text-slate-900 transition-colors">The Atelier</a></li>
-                <li><a href="/products" className="hover:text-slate-900 transition-colors">Accessories</a></li>
-                <li><a href="/products" className="hover:text-slate-900 transition-colors">Curated Set</a></li>
+                <li><a href="/products?category=Monochrome" className="hover:text-slate-900 transition-colors">Monochrome</a></li>
+                <li><a href="/products?category=Accessories" className="hover:text-slate-900 transition-colors">Accessories</a></li>
+                <li><a href="/products?category=Footwear" className="hover:text-slate-900 transition-colors">Footwear</a></li>
+                <li><a href="/products" className="hover:text-slate-900 transition-colors">All Arrivals</a></li>
               </ul>
             </div>
             <div className="space-y-8">
               <h4 className="text-[10px] font-bold uppercase tracking-[0.4em] text-slate-900">Customer Care</h4>
               <ul className="space-y-4 text-[10px] text-slate-500 font-medium uppercase tracking-widest">
-                <li><a href="#" className="hover:text-slate-900 transition-colors">Shipping & Returns</a></li>
-                <li><a href="#" className="hover:text-slate-900 transition-colors">Contact Us</a></li>
-                <li><a href="#" className="hover:text-slate-900 transition-colors">Privacy Policy</a></li>
-                <li><a href="#" className="hover:text-slate-900 transition-colors">Sustainability</a></li>
+                <li><a href="/shipping-returns" className="hover:text-slate-900 transition-colors">Shipping & Returns</a></li>
+                <li><a href="/contact" className="hover:text-slate-900 transition-colors">Contact Us</a></li>
+                <li><a href="/privacy" className="hover:text-slate-900 transition-colors">Privacy Policy</a></li>
+                <li><a href="/sustainability" className="hover:text-slate-900 transition-colors">Sustainability</a></li>
               </ul>
             </div>
           </div>

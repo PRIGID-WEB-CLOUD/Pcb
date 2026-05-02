@@ -32,15 +32,20 @@ export default function Header() {
 
         {/* Desktop Navigation */}
         <nav className="hidden md:flex items-center space-x-12">
-          {["Collections", "New Arrivals", "Journal", "Heritage"].map((item) => (
+          {[
+            { label: "Collections", href: "/products" },
+            { label: "New Arrivals", href: "/products?new=true" },
+            { label: "Journal", href: "/blog" },
+            { label: "Heritage", href: "/sustainability" }
+          ].map((item) => (
             <Link 
-              key={item}
-              href="/products" 
+              key={item.label}
+              href={item.href} 
               className={`text-[10px] font-bold uppercase tracking-[0.2em] transition-all duration-500 hover:opacity-50 ${
                 isScrolled ? "text-slate-900" : "text-white"
               }`}
             >
-              {item}
+              {item.label}
             </Link>
           ))}
         </nav>
@@ -75,14 +80,19 @@ export default function Header() {
             className="md:hidden bg-white border-b border-slate-100 overflow-hidden"
           >
             <div className="px-8 py-12 flex flex-col space-y-8">
-              {["Collections", "New Arrivals", "Journal", "Heritage", "Sustainability"].map((item) => (
+              {[
+                { label: "Collections", href: "/products" },
+                { label: "New Arrivals", href: "/products?new=true" },
+                { label: "Journal", href: "/blog" },
+                { label: "Heritage", href: "/sustainability" }
+              ].map((item) => (
                 <Link 
-                  key={item}
-                  href="/products" 
+                  key={item.label}
+                  href={item.href} 
                   onClick={() => setIsMobileMenuOpen(false)}
                   className="text-sm font-bold uppercase tracking-[0.3em] text-slate-900 border-b border-slate-50 pb-4"
                 >
-                  {item}
+                  {item.label}
                 </Link>
               ))}
               <div className="flex space-x-8 pt-4">
