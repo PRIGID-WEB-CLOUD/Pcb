@@ -838,7 +838,13 @@ export default function AdminFacebookPage() {
                     <h3 className="font-serif text-[20px] font-semibold mb-1">Pixel Event Mapping</h3>
                     <p className="text-sm text-[#7c839b] font-[Manrope]">Map store events to Facebook Pixel standard events for precise ad attribution.</p>
                   </div>
-                  <div className="text-right"><span className="text-[10px] font-[Manrope] font-bold text-[#7c839b] uppercase tracking-widest block">Pixel ID</span><code className="text-sm font-mono text-[#006c49]">FB-PX-8841029384</code></div>
+                  <div className="text-right">
+                    <span className="text-[10px] font-[Manrope] font-bold text-[#7c839b] uppercase tracking-widest block">Pixel ID</span>
+                    {fbCreds.pixel_id
+                      ? <code className="text-sm font-mono text-[#006c49]">{fbCreds.pixel_id}</code>
+                      : <button onClick={() => setActiveTab("credentials")} className="text-xs font-[Manrope] font-bold text-amber-600 hover:text-black transition-colors flex items-center gap-1 ml-auto"><span className="material-symbols-outlined text-xs">warning</span>Not set</button>
+                    }
+                  </div>
                 </div>
                 <div className="space-y-2">
                   {pixelEvents.map((ev) => (
@@ -902,52 +908,88 @@ export default function AdminFacebookPage() {
             {/* ══════════════════════ AD PERFORMANCE ══════════════════════ */}
             {activeTab === "ads" && (
               <div>
-                <div className="flex justify-between items-center mb-6">
-                  <h3 className="font-serif text-[20px] font-semibold">Ad Performance Overview</h3>
-                  <div className="flex gap-1 bg-slate-100 rounded-lg p-1">
-                    {(["7","30","90"] as const).map((r) => (
-                      <button key={r} onClick={() => setAdRange(r)} className={`px-4 py-1.5 text-xs font-[Manrope] font-bold rounded-md transition-all ${adRange === r ? "bg-white text-black shadow-sm" : "text-[#7c839b] hover:text-black"}`}>{r}d</button>
-                    ))}
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-5 mb-8">
-                  {[
-                    { label: "Impressions",       value: adData.impressions, change: "+12.5%", up: true  },
-                    { label: "Click-Through Rate", value: adData.ctr,        change: "+0.4%",  up: true  },
-                    { label: "Cost Per Click",     value: adData.cpc,        change: "-$0.08", up: false },
-                    { label: "ROAS",               value: adData.roas,       change: "+0.6x",  up: true  },
-                  ].map((m) => (
-                    <div key={m.label} className="p-5 bg-[#f8f9ff] rounded-xl">
-                      <p className="font-[Manrope] font-bold text-[10px] tracking-widest uppercase text-[#7c839b] mb-2">{m.label}</p>
-                      <p className="text-[28px] font-serif font-semibold">{m.value}</p>
-                      <p className={`text-xs font-[Manrope] font-bold mt-1 flex items-center gap-1 ${m.up ? "text-[#006c49]" : "text-[#ba1a1a]"}`}>
-                        <span className="material-symbols-outlined text-xs">{m.up ? "trending_up" : "trending_down"}</span>{m.change}
+                {!fbCreds.ad_account_id ? (
+                  /* ── Empty state: no Ad Account ID saved ── */
+                  <div className="flex flex-col items-center justify-center py-20 gap-5 text-center">
+                    <div className="w-16 h-16 rounded-2xl bg-[#f8f9ff] flex items-center justify-center">
+                      <span className="material-symbols-outlined text-3xl text-[#c6c6cd]">bar_chart</span>
+                    </div>
+                    <div>
+                      <h3 className="font-serif text-[20px] font-semibold mb-2">No Ad Account connected</h3>
+                      <p className="text-sm font-[Manrope] text-[#7c839b] max-w-sm leading-relaxed">
+                        Add your <strong>Ad Account ID</strong> in the API Credentials tab to unlock ad performance data. Format: <code className="bg-slate-100 px-1 rounded text-xs">act_XXXXXXXXX</code>
                       </p>
                     </div>
-                  ))}
-                </div>
-                <div className="p-5 bg-[#f8f9ff] rounded-xl">
-                  <h4 className="font-serif font-semibold mb-3">Top Performing Campaigns</h4>
-                  <div className="space-y-3">
-                    {[
-                      { name: "SS25 Collection — Retargeting",    spend: "$4,820", roas: "5.2x", status: "Active" },
-                      { name: "Lookalike — High LTV Prospecting", spend: "$2,140", roas: "3.8x", status: "Active" },
-                      { name: "Cart Recovery Automation",          spend: "$980",   roas: "6.1x", status: "Active" },
-                      { name: "Brand Awareness — Broad",           spend: "$1,560", roas: "2.1x", status: "Paused" },
-                    ].map((c) => (
-                      <div key={c.name} className="flex items-center justify-between py-2 border-b border-slate-100 last:border-0">
-                        <div className="flex items-center gap-3">
-                          <span className={`w-2 h-2 rounded-full ${c.status === "Active" ? "bg-[#006c49]" : "bg-slate-300"}`}></span>
-                          <span className="font-[Manrope] font-semibold text-sm">{c.name}</span>
-                        </div>
-                        <div className="flex items-center gap-6 text-sm font-[Manrope]">
-                          <span className="text-[#7c839b]">Spend: <strong className="text-black">{c.spend}</strong></span>
-                          <span className="text-[#006c49] font-bold">ROAS {c.roas}</span>
+                    <button onClick={() => setActiveTab("credentials")}
+                      className="px-6 py-2.5 bg-black text-white font-[Manrope] font-bold text-xs tracking-widest uppercase hover:bg-[#006c49] transition-all rounded-lg flex items-center gap-2">
+                      <span className="material-symbols-outlined text-sm">key</span>
+                      Go to API Credentials
+                    </button>
+                  </div>
+                ) : (
+                  /* ── Ad data (sample — no live Meta Ads API yet) ── */
+                  <div>
+                    <div className="flex justify-between items-center mb-4">
+                      <div>
+                        <h3 className="font-serif text-[20px] font-semibold">Ad Performance Overview</h3>
+                        <p className="text-[11px] font-[Manrope] text-amber-600 font-bold flex items-center gap-1 mt-0.5">
+                          <span className="material-symbols-outlined text-xs">info</span>
+                          Sample data — live Meta Ads API integration coming soon
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="text-[10px] font-[Manrope] text-[#7c839b]">Account: <code className="text-black font-mono">{fbCreds.ad_account_id}</code></span>
+                        <div className="flex gap-1 bg-slate-100 rounded-lg p-1">
+                          {(["7","30","90"] as const).map((r) => (
+                            <button key={r} onClick={() => setAdRange(r)} className={`px-4 py-1.5 text-xs font-[Manrope] font-bold rounded-md transition-all ${adRange === r ? "bg-white text-black shadow-sm" : "text-[#7c839b] hover:text-black"}`}>{r}d</button>
+                          ))}
                         </div>
                       </div>
-                    ))}
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-5 mb-8">
+                      {[
+                        { label: "Impressions",        value: adData.impressions, change: "+12.5%", up: true  },
+                        { label: "Click-Through Rate", value: adData.ctr,         change: "+0.4%",  up: true  },
+                        { label: "Cost Per Click",     value: adData.cpc,         change: "-$0.08", up: false },
+                        { label: "ROAS",               value: adData.roas,        change: "+0.6x",  up: true  },
+                      ].map((m) => (
+                        <div key={m.label} className="p-5 bg-[#f8f9ff] rounded-xl relative">
+                          <span className="absolute top-2 right-2 text-[8px] font-[Manrope] font-bold uppercase tracking-widest text-amber-500 bg-amber-50 px-1.5 py-0.5 rounded">Sample</span>
+                          <p className="font-[Manrope] font-bold text-[10px] tracking-widest uppercase text-[#7c839b] mb-2">{m.label}</p>
+                          <p className="text-[28px] font-serif font-semibold">{m.value}</p>
+                          <p className={`text-xs font-[Manrope] font-bold mt-1 flex items-center gap-1 ${m.up ? "text-[#006c49]" : "text-[#ba1a1a]"}`}>
+                            <span className="material-symbols-outlined text-xs">{m.up ? "trending_up" : "trending_down"}</span>{m.change}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="p-5 bg-[#f8f9ff] rounded-xl">
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="font-serif font-semibold">Top Performing Campaigns</h4>
+                        <span className="text-[8px] font-[Manrope] font-bold uppercase tracking-widest text-amber-500 bg-amber-50 px-1.5 py-0.5 rounded">Sample data</span>
+                      </div>
+                      <div className="space-y-3">
+                        {[
+                          { name: "SS25 Collection — Retargeting",    spend: "$4,820", roas: "5.2x", status: "Active" },
+                          { name: "Lookalike — High LTV Prospecting", spend: "$2,140", roas: "3.8x", status: "Active" },
+                          { name: "Cart Recovery Automation",          spend: "$980",   roas: "6.1x", status: "Active" },
+                          { name: "Brand Awareness — Broad",           spend: "$1,560", roas: "2.1x", status: "Paused" },
+                        ].map((c) => (
+                          <div key={c.name} className="flex items-center justify-between py-2 border-b border-slate-100 last:border-0">
+                            <div className="flex items-center gap-3">
+                              <span className={`w-2 h-2 rounded-full ${c.status === "Active" ? "bg-[#006c49]" : "bg-slate-300"}`}></span>
+                              <span className="font-[Manrope] font-semibold text-sm">{c.name}</span>
+                            </div>
+                            <div className="flex items-center gap-6 text-sm font-[Manrope]">
+                              <span className="text-[#7c839b]">Spend: <strong className="text-black">{c.spend}</strong></span>
+                              <span className="text-[#006c49] font-bold">ROAS {c.roas}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             )}
 

@@ -94,8 +94,13 @@ export default function AdminWhatsAppPage() {
 
   const forceResync = () => {
     if (syncing) return;
+    const hasToken = !!(waCreds.system_access_token?.trim());
     setSyncing(true); setSyncDone(false);
-    setTimeout(() => { setSyncing(false); setSyncDone(true); showToast("Catalog resync complete — 1,248 products updated."); setTimeout(() => setSyncDone(false), 4000); }, 2500);
+    setTimeout(() => {
+      setSyncing(false); setSyncDone(true);
+      showToast(hasToken ? "Credentials present — connect WhatsApp Cloud API to run live catalog sync." : "No System Access Token saved. Add credentials first.");
+      setTimeout(() => setSyncDone(false), 4000);
+    }, 1500);
   };
 
   const submitNewTemplate = async () => {
@@ -117,8 +122,15 @@ export default function AdminWhatsAppPage() {
 
   const sendTestMessage = () => {
     if (!testPhone.trim()) { showToast("Enter a phone number first."); return; }
+    const requiredCreds = ["phone_number_id", "waba_id", "system_access_token"];
+    const missing = requiredCreds.filter((k) => !waCreds[k] || !waCreds[k].trim());
+    if (missing.length > 0) {
+      showToast(`Missing credentials: ${missing.join(", ")}. Add them in API Credentials first.`);
+      setActiveTab("credentials");
+      return;
+    }
     setSendingTest(true);
-    setTimeout(() => { setSendingTest(false); showToast(`Test message sent to ${testPhone}.`); }, 2000);
+    setTimeout(() => { setSendingTest(false); showToast(`Credentials present — connect WhatsApp Cloud API to send live messages.`); }, 1200);
   };
 
   const saveOptinSettings = async () => {

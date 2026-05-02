@@ -101,18 +101,42 @@ router.post("/configs/:channelId/test", async (req, res) => {
   try {
     const user = await getSession(req);
     if (!user || user.role !== "ADMIN") return res.status(401).json({ error: "Unauthorized" });
-    const latency = Math.floor(Math.random() * 150) + 60;
-    const pass = Math.random() > 0.1;
+
+    // Determine which credentials are required per channel
+    const requiredKeys: Record<string, string[]> = {
+      facebook: ["page_id", "app_id", "app_secret", "page_access_token"],
+      commerce:  ["catalog_id", "app_id", "app_secret"],
+      whatsapp: ["phone_number_id", "waba_id", "system_access_token"],
+      twitter:  ["api_key", "api_secret", "access_token", "access_token_secret"],
+    };
+
+    const channelId = req.params.channelId;
+    const required = requiredKeys[channelId] ?? [];
+
+    // Load saved credentials for this channel
+    const creds = await db.select().from(channelCredentials)
+      .where(eq(channelCredentials.channel, channelId));
+    const credMap: Record<string, string> = {};
+    for (const c of creds) credMap[c.keyName] = c.value;
+
+    const missing = required.filter((k) => !credMap[k] || credMap[k].trim() === "");
+    const pass = missing.length === 0;
+    const latency = pass ? Math.floor(Math.random() * 100) + 40 : 0;
+
     await db.update(channelConfigs)
-      .set({ latency, updatedAt: new Date() })
-      .where(eq(channelConfigs.channelId, req.params.channelId));
+      .set({ latency: pass ? latency : undefined, updatedAt: new Date() })
+      .where(eq(channelConfigs.channelId, channelId));
+
     await db.insert(channelEventLogs).values({
-      channel: req.params.channelId,
+      channel: channelId,
       event: pass ? "Connection Test Passed" : "Connection Test Failed",
-      detail: pass ? `Latency: ${latency}ms` : "Authentication error — verify API keys",
+      detail: pass
+        ? `All credentials present. Simulated latency: ${latency}ms`
+        : `Missing credentials: ${missing.join(", ")}`,
       type: pass ? "info" : "error",
     });
-    res.json({ pass, latency });
+
+    res.json({ pass, latency, missing });
   } catch { res.status(500).json({ error: "Failed to test connection" }); }
 });
 
