@@ -181,7 +181,8 @@ router.post("/admin/request-otp", async (req, res) => {
     await db.insert(adminOtpCodes).values({ email, code, expiresAt });
 
     const { dev } = await sendAdminOtp(email, code, user.name);
-    res.json({ success: true, dev });
+    const isDev = process.env.NODE_ENV !== "production";
+    res.json({ success: true, dev, ...(isDev && dev ? { devCode: code } : {}) });
   } catch { res.status(500).json({ error: "Failed to send OTP" }); }
 });
 
