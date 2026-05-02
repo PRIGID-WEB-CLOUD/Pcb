@@ -5,7 +5,7 @@ import { useEffect } from "react";
 import AccountSidebar from "@/components/AccountSidebar";
 
 export default function AccountSettingsPage() {
-  const { user, loading } = useAuth();
+  const { user, loading, refetch } = useAuth();
   const [, navigate] = useLocation();
   const [name, setName] = useState("");
   const [currentPw, setCurrentPw] = useState("");
@@ -36,6 +36,7 @@ export default function AccountSettingsPage() {
       if (!res.ok) throw new Error(data.error || "Update failed");
       setMsg({ type: "ok", text: "Your details have been updated." });
       setCurrentPw(""); setNewPw("");
+      await refetch();
     } catch (err: any) {
       setMsg({ type: "err", text: err.message });
     } finally {
