@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Image from "next/image";
-import { motion } from "motion/react";
-import { ChevronRight, Minus, Plus, ShoppingBag } from "lucide-react";
+import Link from "next/link";
+import { motion, AnimatePresence } from "motion/react";
+import { ChevronRight, Minus, Plus, ShoppingBag, Heart, Star } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { useCurrency } from "@/components/CurrencyContext";
 
@@ -17,6 +18,11 @@ export default function ProductDetailPage() {
   const [quantity, setQuantity] = useState(1);
   const [loading, setLoading] = useState(true);
   const [addingToCart, setAddingToCart] = useState(false);
+  const [isWishlisted, setIsWishlisted] = useState(false);
+  const [addingToWishlist, setAddingToWishlist] = useState(false);
+  const [reviewText, setReviewText] = useState("");
+  const [rating, setRating] = useState(5);
+  const [submittingReview, setSubmittingReview] = useState(false);
 
   useEffect(() => {
     fetch(`/api/products/${id}`)
@@ -26,6 +32,18 @@ export default function ProductDetailPage() {
         setLoading(false);
       });
   }, [id]);
+
+  useEffect(() => {
+    if (session) {
+      fetch("/api/wishlist")
+        .then(res => res.json())
+        .then(wishlist => {
+          if (Array.isArray(wishlist)) {
+            setIsWishlisted(wishlist.some(item => item.productId === id));
+          }
+        });
+    }
+  }, [session, id]);
 
   const addToCart = async () => {
     if (!session) {
@@ -50,6 +68,64 @@ export default function ProductDetailPage() {
     }
   };
 
+  const toggleWishlist = async () => {
+    if (!session) {
+      router.push("/login");
+      return;
+    }
+
+    setAddingToWishlist(true);
+    try {
+      if (isWishlisted) {
+        await fetch(`/api/wishlist/${id}`, { method: "DELETE" });
+        setIsWishlisted(false);
+      } else {
+        await fetch("/api/wishlist", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ productId: id }),
+        });
+        setIsWishlisted(true);
+      }
+    } catch (error) {
+      console.error("Wishlist error:", error);
+    } finally {
+      setAddingToWishlist(false);
+    }
+  };
+
+  const submitReview = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!session) {
+      router.push("/login");
+      return;
+    }
+    
+    if (!reviewText.trim()) return;
+
+    setSubmittingReview(true);
+    try {
+      const res = await fetch("/api/reviews", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ productId: id, rating, comment: reviewText })
+      });
+      if (res.ok) {
+        const newReview = await res.json();
+        setProduct((prev: any) => ({
+          ...prev,
+          reviews: [newReview, ...prev.reviews]
+        }));
+        setReviewText("");
+        setRating(5);
+      }
+    } catch (error) {
+      console.error("Review error:", error);
+    } finally {
+      setSubmittingReview(false);
+    }
+  };
+
   if (loading) return <div className="max-w-7xl mx-auto px-8 py-20">Loading...</div>;
   if (!product) return <div className="max-w-7xl mx-auto px-8 py-20 text-center">Product not found</div>;
 
@@ -65,16 +141,24 @@ export default function ProductDetailPage() {
         </ol>
       </nav>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-16">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-16 mb-24">
         <div className="lg:col-span-7">
-          <div className="aspect-[3/4] relative bg-slate-50 overflow-hidden rounded-xl shadow-sm">
+          <div className="aspect-[3/4] relative bg-slate-50 overflow-hidden rounded-xl shadow-sm group">
             <Image
               src={product.imageUrl || "https://picsum.photos/seed/product/800/1000"}
               alt={product.name}
               fill
-              className="object-cover"
+              className="object-cover transition-transform duration-700 group-hover:scale-105"
               referrerPolicy="no-referrer"
             />
+            <button 
+              onClick={toggleWishlist}
+              disabled={addingToWishlist}
+              className="absolute top-6 right-6 w-12 h-12 bg-white/90 backdrop-blur rounded-full flex items-center justify-center hover:bg-slate-900 hover:text-white transition-all shadow-sm"
+              aria-label="Add to wishlist"
+            >
+              <Heart size={20} className={isWishlisted ? "fill-slate-900 text-slate-900" : ""} />
+            </button>
           </div>
         </div>
 
@@ -114,7 +198,7 @@ export default function ProductDetailPage() {
             <button 
               onClick={addToCart}
               disabled={addingToCart}
-              className="w-full bg-slate-900 text-white py-5 rounded-none font-bold uppercase tracking-widest text-xs flex items-center justify-center space-x-3 hover:bg-emerald-600 transition-all active:scale-95 disabled:bg-slate-300"
+              className="w-full bg-slate-900 text-white py-5 rounded-none font-bold uppercase tracking-widest text-xs flex items-center justify-center space-x-3 hover:bg-emerald-600 transition-all active:scale-95 disabled:bg-slate-300 shadow-lg"
             >
               <ShoppingBag size={18} />
               <span>{addingToCart ? "Adding..." : "Add to Bag"}</span>
@@ -131,8 +215,83 @@ export default function ProductDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Reviews Section */}
+      <div className="border-t border-slate-100 pt-16">
+        <h2 className="text-2xl font-serif text-slate-900 mb-10">Customer Reviews</h2>
+        
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-16">
+          <div>
+            {product.reviews && product.reviews.length > 0 ? (
+              <div className="space-y-8">
+                {product.reviews.map((review: any) => (
+                  <div key={review.id} className="border-b border-slate-100 pb-8 last:border-0">
+                    <div className="flex items-center space-x-1 mb-3 text-emerald-600">
+                      {[...Array(5)].map((_, i) => (
+                        <Star key={i} size={14} className={i < review.rating ? "fill-emerald-600" : "fill-slate-200 text-slate-200"} />
+                      ))}
+                    </div>
+                    <p className="text-slate-600 italic mb-3">&quot;{review.comment}&quot;</p>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                      — {review.user?.name || "Anonymous Guest"}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-slate-500 italic">No reviews yet. Be the first to review this product.</p>
+            )}
+          </div>
+
+          <div className="bg-slate-50 p-8 rounded-xl">
+            <h3 className="text-lg font-serif text-slate-900 mb-6">Write a Review</h3>
+            {session ? (
+              <form onSubmit={submitReview} className="space-y-6">
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-4">Rating</label>
+                  <div className="flex items-center space-x-2 text-emerald-600">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <button 
+                        key={star} 
+                        type="button" 
+                        onClick={() => setRating(star)}
+                        className="hover:scale-110 transition-transform"
+                      >
+                        <Star size={24} className={star <= rating ? "fill-emerald-600" : "fill-slate-200 text-slate-200"} />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">Review</label>
+                  <textarea 
+                    rows={4}
+                    value={reviewText}
+                    onChange={(e) => setReviewText(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded p-4 text-sm outline-none focus:border-slate-900 transition-colors resize-none"
+                    placeholder="Share your thoughts..."
+                    required
+                  />
+                </div>
+                <button 
+                  type="submit" 
+                  disabled={submittingReview}
+                  className="bg-slate-900 text-white text-[10px] font-bold uppercase tracking-widest px-8 py-4 rounded hover:bg-slate-800 transition-colors disabled:bg-slate-400"
+                >
+                  {submittingReview ? "Submitting..." : "Submit Review"}
+                </button>
+              </form>
+            ) : (
+              <div className="text-center py-8">
+                <p className="text-slate-500 mb-4">Please log in to leave a review.</p>
+                <Link href="/login" className="inline-block bg-slate-900 text-white text-[10px] font-bold uppercase tracking-widest px-8 py-4 rounded hover:bg-slate-800 transition-colors">
+                  Log In
+                </Link>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
-
-import Link from "next/link";

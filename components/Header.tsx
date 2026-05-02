@@ -1,15 +1,28 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ShoppingBag, User, Search, Menu, X } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 
 export default function Header() {
+  const router = useRouter();
   const { data: session } = useSession();
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (searchQuery.trim()) {
+      setIsSearchOpen(false);
+      router.push(`/search?q=${encodeURIComponent(searchQuery)}`);
+      setSearchQuery("");
+    }
+  };
 
   useEffect(() => {
     const handleScroll = () => {
@@ -51,9 +64,38 @@ export default function Header() {
         </nav>
 
         <div className={`flex items-center space-x-8 transition-colors duration-500 ${isScrolled ? "text-slate-900" : "text-white"}`}>
-          <button className="hover:opacity-50 transition-opacity">
-            <Search size={18} strokeWidth={1.5} />
-          </button>
+          <div className="relative">
+            <button 
+              onClick={() => setIsSearchOpen(!isSearchOpen)}
+              className="hover:opacity-50 transition-opacity"
+            >
+              <Search size={18} strokeWidth={1.5} />
+            </button>
+            <AnimatePresence>
+              {isSearchOpen && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 10 }}
+                  className="absolute right-0 top-10 w-64 bg-white p-2 rounded shadow-lg border border-slate-100"
+                >
+                  <form onSubmit={handleSearch} className="flex items-center">
+                    <input 
+                      type="text" 
+                      placeholder="Search collections..." 
+                      className="w-full text-xs p-2 outline-none text-slate-900 placeholder:text-slate-400"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      autoFocus
+                    />
+                    <button type="submit" className="text-slate-400 hover:text-slate-900 px-2">
+                       <Search size={14} />
+                    </button>
+                  </form>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
           <Link href="/cart" className="relative group">
             <ShoppingBag size={18} strokeWidth={1.5} />
             <span className="absolute -top-2 -right-2 text-[8px] bg-slate-900 text-white w-4 h-4 rounded-full flex items-center justify-center font-bold">0</span>

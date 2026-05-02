@@ -1,8 +1,6 @@
 import type { Metadata } from 'next';
 import { Inter, Playfair_Display } from 'next/font/google';
 import './globals.css';
-import Header from '@/components/Header';
-import Footer from '@/components/Footer';
 import AuthProvider from '@/components/AuthProvider';
 import CookieBanner from '@/components/CookieBanner';
 import { CurrencyProvider } from '@/components/CurrencyContext';
@@ -28,11 +26,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body suppressHydrationWarning className="bg-white min-h-screen flex flex-col font-sans antialiased text-slate-900 selection:bg-slate-900 selection:text-white">
         <AuthProvider>
           <CurrencyProvider>
-            <Header />
             <main className="flex-grow">
               {children}
             </main>
-            <Footer />
             <CookieBanner />
           </CurrencyProvider>
         </AuthProvider>

@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { motion } from "motion/react";
 import ProductCard from "@/components/ProductCard";
+import NewsletterForm from "@/components/NewsletterForm";
 import { useEffect, useState } from "react";
 import { ArrowRight, Play } from "lucide-react";
 
@@ -285,15 +286,7 @@ export default function HomePage() {
             )}
             
             <div className="pt-12 border-t border-slate-100">
-               <p className="text-slate-400 text-[10px] font-bold uppercase tracking-[0.4em] mb-4">Join our list</p>
-               <form className="flex border-b border-slate-300 focus-within:border-slate-900 transition-colors pb-2">
-                  <input 
-                    type="email" 
-                    placeholder="EMAIL ADDRESS" 
-                    className="bg-transparent border-none focus:ring-0 text-[10px] tracking-widest w-full py-2 placeholder:text-slate-300"
-                  />
-                  <button className="text-[10px] font-bold uppercase tracking-widest px-4 hover:text-slate-500 transition-colors">Join</button>
-               </form>
+               <NewsletterForm />
             </div>
           </div>
         </div>

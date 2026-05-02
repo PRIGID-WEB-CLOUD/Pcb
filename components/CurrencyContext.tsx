@@ -20,7 +20,9 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
+    setTimeout(() => {
+       setMounted(true);
+    }, 0);
     async function determineCurrency() {
       try {
         // 1. Get location mapping (ipapi is free, no key required for client-side)
