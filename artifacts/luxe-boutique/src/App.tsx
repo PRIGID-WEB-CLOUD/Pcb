@@ -42,6 +42,7 @@ import AdminFacebookPage from "@/pages/admin/AdminFacebookPage";
 import AdminTwitterPage from "@/pages/admin/AdminTwitterPage";
 import AdminWhatsAppPage from "@/pages/admin/AdminWhatsAppPage";
 import AdminSocialAnalyticsPage from "@/pages/admin/AdminSocialAnalyticsPage";
+import AdminLoginPage from "@/pages/admin/AdminLoginPage";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -89,6 +90,7 @@ function Router() {
       <Route path="/login" component={() => <AuthLayout><LoginPage /></AuthLayout>} />
       <Route path="/forgot-password" component={() => <AuthLayout><ForgotPasswordPage /></AuthLayout>} />
       <Route path="/register" component={() => <AuthLayout><RegisterPage /></AuthLayout>} />
+      <Route path="/admin/login" component={() => <AdminLoginPage />} />
       <Route path="/admin" component={() => <AdminGuard><AdminDashboardPage /></AdminGuard>} />
       <Route path="/admin/catalog" component={() => <AdminGuard><AdminCatalogPage /></AdminGuard>} />
       <Route path="/admin/categories" component={() => <AdminGuard><AdminCategoriesPage /></AdminGuard>} />
