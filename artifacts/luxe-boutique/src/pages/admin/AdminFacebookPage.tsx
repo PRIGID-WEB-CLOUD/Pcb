@@ -629,31 +629,6 @@ export default function AdminFacebookPage() {
 
             {/* ══════════════════════ API CREDENTIALS ══════════════════════ */}
             {activeTab === "credentials" && (
-              <div className="flex flex-col items-center justify-center py-20 gap-6 text-center">
-                <div className="w-16 h-16 rounded-2xl bg-[#eff4ff] flex items-center justify-center">
-                  <span className="material-symbols-outlined text-[#006c49] text-3xl">settings</span>
-                </div>
-                <div>
-                  <h3 className="font-serif text-[22px] font-semibold mb-2">Credentials moved to Settings</h3>
-                  <p className="text-sm font-[Manrope] text-[#7c839b] max-w-sm">
-                    Meta / Facebook API credentials are now managed centrally in Settings → Channels → Meta / Facebook.
-                  </p>
-                </div>
-                <Link href="/admin/settings?section=facebook">
-                  <button className="px-8 py-3 bg-black text-white font-[Manrope] font-bold text-xs tracking-widest uppercase hover:bg-[#006c49] transition-all rounded-lg flex items-center gap-2">
-                    <span className="material-symbols-outlined text-sm">arrow_forward</span>
-                    Go to Settings → Meta / Facebook
-                  </button>
-                </Link>
-                {configuredCredsCount > 0 && (
-                  <p className="text-xs font-[Manrope] text-[#006c49] font-bold flex items-center gap-1">
-                    <span className="material-symbols-outlined text-sm">check_circle</span>
-                    {configuredCredsCount}/{FB_CRED_FIELDS.length} credentials already saved
-                  </p>
-                )}
-              </div>
-            )}
-            {false && (
               <div className="grid grid-cols-12 gap-8">
                 <div className="col-span-12 lg:col-span-7 space-y-5">
                   <div className="flex items-center justify-between">
@@ -729,11 +704,12 @@ export default function AdminFacebookPage() {
                   <div className="p-5 bg-[#f8f9ff] rounded-xl border border-slate-100 space-y-4">
                     <h4 className="font-serif font-semibold flex items-center gap-2"><span className="material-symbols-outlined text-[#006c49] text-base">help</span>Where to find your credentials</h4>
                     {[
-                      { step: "1", title: "Create a Meta App", body: "Go to developers.facebook.com → My Apps → Create App. Choose Business type for commerce + ads access." },
-                      { step: "2", title: "Get App ID & Secret", body: "App Dashboard → Settings → Basic. Copy the App ID (public) and App Secret (keep private)." },
-                      { step: "3", title: "Generate Page Token", body: "Use Graph API Explorer → select your app and page → generate token → exchange for a long-lived token via the token debugger." },
-                      { step: "4", title: "Find Pixel ID", body: "Meta Business Manager → Events Manager → Data Sources → your Pixel → copy the Pixel ID from the overview." },
-                      { step: "5", title: "Ad Account ID", body: "Meta Business Manager → Ad Accounts → click your account. The ID appears as act_XXXXXXXXX in the URL." },
+                      { step: "1", title: "Find your Page ID", body: "Go to your Facebook Page → click About (left sidebar) → scroll to the bottom. The Page ID is a long number shown under 'More info'." },
+                      { step: "2", title: "Create a Meta App", body: "Go to developers.facebook.com → My Apps → Create App. Choose Business type for commerce + ads access." },
+                      { step: "3", title: "Get App ID & Secret", body: "App Dashboard → Settings → Basic. Copy the App ID (public) and App Secret (keep private)." },
+                      { step: "4", title: "Generate Page Token", body: "Use Graph API Explorer → select your app and page → generate token → exchange for a long-lived token via the token debugger." },
+                      { step: "5", title: "Find Pixel ID", body: "Meta Business Manager → Events Manager → Data Sources → your Pixel → copy the Pixel ID from the overview." },
+                      { step: "6", title: "Ad Account ID", body: "Meta Business Manager → Ad Accounts → click your account. The ID appears as act_XXXXXXXXX in the URL." },
                     ].map((s) => (
                       <div key={s.step} className="flex gap-3">
                         <span className="w-5 h-5 rounded-full bg-[#006c49] text-white text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">{s.step}</span>
