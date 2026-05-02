@@ -19,6 +19,7 @@ import usersRouter from "./users";
 import settingsRouter from "./settings";
 import mediaRouter from "./media";
 import teamRouter from "./team";
+import apiKeysRouter from "./apikeys";
 
 const router: IRouter = Router();
 
@@ -42,5 +43,6 @@ router.use("/users", usersRouter);
 router.use("/settings", settingsRouter);
 router.use("/media", mediaRouter);
 router.use("/team", teamRouter);
+router.use("/apikeys", apiKeysRouter);
 
 export default router;

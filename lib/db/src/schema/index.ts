@@ -358,6 +358,20 @@ export const teamMembers = pgTable("team_members", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+// ─── API Keys ─────────────────────────────────────────────────────────────────
+
+export const apiKeys = pgTable("api_keys", {
+  id:          text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  name:        text("name").notNull(),
+  keyPrefix:   text("key_prefix").notNull(),
+  keyHash:     text("key_hash").notNull(),
+  createdBy:   text("created_by"),
+  lastUsedAt:  timestamp("last_used_at"),
+  expiresAt:   timestamp("expires_at"),
+  revokedAt:   timestamp("revoked_at"),
+  createdAt:   timestamp("created_at").defaultNow().notNull(),
+});
+
 // ─── Zod / Type exports ───────────────────────────────────────────────────────
 
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true, updatedAt: true });

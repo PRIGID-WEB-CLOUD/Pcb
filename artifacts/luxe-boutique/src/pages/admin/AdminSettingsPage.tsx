@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import AdminLayout from "./AdminLayout";
 
@@ -8,7 +8,18 @@ type SettingsData = {
   status: { smtpConfigured: boolean; cloudinaryConfigured: boolean };
 };
 
-type Section = "email" | "cloudinary" | "store" | "facebook" | "twitter" | "whatsapp";
+type Section = "email" | "cloudinary" | "store" | "facebook" | "twitter" | "whatsapp" | "apikeys";
+
+type ApiKey = {
+  id: string;
+  name: string;
+  keyPrefix: string;
+  createdBy: string | null;
+  lastUsedAt: string | null;
+  expiresAt: string | null;
+  revokedAt: string | null;
+  createdAt: string;
+};
 
 const MASK = "●●●●●●●●●●●●";
 
@@ -234,6 +245,398 @@ function Field({
   );
 }
 
+function timeAgo(iso: string) {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1)  return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24)  return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 30) return `${days}d ago`;
+  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function ApiKeysPanel() {
+  const qc = useQueryClient();
+  const [showCreate, setShowCreate] = useState(false);
+  const [newName,    setNewName]    = useState("");
+  const [newKey,     setNewKey]     = useState<string | null>(null);
+  const [newId,      setNewId]      = useState<string | null>(null);
+  const [copied,     setCopied]     = useState(false);
+  const [revokeId,   setRevokeId]   = useState<string | null>(null);
+  const [deleteId,   setDeleteId]   = useState<string | null>(null);
+  const [createErr,  setCreateErr]  = useState<string | null>(null);
+  const [toast,      setToast]      = useState<string | null>(null);
+
+  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3200); };
+
+  const { data: keys = [], isLoading } = useQuery<ApiKey[]>({
+    queryKey: ["api-keys"],
+    queryFn: async () => {
+      const r = await fetch("/api/apikeys");
+      if (!r.ok) throw new Error("Failed");
+      return r.json();
+    },
+  });
+
+  const createMut = useMutation({
+    mutationFn: async () => {
+      const r = await fetch("/api/apikeys", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newName }),
+      });
+      if (!r.ok) { const d = await r.json(); throw new Error(d.error ?? "Failed"); }
+      return r.json() as Promise<ApiKey & { rawKey: string }>;
+    },
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["api-keys"] });
+      setNewKey(data.rawKey);
+      setNewId(data.id);
+      setNewName("");
+      setCreateErr(null);
+    },
+    onError: (e: Error) => setCreateErr(e.message),
+  });
+
+  const revokeMut = useMutation({
+    mutationFn: async (id: string) => {
+      const r = await fetch(`/api/apikeys/${id}`, { method: "DELETE" });
+      if (!r.ok) throw new Error("Failed");
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["api-keys"] });
+      setRevokeId(null);
+      showToast("API key revoked.");
+    },
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: async (id: string) => {
+      const r = await fetch(`/api/apikeys/${id}/permanent`, { method: "DELETE" });
+      if (!r.ok) throw new Error("Failed");
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["api-keys"] });
+      setDeleteId(null);
+      showToast("API key permanently deleted.");
+    },
+  });
+
+  const copyKey = async () => {
+    if (!newKey) return;
+    await navigator.clipboard.writeText(newKey);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const active  = keys.filter(k => !k.revokedAt).length;
+  const revoked = keys.filter(k => !!k.revokedAt).length;
+
+  return (
+    <div className="space-y-6">
+      {/* Toast */}
+      {toast && (
+        <div className="fixed bottom-6 right-6 z-[100] bg-black text-white px-5 py-3 rounded-xl shadow-xl flex items-center gap-3 font-[Manrope] text-sm font-bold animate-in slide-in-from-bottom-4">
+          <span className="material-symbols-outlined text-[#6cf8bb] text-base">check_circle</span>
+          {toast}
+        </div>
+      )}
+
+      {/* Header card */}
+      <div className="bg-white rounded-xl shadow-[0px_4px_20px_rgba(15,23,42,0.05)] overflow-hidden">
+        <div className="px-8 py-6 border-b border-[#e5eeff] flex items-center justify-between">
+          <div>
+            <h2 className="text-[24px] font-serif font-semibold text-black">API Keys</h2>
+            <p className="text-xs font-[Manrope] text-[#7c839b] mt-0.5">
+              Issue keys for programmatic access to the Luxe Boutique API. Revoke any key instantly.
+            </p>
+          </div>
+          <button
+            onClick={() => { setShowCreate(true); setNewKey(null); setCreateErr(null); }}
+            className="flex items-center gap-2 px-5 py-2.5 bg-black text-white font-[Manrope] font-bold text-xs tracking-widest uppercase hover:bg-[#006c49] transition-all rounded-lg shadow">
+            <span className="material-symbols-outlined text-sm">add</span>
+            New Key
+          </button>
+        </div>
+
+        {/* Stats */}
+        <div className="grid grid-cols-3 divide-x divide-[#f0f2ff] border-b border-[#e5eeff]">
+          {[
+            { label: "Total",   value: keys.length, icon: "key",          color: "text-black"     },
+            { label: "Active",  value: active,       icon: "check_circle", color: "text-[#006c49]" },
+            { label: "Revoked", value: revoked,      icon: "block",        color: "text-red-500"   },
+          ].map(s => (
+            <div key={s.label} className="flex items-center gap-3 px-8 py-4">
+              <span className={`material-symbols-outlined text-xl ${s.color}`}>{s.icon}</span>
+              <div>
+                <p className="text-[22px] font-serif font-bold text-black leading-none">{s.value}</p>
+                <p className="text-[10px] font-[Manrope] font-bold uppercase tracking-widest text-[#7c839b]">{s.label}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Keys table */}
+        {isLoading ? (
+          <div className="py-16 flex items-center justify-center gap-3 text-[#7c839b] font-[Manrope]">
+            <span className="material-symbols-outlined animate-spin">autorenew</span> Loading…
+          </div>
+        ) : keys.length === 0 ? (
+          <div className="py-20 flex flex-col items-center justify-center gap-4 text-center">
+            <div className="w-14 h-14 bg-[#f0f2ff] rounded-2xl flex items-center justify-center">
+              <span className="material-symbols-outlined text-2xl text-[#7c839b]">key_off</span>
+            </div>
+            <div>
+              <p className="font-serif text-[18px] font-semibold mb-1">No API keys yet</p>
+              <p className="text-sm font-[Manrope] text-[#7c839b]">Create your first key to enable programmatic access.</p>
+            </div>
+            <button onClick={() => { setShowCreate(true); setNewKey(null); }}
+              className="px-5 py-2.5 bg-black text-white font-[Manrope] font-bold text-xs tracking-widest uppercase hover:bg-[#006c49] transition-all rounded-lg flex items-center gap-2">
+              <span className="material-symbols-outlined text-sm">add</span>
+              Create First Key
+            </button>
+          </div>
+        ) : (
+          <div>
+            {/* Table header */}
+            <div className="grid grid-cols-12 gap-4 px-8 py-3 bg-[#f8f9ff] border-b border-[#f0f2ff]">
+              <div className="col-span-3  text-[10px] font-[Manrope] font-bold uppercase tracking-widest text-[#7c839b]">Name</div>
+              <div className="col-span-3  text-[10px] font-[Manrope] font-bold uppercase tracking-widest text-[#7c839b]">Key Prefix</div>
+              <div className="col-span-2  text-[10px] font-[Manrope] font-bold uppercase tracking-widest text-[#7c839b]">Status</div>
+              <div className="col-span-2  text-[10px] font-[Manrope] font-bold uppercase tracking-widest text-[#7c839b]">Created</div>
+              <div className="col-span-2  text-[10px] font-[Manrope] font-bold uppercase tracking-widest text-[#7c839b]">Actions</div>
+            </div>
+            <div className="divide-y divide-[#f0f2ff]">
+              {keys.map(k => {
+                const isRevoked = !!k.revokedAt;
+                return (
+                  <div key={k.id} className={`grid grid-cols-12 gap-4 px-8 py-4 items-center hover:bg-[#fafbff] transition-colors ${isRevoked ? "opacity-55" : ""}`}>
+                    {/* Name */}
+                    <div className="col-span-3">
+                      <p className="font-[Manrope] font-bold text-sm text-black truncate">{k.name}</p>
+                      {k.createdBy && <p className="text-[10px] font-[Manrope] text-[#c6c6cd] mt-0.5">by {k.createdBy}</p>}
+                    </div>
+                    {/* Prefix */}
+                    <div className="col-span-3">
+                      <code className="text-xs font-mono bg-[#f0f2ff] px-2 py-1 rounded-md text-[#45464d]">
+                        {k.keyPrefix}••••••••••••••••••••••••••••••••••••••••
+                      </code>
+                    </div>
+                    {/* Status */}
+                    <div className="col-span-2">
+                      {isRevoked ? (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-[Manrope] font-bold bg-[#ffdad6] text-red-700">
+                          <span className="material-symbols-outlined text-[11px]">block</span>
+                          Revoked
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-[Manrope] font-bold bg-[#e6f7f1] text-[#006c49]">
+                          <span className="material-symbols-outlined text-[11px]">check_circle</span>
+                          Active
+                        </span>
+                      )}
+                    </div>
+                    {/* Created */}
+                    <div className="col-span-2">
+                      <p className="text-xs font-[Manrope] text-[#7c839b]">{timeAgo(k.createdAt)}</p>
+                      {k.lastUsedAt
+                        ? <p className="text-[10px] font-[Manrope] text-[#c6c6cd] mt-0.5">Used {timeAgo(k.lastUsedAt)}</p>
+                        : <p className="text-[10px] font-[Manrope] text-[#c6c6cd] mt-0.5">Never used</p>
+                      }
+                    </div>
+                    {/* Actions */}
+                    <div className="col-span-2 flex items-center gap-1">
+                      {!isRevoked ? (
+                        <button onClick={() => setRevokeId(k.id)}
+                          title="Revoke key"
+                          className="flex items-center gap-1.5 px-3 py-1.5 border border-red-200 text-red-600 bg-red-50 hover:bg-red-100 font-[Manrope] font-bold text-[10px] uppercase tracking-widest rounded-lg transition-all">
+                          <span className="material-symbols-outlined text-[12px]">block</span>
+                          Revoke
+                        </button>
+                      ) : (
+                        <button onClick={() => setDeleteId(k.id)}
+                          title="Delete permanently"
+                          className="flex items-center gap-1.5 px-3 py-1.5 border border-[#c6c6cd] text-[#7c839b] hover:bg-[#f0f2ff] font-[Manrope] font-bold text-[10px] uppercase tracking-widest rounded-lg transition-all">
+                          <span className="material-symbols-outlined text-[12px]">delete</span>
+                          Delete
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Security note */}
+      <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 flex items-start gap-3">
+        <span className="material-symbols-outlined text-amber-600 text-xl mt-0.5 shrink-0">shield</span>
+        <div>
+          <p className="text-xs font-[Manrope] font-bold text-amber-800 mb-1">Security notice</p>
+          <p className="text-[11px] font-[Manrope] text-amber-700 leading-relaxed">
+            API keys grant full read/write access to the Luxe Boutique API. Never commit keys to source code or share them publicly.
+            Revoke immediately if a key is suspected to be compromised — revocation takes effect instantly.
+          </p>
+        </div>
+      </div>
+
+      {/* ── Create Key Modal ── */}
+      {showCreate && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-[0_24px_80px_rgba(15,23,42,0.2)] w-full max-w-md overflow-hidden">
+            <div className="px-7 py-5 border-b border-[#e5eeff] flex items-center justify-between">
+              <h2 className="font-serif text-[20px] font-semibold">
+                {newKey ? "Key Created" : "New API Key"}
+              </h2>
+              <button onClick={() => { setShowCreate(false); setNewKey(null); setCreateErr(null); qc.invalidateQueries({ queryKey: ["api-keys"] }); }}
+                className="w-8 h-8 rounded-full hover:bg-[#f0f2ff] flex items-center justify-center text-[#7c839b] hover:text-black transition-colors">
+                <span className="material-symbols-outlined text-lg">close</span>
+              </button>
+            </div>
+
+            {newKey ? (
+              <div className="p-7 space-y-5">
+                {/* One-time warning */}
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
+                  <span className="material-symbols-outlined text-amber-600 text-base mt-0.5 shrink-0">warning</span>
+                  <p className="text-[11px] font-[Manrope] text-amber-800 leading-relaxed">
+                    <strong>Copy this key now.</strong> It will never be shown again after you close this dialog.
+                  </p>
+                </div>
+                {/* Raw key */}
+                <div className="bg-[#f8f9ff] border border-[#e5eeff] rounded-xl p-4">
+                  <p className="text-[10px] font-[Manrope] font-bold uppercase tracking-widest text-[#7c839b] mb-2">Your API Key</p>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 text-xs font-mono text-[#006c49] break-all leading-relaxed">{newKey}</code>
+                    <button onClick={copyKey}
+                      className={`shrink-0 px-3 py-1.5 rounded-lg text-[10px] font-[Manrope] font-bold uppercase tracking-widest transition-all flex items-center gap-1 ${
+                        copied ? "bg-[#006c49] text-white" : "border border-[#c6c6cd] hover:bg-[#f0f2ff]"
+                      }`}>
+                      <span className="material-symbols-outlined text-sm">{copied ? "check" : "content_copy"}</span>
+                      {copied ? "Copied!" : "Copy"}
+                    </button>
+                  </div>
+                </div>
+                <button
+                  onClick={() => { setShowCreate(false); setNewKey(null); qc.invalidateQueries({ queryKey: ["api-keys"] }); }}
+                  className="w-full py-2.5 bg-black text-white font-[Manrope] font-bold text-xs tracking-widest uppercase rounded-lg hover:bg-[#006c49] transition-all">
+                  Done — I've saved my key
+                </button>
+              </div>
+            ) : (
+              <div className="p-7 space-y-5">
+                <div>
+                  <label className="text-[10px] font-[Manrope] font-bold uppercase tracking-widest text-[#45464d] block mb-2">
+                    Key Name <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={newName}
+                    onChange={e => setNewName(e.target.value)}
+                    placeholder="e.g. Webhook Integration, Mobile App…"
+                    className="w-full bg-[#f8f9ff] border border-[#c6c6cd] rounded-lg px-4 py-3 font-[Manrope] text-sm outline-none focus:border-black transition-colors"
+                    onKeyDown={e => e.key === "Enter" && newName.trim() && createMut.mutate()}
+                  />
+                  <p className="mt-1.5 text-[11px] font-[Manrope] text-[#7c839b]">
+                    Give it a name that describes where it will be used.
+                  </p>
+                </div>
+                {createErr && (
+                  <div className="p-3 bg-[#ffdad6] rounded-lg flex items-center gap-2">
+                    <span className="material-symbols-outlined text-red-600 text-sm">error</span>
+                    <p className="text-xs font-[Manrope] text-red-700 font-bold">{createErr}</p>
+                  </div>
+                )}
+                <div className="flex gap-3">
+                  <button onClick={() => { setShowCreate(false); setCreateErr(null); }}
+                    className="flex-1 py-2.5 border border-[#c6c6cd] font-[Manrope] font-bold text-xs tracking-widest uppercase rounded-lg hover:bg-[#f0f2ff] transition-all">
+                    Cancel
+                  </button>
+                  <button onClick={() => createMut.mutate()} disabled={!newName.trim() || createMut.isPending}
+                    className="flex-1 py-2.5 bg-black text-white font-[Manrope] font-bold text-xs tracking-widest uppercase rounded-lg hover:bg-[#006c49] transition-all disabled:opacity-50 flex items-center justify-center gap-2">
+                    {createMut.isPending
+                      ? <><span className="material-symbols-outlined text-sm animate-spin">autorenew</span> Generating…</>
+                      : <><span className="material-symbols-outlined text-sm">key</span> Generate Key</>
+                    }
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Revoke Confirm ── */}
+      {revokeId && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-[0_24px_80px_rgba(15,23,42,0.2)] w-full max-w-sm p-7 space-y-5">
+            <div className="flex flex-col items-center text-center gap-3">
+              <div className="w-14 h-14 rounded-2xl bg-red-50 flex items-center justify-center">
+                <span className="material-symbols-outlined text-2xl text-red-500">block</span>
+              </div>
+              <div>
+                <p className="font-serif text-[18px] font-semibold mb-1">Revoke this key?</p>
+                <p className="text-sm font-[Manrope] text-[#7c839b] leading-relaxed">
+                  Any system using this key will immediately lose access. This cannot be undone — you would need to create a new key.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setRevokeId(null)}
+                className="flex-1 py-2.5 border border-[#c6c6cd] font-[Manrope] font-bold text-xs tracking-widest uppercase rounded-lg hover:bg-[#f0f2ff] transition-all">
+                Cancel
+              </button>
+              <button onClick={() => revokeMut.mutate(revokeId!)} disabled={revokeMut.isPending}
+                className="flex-1 py-2.5 bg-red-600 text-white font-[Manrope] font-bold text-xs tracking-widest uppercase rounded-lg hover:bg-red-700 transition-all disabled:opacity-60 flex items-center justify-center gap-2">
+                {revokeMut.isPending
+                  ? <><span className="material-symbols-outlined text-sm animate-spin">autorenew</span> Revoking…</>
+                  : "Revoke Key"
+                }
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Permanent Delete Confirm ── */}
+      {deleteId && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-[0_24px_80px_rgba(15,23,42,0.2)] w-full max-w-sm p-7 space-y-5">
+            <div className="flex flex-col items-center text-center gap-3">
+              <div className="w-14 h-14 rounded-2xl bg-red-50 flex items-center justify-center">
+                <span className="material-symbols-outlined text-2xl text-red-500">delete_forever</span>
+              </div>
+              <div>
+                <p className="font-serif text-[18px] font-semibold mb-1">Delete permanently?</p>
+                <p className="text-sm font-[Manrope] text-[#7c839b] leading-relaxed">
+                  This revoked key and all its records will be permanently removed from the database.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setDeleteId(null)}
+                className="flex-1 py-2.5 border border-[#c6c6cd] font-[Manrope] font-bold text-xs tracking-widest uppercase rounded-lg hover:bg-[#f0f2ff] transition-all">
+                Cancel
+              </button>
+              <button onClick={() => deleteMut.mutate(deleteId!)} disabled={deleteMut.isPending}
+                className="flex-1 py-2.5 bg-red-600 text-white font-[Manrope] font-bold text-xs tracking-widest uppercase rounded-lg hover:bg-red-700 transition-all disabled:opacity-60 flex items-center justify-center gap-2">
+                {deleteMut.isPending
+                  ? <><span className="material-symbols-outlined text-sm animate-spin">autorenew</span> Deleting…</>
+                  : "Delete Forever"
+                }
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function AdminSettingsPage() {
   const [activeSection, setActiveSection] = useState<Section>("email");
 
@@ -363,6 +766,7 @@ export default function AdminSettingsPage() {
     { key: "facebook",   icon: "public",         label: "Meta / Facebook",  ok: false, group: "Channels" },
     { key: "twitter",    icon: "alternate_email",label: "X (Twitter)",      ok: false, group: "Channels" },
     { key: "whatsapp",   icon: "chat_bubble",    label: "WhatsApp",         ok: false, group: "Channels" },
+    { key: "apikeys",    icon: "key",            label: "API Keys",         ok: true,  group: "Security" },
   ];
 
   return (
@@ -381,7 +785,7 @@ export default function AdminSettingsPage() {
           {/* Sidebar nav */}
           <div className="col-span-12 lg:col-span-3">
             <div className="bg-white rounded-xl shadow-[0px_4px_20px_rgba(15,23,42,0.05)] p-3 flex flex-col gap-1">
-              {["Core", "Channels"].map(group => (
+              {["Core", "Channels", "Security"].map(group => (
                 <div key={group}>
                   <p className="text-[9px] font-[Manrope] font-bold uppercase tracking-widest text-[#c6c6cd] px-4 pt-3 pb-1">{group}</p>
                   {sections.filter(s => s.group === group).map(s => (
@@ -727,6 +1131,9 @@ export default function AdminSettingsPage() {
                     />
                   </div>
                 )}
+
+                {/* ── API Keys ── */}
+                {activeSection === "apikeys" && <ApiKeysPanel />}
 
                 {/* ── WhatsApp ── */}
                 {activeSection === "whatsapp" && (
