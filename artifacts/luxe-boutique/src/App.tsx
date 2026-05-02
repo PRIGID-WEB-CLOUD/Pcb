@@ -46,6 +46,7 @@ import AdminTwitterPage from "@/pages/admin/AdminTwitterPage";
 import AdminWhatsAppPage from "@/pages/admin/AdminWhatsAppPage";
 import AdminSocialAnalyticsPage from "@/pages/admin/AdminSocialAnalyticsPage";
 import AdminNewsletterPage from "@/pages/admin/AdminNewsletterPage";
+import AdminSettingsPage from "@/pages/admin/AdminSettingsPage";
 import AdminLoginPage from "@/pages/admin/AdminLoginPage";
 import NotFound from "@/pages/NotFound";
 
@@ -113,6 +114,7 @@ function Router() {
       <Route path="/admin/blog/new" component={() => <AdminGuard><AdminBlogEditorPage /></AdminGuard>} />
       <Route path="/admin/blog/edit" component={() => <AdminGuard><AdminBlogEditorPage /></AdminGuard>} />
       <Route path="/admin/newsletter" component={() => <AdminGuard><AdminNewsletterPage /></AdminGuard>} />
+      <Route path="/admin/settings" component={() => <AdminGuard><AdminSettingsPage /></AdminGuard>} />
       <Route component={NotFound} />
     </Switch>
   );

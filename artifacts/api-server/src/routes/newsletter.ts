@@ -49,7 +49,7 @@ router.get("/", async (req, res) => {
       thisMonth,
       thisWeek,
       growth,
-      smtpConfigured: isSmtpConfigured(),
+      smtpConfigured: await isSmtpConfigured(),
     });
   } catch { res.status(500).json({ error: "Internal server error" }); }
 });

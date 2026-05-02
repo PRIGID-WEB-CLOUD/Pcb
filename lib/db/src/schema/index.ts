@@ -126,6 +126,12 @@ export const newsletter = pgTable("newsletter", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const appSettings = pgTable("app_settings", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 export const newsletterCampaigns = pgTable("newsletter_campaigns", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   subject: text("subject").notNull(),
