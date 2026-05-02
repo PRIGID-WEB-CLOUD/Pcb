@@ -14,6 +14,7 @@ const mainNavItems = [
   { icon: "shopping_bag", label: "Orders",     href: "/admin/orders"    },
   { icon: "group",        label: "Customers",  href: "/admin/customers" },
   { icon: "analytics",    label: "Analytics",  href: "/admin/analytics" },
+  { icon: "photo_library", label: "Media",      href: "/admin/media"       },
   { icon: "article",      label: "Journal",    href: "/admin/blog"        },
   { icon: "mail",         label: "Newsletter", href: "/admin/newsletter"  },
   { icon: "hub",          label: "Channels",   href: "/admin/channels"    },

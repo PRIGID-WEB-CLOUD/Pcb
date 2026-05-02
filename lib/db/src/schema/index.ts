@@ -126,6 +126,20 @@ export const newsletter = pgTable("newsletter", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const mediaAssets = pgTable("media_assets", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  publicId: text("public_id").notNull().unique(),
+  url: text("url").notNull(),
+  secureUrl: text("secure_url").notNull(),
+  originalName: text("original_name").notNull(),
+  format: text("format").notNull(),
+  width: integer("width"),
+  height: integer("height"),
+  bytes: integer("bytes"),
+  folder: text("folder").default("luxe-boutique"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const appSettings = pgTable("app_settings", {
   key: text("key").primaryKey(),
   value: text("value").notNull(),

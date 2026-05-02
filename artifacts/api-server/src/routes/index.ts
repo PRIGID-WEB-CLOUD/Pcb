@@ -17,6 +17,7 @@ import whatsappRouter from "./whatsapp";
 import twitterRouter from "./twitter";
 import usersRouter from "./users";
 import settingsRouter from "./settings";
+import mediaRouter from "./media";
 
 const router: IRouter = Router();
 
@@ -38,5 +39,6 @@ router.use("/whatsapp", whatsappRouter);
 router.use("/twitter", twitterRouter);
 router.use("/users", usersRouter);
 router.use("/settings", settingsRouter);
+router.use("/media", mediaRouter);
 
 export default router;
