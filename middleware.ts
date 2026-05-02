@@ -1,14 +1,10 @@
-import { auth } from '@/lib/auth/server';
+import { auth } from "@/lib/auth";
 
-export default auth.middleware({
-  // Redirects unauthenticated users to sign-in page
-  loginUrl: '/admin-login',
-});
+export default auth;
 
 export const config = {
   matcher: [
-    // Protected routes requiring authentication
-    '/admin/:path*',
-    '/verify-otp',
+    "/admin/:path*",
+    "/verify-otp",
   ],
 };

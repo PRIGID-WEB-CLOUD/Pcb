@@ -10,10 +10,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       name: "Credentials",
       credentials: {
         email: { label: "Email", type: "email" },
-        password: { label: "Password", type: "password" }
+        password: { label: "Password", type: "password" },
+        otp: { label: "OTP", type: "text" },
+        isOtpLogin: { label: "isOtpLogin", type: "text" }
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) return null;
+        if (!credentials?.email) return null;
 
         const user = await prisma.user.findUnique({
           where: { email: credentials.email as string }
@@ -21,6 +23,31 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         if (!user) return null;
 
+        // OTP Login Flow (Admin Only)
+        if (credentials.isOtpLogin === "true") {
+          if (user.role !== "ADMIN") return null;
+          if (!credentials.otp || !user.otpCode) return null;
+          
+          // Check OTP code and expiry
+          if (user.otpCode !== credentials.otp) return null;
+          if (user.otpExpiry && new Date() > new Date(user.otpExpiry)) return null;
+
+          // Clear OTP after successful use
+          await prisma.user.update({
+            where: { id: user.id },
+            data: { otpCode: null, otpExpiry: null }
+          });
+
+          return {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            role: user.role,
+          };
+        }
+
+        // Standard Password Flow
+        if (!credentials?.password) return null;
         const isValid = await bcrypt.compare(credentials.password as string, user.password);
 
         if (!isValid) return null;

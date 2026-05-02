@@ -1,21 +1,43 @@
 'use server';
 
-import { auth } from '@/lib/auth/server';
+import { prisma } from '@/lib/prisma';
 import { redirect } from 'next/navigation';
+import { signIn } from '@/lib/auth';
 
 export async function verifyOtp(
-  _prevState: { error: string } | null,
+  prevState: { error: string } | null,
   formData: FormData
 ) {
-  // Assuming a verifyOtp method exists on auth based on typical patterns
-  // If not, this might need adjustment based on how the auth provider handles OTP verification
-  const { error } = await (auth as any).verifyOtp({
-    otp: formData.get('otp') as string,
+  const otp = formData.get('otp') as string;
+  const emailQuery = formData.get('email') as string; // Ideally retrieve from search params or session
+
+  // 1. Fetch User to authenticate
+  const user = await prisma.user.findUnique({
+      where: { email: emailQuery }
   });
 
-  if (error) {
-    return { error: error.message || 'Failed to verify OTP. Try again' };
+  if (!user || user.role !== 'ADMIN') {
+      return { error: 'Access denied.' };
   }
 
-  redirect('/admin');
+  // 3. Authenticate with NextAuth via OTP
+  try {
+    const result = await signIn("credentials", {
+        email: user.email,
+        otp: otp,
+        isOtpLogin: "true",
+        redirect: false,
+    });
+    
+    if (result?.error) {
+        return { error: 'Invalid or expired OTP' };
+    }
+
+    redirect('/admin');
+  } catch (err) {
+      if (err instanceof Error && err.message.includes('redirect')) {
+          throw err; // Re-throw redirect errors so Next.js can handle them
+      }
+      return { error: 'Authentication failed' };
+  }
 }
