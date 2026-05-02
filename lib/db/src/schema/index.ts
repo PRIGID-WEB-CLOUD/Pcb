@@ -27,10 +27,28 @@ export const products = pgTable("products", {
   name: text("name").notNull(),
   description: text("description").notNull(),
   price: real("price").notNull(),
+  compareAtPrice: real("compare_at_price"),
   imageUrl: text("image_url"),
+  images: text("images"),
   categoryId: text("category_id").notNull().references(() => categories.id),
+  status: text("status").notNull().default("ACTIVE"),
+  tags: text("tags"),
+  seoTitle: text("seo_title"),
+  seoDescription: text("seo_description"),
+  trackQuantity: boolean("track_quantity").notNull().default(true),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const productVariants = pgTable("product_variants", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  productId: text("product_id").notNull().references(() => products.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  price: real("price").notNull(),
+  sku: text("sku"),
+  stock: integer("stock").notNull().default(0),
+  color: text("color"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 export const reviews = pgTable("reviews", {
