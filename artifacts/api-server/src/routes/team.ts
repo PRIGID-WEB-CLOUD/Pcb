@@ -3,6 +3,7 @@ import { db } from "@workspace/db";
 import { teamMembers } from "@workspace/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { getSession } from "../lib/auth";
+import { sendTeamInvite } from "../lib/email";
 import crypto from "crypto";
 
 const router = Router();
@@ -38,7 +39,16 @@ router.post("/invite", async (req, res) => {
       inviteExpiresAt: expiresAt,
     }).returning();
 
-    res.json({ ...member, inviteLink: `/admin/accept-invite?token=${token}` });
+    const inviteLink = `/admin/accept-invite?token=${token}`;
+    const { dev } = await sendTeamInvite(email, {
+      invitedBy: user.name ?? user.email,
+      role,
+      name: name ?? null,
+      inviteLink,
+      expiryDays: 7,
+    });
+
+    res.json({ ...member, inviteLink, emailSent: !dev });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Failed";
     if (msg.includes("unique") || msg.includes("duplicate")) {
@@ -89,7 +99,18 @@ router.post("/:id/resend", async (req, res) => {
       .set({ inviteToken: token, inviteExpiresAt: expiresAt, status: "pending", updatedAt: new Date() })
       .where(eq(teamMembers.id, req.params.id))
       .returning();
-    res.json({ ...updated, inviteLink: `/admin/accept-invite?token=${token}` });
+    if (!updated) return res.status(404).json({ error: "Member not found" });
+
+    const inviteLink = `/admin/accept-invite?token=${token}`;
+    const { dev } = await sendTeamInvite(updated.email, {
+      invitedBy: user.name ?? user.email,
+      role: updated.role,
+      name: updated.name,
+      inviteLink,
+      expiryDays: 7,
+    });
+
+    res.json({ ...updated, inviteLink, emailSent: !dev });
   } catch { res.status(500).json({ error: "Failed to resend invite" }); }
 });
 
