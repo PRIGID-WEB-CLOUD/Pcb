@@ -102,6 +102,7 @@ export default function AdminFacebookPage() {
   const [testResult,  setTestResult]  = useState<{pass: boolean; latency: number} | null>(null);
 
   const FB_CRED_FIELDS = [
+    { key: "page_id",            label: "Facebook Page ID",      isSecret: false, hint: "Go to your Facebook Page → About → scroll to the bottom → Page ID. Required to publish posts and use Messenger." },
     { key: "catalog_id",         label: "Commerce Catalog ID",   isSecret: false, hint: "Facebook Commerce Manager → Catalog → Settings → Catalog ID. Required to sync your product feed to Facebook Shop." },
     { key: "app_id",             label: "App ID",                isSecret: false, hint: "Meta for Developers → App Dashboard → App ID"                           },
     { key: "app_secret",         label: "App Secret",            isSecret: true,  hint: "App Dashboard → Settings → Basic → App Secret. Never share publicly."   },
