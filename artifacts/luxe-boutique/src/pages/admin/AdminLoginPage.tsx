@@ -40,8 +40,14 @@ export default function AdminLoginPage() {
     const data = await res.json();
     setStep("otp");
     setResendCooldown(60);
-    if (data.dev) setInfo("Development mode: check the API server console for your OTP code.");
-    else           setInfo(`A 6-digit code was sent to ${email}`);
+    if (data.devCode) {
+      setInfo(`Dev mode — your code is: ${data.devCode}`);
+      // Auto-fill the OTP boxes
+      const digits = String(data.devCode).split("");
+      setOtp(digits);
+    } else {
+      setInfo(`A 6-digit sign-in code was sent to ${email}`);
+    }
     setTimeout(() => inputRefs.current[0]?.focus(), 100);
   };
 
