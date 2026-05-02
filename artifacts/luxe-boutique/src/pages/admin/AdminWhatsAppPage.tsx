@@ -1,52 +1,19 @@
-import { useState, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Link } from "wouter";
 import AdminLayout from "./AdminLayout";
 
 type ActiveTab = "config" | "templates" | "journeys" | "optins";
-type TemplateStatus = "Approved" | "Pending" | "Rejected";
 
-interface MessageTemplate {
-  id: string;
-  name: string;
-  category: "Marketing" | "Utility" | "Authentication";
-  body: string;
-  status: TemplateStatus;
-  language: string;
-  sentCount: number;
-}
+interface Template { id: string; name: string; category: string; body: string; status: string; language: string; sentCount: number; }
+interface Journey  { id: string; journeyId: string; icon: string; title: string; description: string; active: boolean; sentCount: string; steps: number; convRate: string; }
+interface OptinSettings { id: string; optinKeyword: string; optoutKeyword: string; doubleOptin: boolean; }
 
-interface Journey {
-  id: string;
-  icon: string;
-  title: string;
-  desc: string;
-  active: boolean;
-  sent: string;
-  steps: number;
-  convRate: string;
-}
-
-const initialTemplates: MessageTemplate[] = [
-  { id: "t1", name: "order_confirmation", category: "Utility",     body: "Hi {{1}}, your order #{{2}} has been confirmed! Estimated delivery: {{3}}. Track at luxeboutique.com/track", status: "Approved", language: "en", sentCount: 8102 },
-  { id: "t2", name: "cart_recovery_1",    category: "Marketing",   body: "{{1}}, you left something behind ✨ Your cart is waiting — complete your order before it sells out: {{2}}", status: "Approved", language: "en", sentCount: 2841 },
-  { id: "t3", name: "vip_welcome",        category: "Marketing",   body: "Welcome to LUXE VIP, {{1}} 🖤 You now have exclusive early access to new collections and private sale events.", status: "Approved", language: "en", sentCount: 142 },
-  { id: "t4", name: "shipping_update",    category: "Utility",     body: "Your order is on the way! 📦 Track your parcel: {{1}}\nExpected delivery: {{2}}", status: "Approved", language: "en", sentCount: 6218 },
-  { id: "t5", name: "review_request",     category: "Marketing",   body: "How did we do, {{1}}? Share your experience with your recent purchase and get 10% off your next order.", status: "Pending",  language: "en", sentCount: 0 },
-];
-
-const initialJourneys: Journey[] = [
-  { id: "cart",     icon: "shopping_cart",  title: "Abandoned Cart",  desc: "3-step recovery sequence triggered 30min after cart abandonment.", active: true,  sent: "2,841", steps: 3, convRate: "18.4%" },
-  { id: "shipping", icon: "local_shipping", title: "Order Tracking",  desc: "Real-time shipping updates sent automatically at each milestone.",   active: true,  sent: "8,102", steps: 4, convRate: "—"     },
-  { id: "vip",      icon: "star",           title: "VIP Welcome",     desc: "Exclusive welcome flow for customers spending over $2,000.",          active: false, sent: "142",   steps: 2, convRate: "34.0%" },
-  { id: "review",   icon: "rate_review",    title: "Review Request",  desc: "Sent 5 days after delivery to collect product reviews.",              active: false, sent: "0",     steps: 1, convRate: "—"     },
-];
-
-const statusStyle: Record<TemplateStatus, string> = {
+const statusStyle: Record<string, string> = {
   Approved: "bg-[#6cf8bb] text-[#00714d]",
   Pending:  "bg-amber-100 text-amber-700",
   Rejected: "bg-red-100 text-red-600",
 };
-const categoryStyle: Record<MessageTemplate["category"], string> = {
+const categoryStyle: Record<string, string> = {
   Marketing:      "bg-blue-50 text-blue-700",
   Utility:        "bg-slate-100 text-slate-600",
   Authentication: "bg-purple-50 text-purple-700",
@@ -55,42 +22,57 @@ const categoryStyle: Record<MessageTemplate["category"], string> = {
 type CopyState = Record<string, boolean>;
 
 export default function AdminWhatsAppPage() {
-  const [activeTab, setActiveTab] = useState<ActiveTab>("config");
-  const [journeys, setJourneys] = useState<Journey[]>(initialJourneys);
-  const [templates, setTemplates] = useState<MessageTemplate[]>(initialTemplates);
-  const [showToken, setShowToken] = useState(false);
-  const [copyState, setCopyState] = useState<CopyState>({});
-  const [syncing, setSyncing] = useState(false);
-  const [syncDone, setSyncDone] = useState(false);
+  const [activeTab, setActiveTab]           = useState<ActiveTab>("config");
+  const [templates, setTemplates]           = useState<Template[]>([]);
+  const [journeys, setJourneys]             = useState<Journey[]>([]);
+  const [optinSettings, setOptinSettings]   = useState<OptinSettings | null>(null);
+  const [loading, setLoading]               = useState(true);
+
+  const [showToken, setShowToken]           = useState(false);
+  const [copyState, setCopyState]           = useState<CopyState>({});
+  const [syncing, setSyncing]               = useState(false);
+  const [syncDone, setSyncDone]             = useState(false);
   const [webhookConfigured, setWebhookConfigured] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
-  // Test message
-  const [testPhone, setTestPhone] = useState("");
-  const [testTemplate, setTestTemplate] = useState("t1");
-  const [sendingTest, setSendingTest] = useState(false);
-  // New template
+  const [toast, setToast]                   = useState<string | null>(null);
+
+  const [testPhone, setTestPhone]           = useState("");
+  const [testTemplate, setTestTemplate]     = useState("");
+  const [sendingTest, setSendingTest]       = useState(false);
+
   const [showNewTemplate, setShowNewTemplate] = useState(false);
-  const [newTplName, setNewTplName] = useState("");
-  const [newTplBody, setNewTplBody] = useState("");
-  const [newTplCategory, setNewTplCategory] = useState<MessageTemplate["category"]>("Marketing");
-  // Opt-in
-  const [optinKeyword, setOptinKeyword] = useState("JOIN");
-  const [optoutKeyword, setOptoutKeyword] = useState("STOP");
-  const [doubleOptin, setDoubleOptin] = useState(true);
-  const [savingSettings, setSavingSettings] = useState(false);
+  const [newTplName, setNewTplName]         = useState("");
+  const [newTplBody, setNewTplBody]         = useState("");
+  const [newTplCategory, setNewTplCategory] = useState("Marketing");
+
+  const [savingOptin, setSavingOptin]       = useState(false);
+  const [localOptin, setLocalOptin]         = useState<OptinSettings | null>(null);
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 2500); };
 
+  const loadAll = useCallback(async () => {
+    const [tRes, jRes, oRes] = await Promise.all([
+      fetch("/api/whatsapp/templates"),
+      fetch("/api/whatsapp/journeys"),
+      fetch("/api/whatsapp/optin"),
+    ]);
+    if (tRes.ok) { const data = await tRes.json(); setTemplates(data); if (data.length) setTestTemplate(data.find((t: Template) => t.status === "Approved")?.id ?? data[0].id); }
+    if (jRes.ok) setJourneys(await jRes.json());
+    if (oRes.ok) { const s = await oRes.json(); setOptinSettings(s); setLocalOptin(s); }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { loadAll(); }, [loadAll]);
+
   const copyToClipboard = (label: string, value: string) => {
     navigator.clipboard.writeText(value).catch(() => {});
-    setCopyState((prev) => ({ ...prev, [label]: true }));
-    setTimeout(() => setCopyState((prev) => ({ ...prev, [label]: false })), 2000);
+    setCopyState((p) => ({ ...p, [label]: true }));
+    setTimeout(() => setCopyState((p) => ({ ...p, [label]: false })), 2000);
     showToast(`${label} copied to clipboard.`);
   };
 
-  const toggleJourney = (id: string) => {
-    const j = journeys.find((x) => x.id === id)!;
-    setJourneys((prev) => prev.map((x) => x.id === id ? { ...x, active: !x.active } : x));
+  const toggleJourney = async (j: Journey) => {
+    setJourneys((p) => p.map((x) => x.journeyId === j.journeyId ? { ...x, active: !x.active } : x));
+    await fetch(`/api/whatsapp/journeys/${j.journeyId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ active: !j.active }) });
     showToast(`${j.title} journey ${j.active ? "paused" : "activated"}.`);
   };
 
@@ -100,42 +82,57 @@ export default function AdminWhatsAppPage() {
     setTimeout(() => { setSyncing(false); setSyncDone(true); showToast("Catalog resync complete — 1,248 products updated."); setTimeout(() => setSyncDone(false), 4000); }, 2500);
   };
 
+  const submitNewTemplate = async () => {
+    if (!newTplName.trim() || !newTplBody.trim()) { showToast("Name and body are required."); return; }
+    const res = await fetch("/api/whatsapp/templates", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: newTplName, category: newTplCategory, body: newTplBody }) });
+    if (res.ok) {
+      const created = await res.json();
+      setTemplates((p) => [...p, created]);
+      setNewTplName(""); setNewTplBody(""); setShowNewTemplate(false);
+      showToast("Template submitted for Meta approval.");
+    }
+  };
+
+  const deleteTemplate = async (t: Template) => {
+    setTemplates((p) => p.filter((x) => x.id !== t.id));
+    await fetch(`/api/whatsapp/templates/${t.id}`, { method: "DELETE" });
+    showToast(`Template "${t.name}" deleted.`);
+  };
+
   const sendTestMessage = () => {
     if (!testPhone.trim()) { showToast("Enter a phone number first."); return; }
     setSendingTest(true);
     setTimeout(() => { setSendingTest(false); showToast(`Test message sent to ${testPhone}.`); }, 2000);
   };
 
-  const deleteTemplate = (id: string) => {
-    const t = templates.find((x) => x.id === id)!;
-    setTemplates((prev) => prev.filter((x) => x.id !== id));
-    showToast(`Template "${t.name}" deleted.`);
-  };
-
-  const submitNewTemplate = () => {
-    if (!newTplName.trim() || !newTplBody.trim()) { showToast("Name and body are required."); return; }
-    const tpl: MessageTemplate = { id: Date.now().toString(), name: newTplName.toLowerCase().replace(/\s+/g, "_"), category: newTplCategory, body: newTplBody, status: "Pending", language: "en", sentCount: 0 };
-    setTemplates((prev) => [...prev, tpl]);
-    setNewTplName(""); setNewTplBody(""); setShowNewTemplate(false);
-    showToast("Template submitted for Meta approval.");
-  };
-
-  const saveSettings = () => {
-    setSavingSettings(true);
-    setTimeout(() => { setSavingSettings(false); showToast("Opt-in/out settings saved."); }, 1500);
+  const saveOptinSettings = async () => {
+    if (!localOptin) return;
+    setSavingOptin(true);
+    const res = await fetch("/api/whatsapp/optin", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(localOptin) });
+    if (res.ok) { setOptinSettings(await res.json()); }
+    setSavingOptin(false);
+    showToast("Opt-in/out settings saved.");
   };
 
   const apiFields = [
-    { label: "Cloud API Phone Number ID", key: "PhoneID", value: "105938472019482" },
+    { label: "Cloud API Phone Number ID", key: "PhoneID",    value: "105938472019482" },
     { label: "WhatsApp Business Account ID", key: "AccountID", value: "294817502938411" },
   ];
 
   const tabs: { key: ActiveTab; label: string; icon: string }[] = [
-    { key: "config",    label: "API Config",   icon: "api"          },
-    { key: "templates", label: "Templates",    icon: "description"  },
-    { key: "journeys",  label: "Journeys",     icon: "route"        },
-    { key: "optins",    label: "Opt-in / Out", icon: "manage_accounts" },
+    { key: "config",    label: "API Config",    icon: "api"              },
+    { key: "templates", label: "Templates",     icon: "description"      },
+    { key: "journeys",  label: "Journeys",      icon: "route"            },
+    { key: "optins",    label: "Opt-in / Out",  icon: "manage_accounts"  },
   ];
+
+  if (loading) return (
+    <AdminLayout sidebar="channels">
+      <div className="flex items-center justify-center min-h-screen">
+        <span className="material-symbols-outlined animate-spin text-[#006c49] text-3xl">refresh</span>
+      </div>
+    </AdminLayout>
+  );
 
   return (
     <AdminLayout sidebar="channels">
@@ -165,10 +162,10 @@ export default function AdminWhatsAppPage() {
         {/* Stats bar */}
         <div className="grid grid-cols-4 gap-4 mb-8">
           {[
-            { label: "Messages Sent (30d)", value: "14,820", sub: "+8.2%", icon: "send" },
-            { label: "Delivery Rate", value: "99.3%", sub: "14,711 delivered", icon: "mark_email_read" },
-            { label: "Read Rate", value: "61.5%", sub: "9,108 opened", icon: "visibility" },
-            { label: "Conversions", value: "482", sub: "+14% vs last month", icon: "shopping_bag" },
+            { label: "Messages Sent (30d)", value: "14,820", sub: "+8.2%",          icon: "send"            },
+            { label: "Delivery Rate",        value: "99.3%",  sub: "14,711 delivered", icon: "mark_email_read" },
+            { label: "Read Rate",            value: "61.5%",  sub: "9,108 opened",   icon: "visibility"      },
+            { label: "Conversions",          value: "482",    sub: "+14% vs last mo", icon: "shopping_bag"    },
           ].map((s) => (
             <div key={s.label} className="bg-white p-4 rounded-xl shadow-[0px_4px_20px_rgba(15,23,42,0.05)]">
               <div className="flex justify-between items-start mb-2">
@@ -181,12 +178,11 @@ export default function AdminWhatsAppPage() {
           ))}
         </div>
 
-        {/* Tabs */}
         <div className="bg-white rounded-xl shadow-[0px_4px_20px_rgba(15,23,42,0.05)]">
-          <div className="flex border-b border-slate-100">
+          <div className="flex border-b border-slate-100 overflow-x-auto">
             {tabs.map((t) => (
               <button key={t.key} onClick={() => setActiveTab(t.key)}
-                className={`flex items-center gap-2 px-6 py-4 font-[Manrope] font-bold text-xs tracking-widest uppercase transition-colors ${activeTab === t.key ? "border-b-2 border-[#006c49] text-[#006c49]" : "text-[#7c839b] hover:text-black"}`}>
+                className={`flex items-center gap-2 px-6 py-4 font-[Manrope] font-bold text-xs tracking-widest uppercase transition-colors whitespace-nowrap ${activeTab === t.key ? "border-b-2 border-[#006c49] text-[#006c49]" : "text-[#7c839b] hover:text-black"}`}>
                 <span className="material-symbols-outlined text-sm">{t.icon}</span>{t.label}
               </button>
             ))}
@@ -237,7 +233,6 @@ export default function AdminWhatsAppPage() {
                       </button>
                     </div>
                   </div>
-                  {/* Test Message */}
                   <div className="p-5 bg-[#f8f9ff] rounded-xl border border-slate-100">
                     <h4 className="font-serif font-semibold mb-3 flex items-center gap-2"><span className="material-symbols-outlined text-[#006c49] text-base">send</span> Send Test Message</h4>
                     <div className="flex gap-3">
@@ -280,7 +275,7 @@ export default function AdminWhatsAppPage() {
                 <div className="flex justify-between items-center mb-6">
                   <div>
                     <h3 className="font-serif text-[20px] font-semibold mb-1">Message Templates</h3>
-                    <p className="text-sm text-[#7c839b] font-[Manrope]">WhatsApp-approved message templates for outbound messaging.</p>
+                    <p className="text-sm text-[#7c839b] font-[Manrope]">{templates.length} templates · {templates.filter(t => t.status === "Approved").length} approved</p>
                   </div>
                   <button onClick={() => setShowNewTemplate((v) => !v)}
                     className="px-5 py-2 bg-black text-white font-[Manrope] font-bold text-xs tracking-widest uppercase hover:bg-[#006c49] transition-colors rounded-lg flex items-center gap-2">
@@ -298,14 +293,14 @@ export default function AdminWhatsAppPage() {
                       </div>
                       <div className="space-y-1">
                         <label className="font-[Manrope] font-bold text-[10px] tracking-widest uppercase text-[#45464d]">Category</label>
-                        <select value={newTplCategory} onChange={(e) => setNewTplCategory(e.target.value as MessageTemplate["category"])}
+                        <select value={newTplCategory} onChange={(e) => setNewTplCategory(e.target.value)}
                           className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm font-[Manrope] outline-none focus:border-[#006c49]">
                           {["Marketing", "Utility", "Authentication"].map((c) => <option key={c}>{c}</option>)}
                         </select>
                       </div>
                     </div>
                     <div className="space-y-1">
-                      <label className="font-[Manrope] font-bold text-[10px] tracking-widest uppercase text-[#45464d]">Message Body (use &#123;&#123;1&#125;&#125; for variables)</label>
+                      <label className="font-[Manrope] font-bold text-[10px] tracking-widest uppercase text-[#45464d]">Message Body</label>
                       <textarea value={newTplBody} onChange={(e) => setNewTplBody(e.target.value)} rows={3}
                         placeholder="Hi {{1}}, your order #{{2}} is confirmed…"
                         className="w-full bg-white border border-slate-200 rounded-lg px-4 py-3 text-sm font-[Manrope] outline-none focus:border-[#006c49] resize-none" />
@@ -320,15 +315,15 @@ export default function AdminWhatsAppPage() {
                   {templates.map((t) => (
                     <div key={t.id} className="p-5 bg-white border border-slate-100 rounded-xl">
                       <div className="flex items-start justify-between mb-3">
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-3 flex-wrap">
                           <code className="font-mono text-sm font-bold text-[#0b1c30]">{t.name}</code>
-                          <span className={`text-[10px] font-[Manrope] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full ${categoryStyle[t.category]}`}>{t.category}</span>
-                          <span className={`text-[10px] font-[Manrope] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full ${statusStyle[t.status]}`}>{t.status}</span>
+                          <span className={`text-[10px] font-[Manrope] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full ${categoryStyle[t.category] ?? "bg-slate-100 text-slate-600"}`}>{t.category}</span>
+                          <span className={`text-[10px] font-[Manrope] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full ${statusStyle[t.status] ?? "bg-slate-100 text-slate-500"}`}>{t.status}</span>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 shrink-0">
                           <span className="text-xs font-[Manrope] text-[#7c839b]">{t.sentCount.toLocaleString()} sent</span>
                           {t.status !== "Approved" && (
-                            <button onClick={() => deleteTemplate(t.id)} className="text-[#7c839b] hover:text-red-500 transition-colors ml-2">
+                            <button onClick={() => deleteTemplate(t)} className="text-[#7c839b] hover:text-red-500 transition-colors ml-1">
                               <span className="material-symbols-outlined text-base">delete</span>
                             </button>
                           )}
@@ -347,26 +342,26 @@ export default function AdminWhatsAppPage() {
                 <div className="flex justify-between items-center mb-6">
                   <div>
                     <h3 className="font-serif text-[20px] font-semibold mb-1">Automated Customer Journeys</h3>
-                    <p className="text-sm text-[#7c839b] font-[Manrope]">{journeys.filter((j) => j.active).length}/{journeys.length} journeys active</p>
+                    <p className="text-sm text-[#7c839b] font-[Manrope]">{journeys.filter((j) => j.active).length}/{journeys.length} journeys active — persisted to database</p>
                   </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                   {journeys.map((j) => (
-                    <div key={j.id} className={`p-6 rounded-xl border transition-all ${j.active ? "bg-[#f8f9ff] border-slate-100" : "bg-white border-slate-200 opacity-70"}`}>
+                    <div key={j.journeyId} className={`p-6 rounded-xl border transition-all ${j.active ? "bg-[#f8f9ff] border-slate-100" : "bg-white border-slate-200 opacity-70"}`}>
                       <div className="flex justify-between items-start mb-4">
                         <div className={`p-2 rounded-lg shadow-sm ${j.active ? "bg-white" : "bg-slate-100"}`}>
                           <span className={`material-symbols-outlined ${j.active ? "text-[#006c49]" : "text-[#7c839b]"}`}>{j.icon}</span>
                         </div>
-                        <button onClick={() => toggleJourney(j.id)}
+                        <button onClick={() => toggleJourney(j)}
                           className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${j.active ? "bg-[#006c49]" : "bg-slate-300"}`}>
                           <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${j.active ? "translate-x-5" : "translate-x-0.5"}`}></span>
                         </button>
                       </div>
                       <h4 className="font-serif font-semibold mb-1">{j.title}</h4>
-                      <p className="text-sm text-[#7c839b] font-[Manrope] mb-4">{j.desc}</p>
+                      <p className="text-sm text-[#7c839b] font-[Manrope] mb-4">{j.description}</p>
                       <div className="flex items-center gap-4 text-[11px] font-[Manrope] font-bold text-[#45464d]">
                         <span className="flex items-center gap-1"><span className="material-symbols-outlined text-xs">route</span> {j.steps} steps</span>
-                        <span className="flex items-center gap-1"><span className="material-symbols-outlined text-xs">send</span> {j.sent} sent/mo</span>
+                        <span className="flex items-center gap-1"><span className="material-symbols-outlined text-xs">send</span> {j.sentCount} sent/mo</span>
                         {j.convRate !== "—" && <span className="text-[#006c49] flex items-center gap-1"><span className="material-symbols-outlined text-xs">shopping_bag</span> {j.convRate} conv.</span>}
                       </div>
                     </div>
@@ -376,34 +371,31 @@ export default function AdminWhatsAppPage() {
             )}
 
             {/* Opt-in / Out */}
-            {activeTab === "optins" && (
+            {activeTab === "optins" && localOptin && (
               <div className="max-w-2xl space-y-8">
                 <div>
                   <h3 className="font-serif text-[20px] font-semibold mb-1">Opt-in / Opt-out Settings</h3>
-                  <p className="text-sm text-[#7c839b] font-[Manrope]">Configure keyword-based subscriber management to stay GDPR & TCPA compliant.</p>
+                  <p className="text-sm text-[#7c839b] font-[Manrope]">Keyword-based subscriber management — changes saved directly to database.</p>
                 </div>
                 <div className="grid grid-cols-2 gap-5">
-                  <div className="space-y-2">
-                    <label className="font-[Manrope] font-bold text-[10px] tracking-widest uppercase text-[#45464d]">Opt-in Keyword</label>
-                    <input value={optinKeyword} onChange={(e) => setOptinKeyword(e.target.value.toUpperCase())}
-                      className="w-full bg-slate-50 border border-slate-100 rounded-lg px-4 py-3 font-mono text-sm outline-none focus:border-[#006c49]" />
-                    <p className="text-xs text-[#7c839b] font-[Manrope]">Customers text this to subscribe.</p>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="font-[Manrope] font-bold text-[10px] tracking-widest uppercase text-[#45464d]">Opt-out Keyword</label>
-                    <input value={optoutKeyword} onChange={(e) => setOptoutKeyword(e.target.value.toUpperCase())}
-                      className="w-full bg-slate-50 border border-slate-100 rounded-lg px-4 py-3 font-mono text-sm outline-none focus:border-[#006c49]" />
-                    <p className="text-xs text-[#7c839b] font-[Manrope]">Customers text this to unsubscribe.</p>
-                  </div>
+                  {[{ label: "Opt-in Keyword", key: "optinKeyword" as const, hint: "Customers text this to subscribe." },
+                    { label: "Opt-out Keyword", key: "optoutKeyword" as const, hint: "Customers text this to unsubscribe." }].map((f) => (
+                    <div key={f.key} className="space-y-2">
+                      <label className="font-[Manrope] font-bold text-[10px] tracking-widest uppercase text-[#45464d]">{f.label}</label>
+                      <input value={localOptin[f.key]} onChange={(e) => setLocalOptin((p) => p ? { ...p, [f.key]: e.target.value.toUpperCase() } : p)}
+                        className="w-full bg-slate-50 border border-slate-100 rounded-lg px-4 py-3 font-mono text-sm outline-none focus:border-[#006c49]" />
+                      <p className="text-xs text-[#7c839b] font-[Manrope]">{f.hint}</p>
+                    </div>
+                  ))}
                 </div>
                 <div className="flex items-center justify-between p-4 bg-[#f8f9ff] rounded-xl">
                   <div>
                     <p className="font-[Manrope] font-bold text-sm">Double Opt-in</p>
-                    <p className="text-xs text-[#7c839b] font-[Manrope] mt-0.5">Send a confirmation message before adding subscribers.</p>
+                    <p className="text-xs text-[#7c839b] font-[Manrope] mt-0.5">Send a confirmation before adding subscribers.</p>
                   </div>
-                  <button onClick={() => setDoubleOptin((v) => !v)}
-                    className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${doubleOptin ? "bg-[#006c49]" : "bg-slate-300"}`}>
-                    <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${doubleOptin ? "translate-x-5" : "translate-x-0.5"}`}></span>
+                  <button onClick={() => setLocalOptin((p) => p ? { ...p, doubleOptin: !p.doubleOptin } : p)}
+                    className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${localOptin.doubleOptin ? "bg-[#006c49]" : "bg-slate-300"}`}>
+                    <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${localOptin.doubleOptin ? "translate-x-5" : "translate-x-0.5"}`}></span>
                   </button>
                 </div>
                 <div className="grid grid-cols-3 gap-4 p-5 bg-white border border-slate-100 rounded-xl">
@@ -414,10 +406,10 @@ export default function AdminWhatsAppPage() {
                     </div>
                   ))}
                 </div>
-                <button onClick={saveSettings} disabled={savingSettings}
+                <button onClick={saveOptinSettings} disabled={savingOptin}
                   className="w-full py-3 bg-black text-white font-[Manrope] font-bold text-xs tracking-widest uppercase hover:bg-[#006c49] disabled:opacity-60 transition-colors rounded-lg flex items-center justify-center gap-2">
-                  <span className={`material-symbols-outlined text-sm ${savingSettings ? "animate-spin" : ""}`}>{savingSettings ? "refresh" : "save"}</span>
-                  {savingSettings ? "Saving…" : "Save Settings"}
+                  <span className={`material-symbols-outlined text-sm ${savingOptin ? "animate-spin" : ""}`}>{savingOptin ? "refresh" : "save"}</span>
+                  {savingOptin ? "Saving…" : "Save Settings"}
                 </button>
               </div>
             )}

@@ -11,6 +11,10 @@ import newsletterRouter from "./newsletter";
 import paymentsRouter from "./payments";
 import postsRouter from "./posts";
 import seedRouter from "./seed";
+import channelsRouter from "./channels";
+import facebookRouter from "./facebook";
+import whatsappRouter from "./whatsapp";
+import twitterRouter from "./twitter";
 
 const router: IRouter = Router();
 
@@ -26,5 +30,9 @@ router.use("/newsletter", newsletterRouter);
 router.use("/payments", paymentsRouter);
 router.use("/posts", postsRouter);
 router.use("/seed", seedRouter);
+router.use("/channels", channelsRouter);
+router.use("/facebook", facebookRouter);
+router.use("/whatsapp", whatsappRouter);
+router.use("/twitter", twitterRouter);
 
 export default router;

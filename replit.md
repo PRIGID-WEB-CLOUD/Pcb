@@ -27,11 +27,12 @@ artifacts/
       contexts/        # AuthContext (custom auth), CurrencyContext (geo-based currency)
   api-server/          # Express API server
     src/
-      routes/          # auth, products, categories, cart, wishlist, orders, reviews, newsletter, payments, seed
+      routes/          # auth, products, categories, cart, wishlist, orders, reviews, newsletter, payments, seed,
+                       # channels, facebook, whatsapp, twitter (channel routes — all admin-only)
       lib/             # auth session helper, logger
 lib/
   db/                  # Drizzle schema + DB client (PostgreSQL)
-    src/schema/index.ts  # All tables: users, products, categories, cart, wishlist, orders, reviews, newsletter, sessions
+    src/schema/index.ts  # All tables — see DB Schema section below
 ```
 
 ## Key Features
@@ -46,6 +47,7 @@ lib/
 - **Payments**: Paystack integration (falls back gracefully if no key configured)
 - **Currency**: Auto-detects user location via ipapi.co and converts prices
 - **Seed**: POST /api/seed to populate DB with sample categories and products
+- **Channels**: All 4 channel admin pages (Hub, Facebook, WhatsApp, Twitter) are fully wired to PostgreSQL — auto-seed on first GET if DB is empty
 
 ## Key Commands
 
@@ -53,6 +55,27 @@ lib/
 - `pnpm --filter @workspace/api-server run dev` — run API server (rebuilds on start)
 - `pnpm --filter @workspace/luxe-boutique run dev` — run frontend dev server
 - `curl -X POST http://localhost:8080/api/seed` — seed database with sample data
+
+## DB Schema
+
+Core tables: `users`, `sessions`, `categories`, `products`, `reviews`, `carts`, `cartItems`, `wishlists`, `wishlistItems`, `orders`, `orderItems`, `newsletter`
+
+Channel tables (auto-seeded with defaults on first GET):
+- `channelConfigs` — status/latency per channel (facebook, commerce, whatsapp, twitter)
+- `channelEventLogs` — event log entries
+- `channelWebhooks` — webhook endpoint configs
+- `facebookConnections` — facebook/instagram/pixel/messenger toggles
+- `facebookCatalogSettings` — category filter + price range (single row)
+- `facebookPixelEvents` — pixel event mappings (storeEvent → fbEvent)
+- `facebookAudiences` — custom audiences
+- `whatsappTemplates` — message templates (submitted to Meta for approval)
+- `whatsappJourneys` — automated journey on/off state
+- `whatsappOptinSettings` — keyword opt-in/out + double optin (single row)
+- `twitterHashtags` — hashtag bank
+- `twitterAutoRules` — auto-post rules (trigger → action)
+- `twitterTweetQueue` — scheduled & sent tweets
+- `twitterContentTemplates` — reusable tweet skeletons
+- `twitterSchedulerSettings` — scheduler on/off + drop frequency + image style (single row)
 
 ## Admin Routes (/admin/*)
 
@@ -64,13 +87,44 @@ All admin routes use `AdminLayout` (no store Header/Footer) with a fixed sidebar
 - `/admin/orders` — Order Management (tabbed filter, order table, status badges)
 - `/admin/customers` — Customer Manager (metrics, searchable table, grayscale avatar effect)
 - `/admin/analytics` — Market Performance (revenue chart, donut, top products, monthly reports)
-- `/admin/channels` — Omnichannel Hub (channel cards, integration health) — uses "channels" sidebar
-- `/admin/channels/facebook` — Meta & Facebook (catalog sync, connection status, ad performance)
-- `/admin/channels/whatsapp` — WhatsApp API Console (API config, message stats, journeys)
-- `/admin/channels/twitter` — X Social Settings (scheduler, hashtags, tweet preview)
+- `/admin/channels` — Omnichannel Hub — **DB-backed**: channel cards, sync, test, pause, event log, webhooks
+- `/admin/channels/facebook` — Meta Commerce — **DB-backed**: connection toggles, catalog rules, pixel events, custom audiences, ad performance
+- `/admin/channels/whatsapp` — WhatsApp API Console — **DB-backed**: templates CRUD, journey toggles, opt-in settings
+- `/admin/channels/twitter` — X Social — **DB-backed**: hashtag bank, tweet queue, auto-post rules, content templates, scheduler settings
 - `/admin/channels/analytics` — Social Analytics (reach, engagement, channel breakdown, heatmap)
 
 Admin Design System: Noto Serif headings, Manrope body, emerald #006c49 accent, black primary, #f8f9ff surface.
+
+## Channel API Endpoints (all admin-only, `user.role === "ADMIN"`)
+
+### /api/channels
+- `GET /configs` — all 4 channel statuses
+- `PUT /configs/:channelId/status` — toggle CONNECTED / PAUSED / DISCONNECTED
+- `POST /configs/:channelId/sync` — trigger sync, updates lastSync + latency
+- `POST /configs/sync-all` — sync all channels
+- `POST /configs/:channelId/test` — ping test, records pass/fail in event log
+- `GET /events` — event log (last 50)
+- `DELETE /events` — clear event log
+- `GET /webhooks` — webhook list
+- `PUT /webhooks/:webhookId` — toggle webhook active state
+
+### /api/facebook
+- `GET/PUT /connections/:key` — toggle facebook/instagram/pixel/messenger
+- `GET/PUT /catalog` — catalog settings (categories JSON, price range)
+- `GET /pixel-events`, `PUT /pixel-events/:id` — pixel event toggle
+- `GET /audiences`, `POST /audiences`, `PUT /audiences/:id`, `DELETE /audiences/:id`
+
+### /api/whatsapp
+- `GET /templates`, `POST /templates`, `DELETE /templates/:id`
+- `GET /journeys`, `PUT /journeys/:journeyId` — toggle journey active
+- `GET /optin`, `PUT /optin` — opt-in/out keywords + double optin
+
+### /api/twitter
+- `GET /hashtags`, `POST /hashtags`, `DELETE /hashtags/:id`
+- `GET /rules`, `POST /rules`, `PUT /rules/:id` — auto-post rules
+- `GET /queue`, `POST /queue`, `PUT /queue/:id`, `DELETE /queue/:id`
+- `GET /templates`, `POST /templates`, `PUT /templates/:id/use`
+- `GET /scheduler`, `PUT /scheduler`
 
 ## Routing (Wouter)
 
@@ -90,23 +144,3 @@ Admin Design System: Noto Serif headings, Manrope body, emerald #006c49 accent, 
 - `/account` — Account dashboard (protected)
 - `/account/orders` — Order history
 - `/account/wishlist` — Wishlist
-
-## API Endpoints
-
-- `GET/POST /api/products` — List all or create product
-- `GET /api/products/:id` — Product with reviews
-- `GET/POST /api/categories` — Categories
-- `GET/POST /api/cart` — Cart
-- `PATCH/DELETE /api/cart/:productId` — Update/remove cart item
-- `GET/POST /api/wishlist` — Wishlist
-- `DELETE /api/wishlist/:productId` — Remove from wishlist
-- `GET/POST /api/orders` — Orders
-- `POST /api/reviews` — Submit review
-- `POST /api/newsletter` — Newsletter subscribe
-- `POST /api/payments/initialize` — Paystack payment init
-- `GET /api/payments/verify/:reference` — Payment verify
-- `POST /api/auth/login` — Login (sets httpOnly cookie)
-- `POST /api/auth/logout` — Logout
-- `GET /api/auth/me` — Get current user
-- `POST /api/auth/register` — Register
-- `POST /api/seed` — Seed DB (dev only)
