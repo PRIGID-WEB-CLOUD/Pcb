@@ -372,6 +372,23 @@ export const apiKeys = pgTable("api_keys", {
   createdAt:   timestamp("created_at").defaultNow().notNull(),
 });
 
+// ─── Coupons ──────────────────────────────────────────────────────────────────
+
+export const coupons = pgTable("coupons", {
+  id:           text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  code:         text("code").notNull().unique(),
+  description:  text("description").notNull().default(""),
+  discountType: text("discount_type").notNull().default("PERCENTAGE"),
+  discountValue: real("discount_value").notNull(),
+  minOrderAmount: real("min_order_amount").notNull().default(0),
+  maxUses:      integer("max_uses"),
+  usedCount:    integer("used_count").notNull().default(0),
+  active:       boolean("active").notNull().default(true),
+  expiresAt:    timestamp("expires_at"),
+  createdAt:    timestamp("created_at").defaultNow().notNull(),
+  updatedAt:    timestamp("updated_at").defaultNow().notNull(),
+});
+
 // ─── Zod / Type exports ───────────────────────────────────────────────────────
 
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true, updatedAt: true });

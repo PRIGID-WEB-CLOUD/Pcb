@@ -13,6 +13,7 @@ const mainNavItems = [
   { icon: "category",     label: "Categories", href: "/admin/categories"},
   { icon: "shopping_bag", label: "Orders",     href: "/admin/orders"    },
   { icon: "group",        label: "Customers",  href: "/admin/customers" },
+  { icon: "sell",         label: "Coupons",    href: "/admin/coupons"   },
   { icon: "analytics",    label: "Analytics",  href: "/admin/analytics" },
   { icon: "photo_library", label: "Media",      href: "/admin/media"       },
   { icon: "article",      label: "Journal",    href: "/admin/blog"        },

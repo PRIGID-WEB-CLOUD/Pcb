@@ -51,6 +51,7 @@ import AdminSettingsPage from "@/pages/admin/AdminSettingsPage";
 import AdminTeamPage from "@/pages/admin/AdminTeamPage";
 import AdminLoginPage from "@/pages/admin/AdminLoginPage";
 import AdminAcceptInvitePage from "@/pages/admin/AdminAcceptInvitePage";
+import AdminCouponsPage from "@/pages/admin/AdminCouponsPage";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -121,6 +122,7 @@ function Router() {
       <Route path="/admin/newsletter" component={() => <AdminGuard><AdminNewsletterPage /></AdminGuard>} />
       <Route path="/admin/settings" component={() => <AdminGuard><AdminSettingsPage /></AdminGuard>} />
       <Route path="/admin/team" component={() => <AdminGuard><AdminTeamPage /></AdminGuard>} />
+      <Route path="/admin/coupons" component={() => <AdminGuard><AdminCouponsPage /></AdminGuard>} />
       <Route component={NotFound} />
     </Switch>
   );
