@@ -24,11 +24,17 @@ import ShippingReturnsPage from "@/pages/ShippingReturnsPage";
 import AccountPage from "@/pages/AccountPage";
 import OrdersPage from "@/pages/OrdersPage";
 import WishlistPage from "@/pages/WishlistPage";
-import AdminPage from "@/pages/AdminPage";
 import AdminDashboardPage from "@/pages/admin/AdminDashboardPage";
 import AdminCatalogPage from "@/pages/admin/AdminCatalogPage";
 import AdminOrdersPage from "@/pages/admin/AdminOrdersPage";
 import AdminProductEditorPage from "@/pages/admin/AdminProductEditorPage";
+import AdminCustomersPage from "@/pages/admin/AdminCustomersPage";
+import AdminAnalyticsPage from "@/pages/admin/AdminAnalyticsPage";
+import AdminChannelHubPage from "@/pages/admin/AdminChannelHubPage";
+import AdminFacebookPage from "@/pages/admin/AdminFacebookPage";
+import AdminWhatsAppPage from "@/pages/admin/AdminWhatsAppPage";
+import AdminTwitterPage from "@/pages/admin/AdminTwitterPage";
+import AdminSocialAnalyticsPage from "@/pages/admin/AdminSocialAnalyticsPage";
 import CheckoutVerifyPage from "@/pages/CheckoutVerifyPage";
 import AccountSettingsPage from "@/pages/AccountSettingsPage";
 import AccountAddressesPage from "@/pages/AccountAddressesPage";
@@ -81,6 +87,13 @@ function Router() {
       <Route path="/admin/catalog" component={() => <AdminCatalogPage />} />
       <Route path="/admin/orders" component={() => <AdminOrdersPage />} />
       <Route path="/admin/products/edit" component={() => <AdminProductEditorPage />} />
+      <Route path="/admin/customers" component={() => <AdminCustomersPage />} />
+      <Route path="/admin/analytics" component={() => <AdminAnalyticsPage />} />
+      <Route path="/admin/channels" component={() => <AdminChannelHubPage />} />
+      <Route path="/admin/channels/facebook" component={() => <AdminFacebookPage />} />
+      <Route path="/admin/channels/whatsapp" component={() => <AdminWhatsAppPage />} />
+      <Route path="/admin/channels/twitter" component={() => <AdminTwitterPage />} />
+      <Route path="/admin/channels/analytics" component={() => <AdminSocialAnalyticsPage />} />
       <Route path="/login" component={() => <AuthLayout><LoginPage /></AuthLayout>} />
       <Route path="/forgot-password" component={() => <AuthLayout><ForgotPasswordPage /></AuthLayout>} />
       <Route path="/register" component={() => <AuthLayout><RegisterPage /></AuthLayout>} />

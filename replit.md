@@ -13,7 +13,7 @@ A full-featured luxury e-commerce app (LUXE BOUTIQUE) ported from Next.js/Prisma
 - **Auth**: Custom session-based auth (bcryptjs + httpOnly cookies + sessions table)
 - **Validation**: Zod (zod/v4), drizzle-zod
 - **Build**: esbuild (API), Vite (frontend)
-- **Fonts**: Inter (sans) + Playfair Display (serif, from Google Fonts)
+- **Fonts**: Inter (sans) + Playfair Display (serif) + Noto Serif + Manrope + Material Symbols Outlined (admin) from Google Fonts
 
 ## Architecture
 
@@ -23,6 +23,7 @@ artifacts/
     src/
       pages/           # All route pages (Home, Products, Cart, Checkout, Blog, etc.)
       components/      # Header, Footer, ProductCard, CookieBanner, NewsletterForm, AccountSidebar
+      pages/admin/     # Admin UI: AdminLayout (sidebar), Dashboard, Catalog, ProductEditor, Orders, Customers, Analytics, ChannelHub, Facebook, WhatsApp, Twitter, SocialAnalytics
       contexts/        # AuthContext (custom auth), CurrencyContext (geo-based currency)
   api-server/          # Express API server
     src/
@@ -52,6 +53,24 @@ lib/
 - `pnpm --filter @workspace/api-server run dev` — run API server (rebuilds on start)
 - `pnpm --filter @workspace/luxe-boutique run dev` — run frontend dev server
 - `curl -X POST http://localhost:8080/api/seed` — seed database with sample data
+
+## Admin Routes (/admin/*)
+
+All admin routes use `AdminLayout` (no store Header/Footer) with a fixed sidebar and sticky topbar.
+
+- `/admin` — Executive Dashboard (metrics, sales chart, top collections, recent transactions)
+- `/admin/catalog` — Product Catalog (table, filters, stock status, pagination)
+- `/admin/products/edit` — Product Editor (12-col grid: info, media gallery, variants, SEO sidebar)
+- `/admin/orders` — Order Management (tabbed filter, order table, status badges)
+- `/admin/customers` — Customer Manager (metrics, searchable table, grayscale avatar effect)
+- `/admin/analytics` — Market Performance (revenue chart, donut, top products, monthly reports)
+- `/admin/channels` — Omnichannel Hub (channel cards, integration health) — uses "channels" sidebar
+- `/admin/channels/facebook` — Meta & Facebook (catalog sync, connection status, ad performance)
+- `/admin/channels/whatsapp` — WhatsApp API Console (API config, message stats, journeys)
+- `/admin/channels/twitter` — X Social Settings (scheduler, hashtags, tweet preview)
+- `/admin/channels/analytics` — Social Analytics (reach, engagement, channel breakdown, heatmap)
+
+Admin Design System: Noto Serif headings, Manrope body, emerald #006c49 accent, black primary, #f8f9ff surface.
 
 ## Routing (Wouter)
 

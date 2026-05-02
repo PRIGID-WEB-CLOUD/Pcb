@@ -39,15 +39,13 @@ export default function AdminLayout({ children, sidebar = "main" }: AdminLayoutP
       {/* Sidebar */}
       <aside className="fixed left-0 top-0 h-screen w-64 bg-slate-50 border-r border-slate-200 flex flex-col z-40">
         <div className="px-6 pt-6 pb-4 border-b border-slate-100">
-          <Link href="/admin">
-            <div className="flex items-center gap-3 cursor-pointer">
-              <div className="w-8 h-8 bg-black rounded-sm flex items-center justify-center">
-                <span className="material-symbols-outlined text-white text-sm">dashboard</span>
-              </div>
-              <div>
-                <h1 className="text-base font-serif font-black tracking-widest text-slate-900 uppercase">BOUTIQUE</h1>
-                <p className="text-[9px] font-[Manrope] uppercase tracking-widest text-[#7c839b]">Admin Terminal</p>
-              </div>
+          <Link href="/admin" className="flex items-center gap-3 cursor-pointer no-underline">
+            <div className="w-8 h-8 bg-black rounded-sm flex items-center justify-center">
+              <span className="material-symbols-outlined text-white text-sm">dashboard</span>
+            </div>
+            <div>
+              <h1 className="text-base font-serif font-black tracking-widest text-slate-900 uppercase">BOUTIQUE</h1>
+              <p className="text-[9px] font-[Manrope] uppercase tracking-widest text-[#7c839b]">Admin Terminal</p>
             </div>
           </Link>
         </div>
@@ -58,15 +56,13 @@ export default function AdminLayout({ children, sidebar = "main" }: AdminLayoutP
               ? (item.href === "/admin" ? location === "/admin" : location.startsWith(item.href))
               : location === item.href;
             return (
-              <Link key={item.href} href={item.href}>
-                <a className={`flex items-center gap-3 px-4 py-3 transition-all duration-200 font-serif text-sm uppercase tracking-wider cursor-pointer rounded-sm
+              <Link key={item.href} href={item.href} className={`flex items-center gap-3 px-4 py-3 transition-all duration-200 font-serif text-sm uppercase tracking-wider cursor-pointer rounded-sm
                   ${isActive
                     ? "bg-white text-emerald-700 border-r-2 border-emerald-600 font-bold shadow-sm"
                     : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"
                   }`}>
-                  <span className="material-symbols-outlined">{item.icon}</span>
-                  <span>{item.label}</span>
-                </a>
+                <span className="material-symbols-outlined">{item.icon}</span>
+                <span>{item.label}</span>
               </Link>
             );
           })}
@@ -92,10 +88,8 @@ export default function AdminLayout({ children, sidebar = "main" }: AdminLayoutP
             </>
           ) : (
             <>
-              <Link href="/admin/settings">
-                <a className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-100 hover:text-slate-900 transition-all font-serif text-sm uppercase tracking-wider">
-                  <span className="material-symbols-outlined">settings</span> Settings
-                </a>
+              <Link href="/admin/settings" className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-100 hover:text-slate-900 transition-all font-serif text-sm uppercase tracking-wider">
+                <span className="material-symbols-outlined">settings</span> Settings
               </Link>
               <a href="#" className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-100 hover:text-slate-900 transition-all font-serif text-sm uppercase tracking-wider">
                 <span className="material-symbols-outlined">contact_support</span> Help
