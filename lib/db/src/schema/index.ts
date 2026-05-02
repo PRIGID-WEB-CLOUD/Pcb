@@ -102,6 +102,24 @@ export const orderItems = pgTable("order_items", {
   price: real("price").notNull(),
 });
 
+export const blogPosts = pgTable("blog_posts", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  title: text("title").notNull(),
+  slug: text("slug").notNull().unique(),
+  excerpt: text("excerpt").notNull().default(""),
+  content: text("content").notNull().default(""),
+  coverImage: text("cover_image"),
+  category: text("category").notNull().default("Editorial"),
+  author: text("author").notNull().default("Admin"),
+  status: text("status").notNull().default("DRAFT"),
+  tags: text("tags"),
+  seoTitle: text("seo_title"),
+  seoDescription: text("seo_description"),
+  publishedAt: timestamp("published_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 export const newsletter = pgTable("newsletter", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   email: text("email").notNull().unique(),

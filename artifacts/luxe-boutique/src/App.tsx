@@ -16,6 +16,9 @@ import CartPage from "@/pages/CartPage";
 import LoginPage from "@/pages/LoginPage";
 import RegisterPage from "@/pages/RegisterPage";
 import BlogPage from "@/pages/BlogPage";
+import BlogPostPage from "@/pages/BlogPostPage";
+import AdminBlogPage from "@/pages/admin/AdminBlogPage";
+import AdminBlogEditorPage from "@/pages/admin/AdminBlogEditorPage";
 import CheckoutPage from "@/pages/CheckoutPage";
 import CheckoutVerifyPage from "@/pages/CheckoutVerifyPage";
 import SearchPage from "@/pages/SearchPage";
@@ -76,6 +79,7 @@ function Router() {
       <Route path="/checkout/verify" component={() => <StoreLayout><div className="pt-24"><CheckoutVerifyPage /></div></StoreLayout>} />
       <Route path="/checkout" component={() => <StoreLayout><div className="pt-24"><CheckoutPage /></div></StoreLayout>} />
       <Route path="/blog" component={() => <StoreLayout><BlogPage /></StoreLayout>} />
+      <Route path="/blog/:slug" component={() => <StoreLayout><div className="pt-0"><BlogPostPage /></div></StoreLayout>} />
       <Route path="/search" component={() => <StoreLayout><div className="pt-24"><SearchPage /></div></StoreLayout>} />
       <Route path="/contact" component={() => <StoreLayout><ContactPage /></StoreLayout>} />
       <Route path="/sustainability" component={() => <StoreLayout><SustainabilityPage /></StoreLayout>} />
@@ -104,6 +108,9 @@ function Router() {
       <Route path="/admin/channels/whatsapp" component={() => <AdminGuard><AdminWhatsAppPage /></AdminGuard>} />
       <Route path="/admin/channels/twitter" component={() => <AdminGuard><AdminTwitterPage /></AdminGuard>} />
       <Route path="/admin/channels/analytics" component={() => <AdminGuard><AdminSocialAnalyticsPage /></AdminGuard>} />
+      <Route path="/admin/blog" component={() => <AdminGuard><AdminBlogPage /></AdminGuard>} />
+      <Route path="/admin/blog/new" component={() => <AdminGuard><AdminBlogEditorPage /></AdminGuard>} />
+      <Route path="/admin/blog/edit" component={() => <AdminGuard><AdminBlogEditorPage /></AdminGuard>} />
       <Route component={NotFound} />
     </Switch>
   );
