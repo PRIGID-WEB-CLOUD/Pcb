@@ -8,6 +8,72 @@ import crypto from "crypto";
 
 const router = Router();
 
+// GET /api/team/accept?token=...  — validate invite token (public, no auth)
+router.get("/accept", async (req, res) => {
+  try {
+    const { token } = req.query as { token?: string };
+    if (!token) return res.status(400).json({ error: "Token is required" });
+
+    const [member] = await db.select({
+      id:              teamMembers.id,
+      email:           teamMembers.email,
+      name:            teamMembers.name,
+      role:            teamMembers.role,
+      status:          teamMembers.status,
+      invitedBy:       teamMembers.invitedBy,
+      inviteExpiresAt: teamMembers.inviteExpiresAt,
+    }).from(teamMembers).where(eq(teamMembers.inviteToken, token)).limit(1);
+
+    if (!member) return res.status(404).json({ error: "Invite link is invalid or has already been used." });
+    if (member.status === "active") return res.status(409).json({ error: "already_accepted", email: member.email });
+    if (member.inviteExpiresAt && new Date(member.inviteExpiresAt) < new Date()) {
+      return res.status(410).json({ error: "This invite link has expired. Ask your admin to resend it." });
+    }
+
+    res.json({
+      email:     member.email,
+      name:      member.name,
+      role:      member.role,
+      invitedBy: member.invitedBy,
+    });
+  } catch (e) {
+    console.error("[team/accept GET]", e);
+    res.status(500).json({ error: "Failed to validate invite" });
+  }
+});
+
+// POST /api/team/accept  — redeem invite token (public, no auth)
+router.post("/accept", async (req, res) => {
+  try {
+    const { token, name } = req.body as { token: string; name?: string };
+    if (!token) return res.status(400).json({ error: "Token is required" });
+
+    const [member] = await db.select().from(teamMembers)
+      .where(eq(teamMembers.inviteToken, token)).limit(1);
+
+    if (!member) return res.status(404).json({ error: "Invite link is invalid or has already been used." });
+    if (member.status === "active") return res.status(409).json({ error: "already_accepted" });
+    if (member.inviteExpiresAt && new Date(member.inviteExpiresAt) < new Date()) {
+      return res.status(410).json({ error: "This invite link has expired. Ask your admin to resend it." });
+    }
+
+    const updates: Record<string, unknown> = {
+      status:          "active",
+      inviteToken:     null,
+      inviteExpiresAt: null,
+      updatedAt:       new Date(),
+    };
+    if (name?.trim()) updates.name = name.trim();
+
+    await db.update(teamMembers).set(updates).where(eq(teamMembers.id, member.id));
+
+    res.json({ ok: true, email: member.email, role: member.role });
+  } catch (e) {
+    console.error("[team/accept POST]", e);
+    res.status(500).json({ error: "Failed to accept invite" });
+  }
+});
+
 // GET /api/team
 router.get("/", async (req, res) => {
   try {

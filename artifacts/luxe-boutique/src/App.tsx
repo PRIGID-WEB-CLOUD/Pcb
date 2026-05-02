@@ -50,6 +50,7 @@ import AdminNewsletterPage from "@/pages/admin/AdminNewsletterPage";
 import AdminSettingsPage from "@/pages/admin/AdminSettingsPage";
 import AdminTeamPage from "@/pages/admin/AdminTeamPage";
 import AdminLoginPage from "@/pages/admin/AdminLoginPage";
+import AdminAcceptInvitePage from "@/pages/admin/AdminAcceptInvitePage";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -99,6 +100,7 @@ function Router() {
       <Route path="/forgot-password" component={() => <AuthLayout><ForgotPasswordPage /></AuthLayout>} />
       <Route path="/register" component={() => <AuthLayout><RegisterPage /></AuthLayout>} />
       <Route path="/admin/login" component={() => <AdminLoginPage />} />
+      <Route path="/admin/accept-invite" component={() => <AdminAcceptInvitePage />} />
       <Route path="/admin" component={() => <AdminGuard><AdminDashboardPage /></AdminGuard>} />
       <Route path="/admin/catalog" component={() => <AdminGuard><AdminCatalogPage /></AdminGuard>} />
       <Route path="/admin/categories" component={() => <AdminGuard><AdminCategoriesPage /></AdminGuard>} />
