@@ -21,6 +21,7 @@ export default function CheckoutPage() {
     if (!shippingAddress) { alert("Please enter shipping address"); return; }
     setProcessing(true);
     try {
+      sessionStorage.setItem("checkout_shipping", shippingAddress);
       const initRes = await fetch("/api/payments/initialize", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ amount: total, callbackUrl: `${window.location.origin}/checkout/verify` }),

@@ -69,6 +69,19 @@ router.patch("/:productId", async (req, res) => {
   } catch { res.status(500).json({ error: "Failed to update cart" }); }
 });
 
+router.delete("/", async (req, res) => {
+  try {
+    const user = await getSession(req);
+    if (!user) return res.status(401).json({ error: "Unauthorized" });
+
+    const [cart] = await db.select().from(carts).where(eq(carts.userId, user.id)).limit(1);
+    if (!cart) return res.json({ message: "Cart already empty" });
+
+    await db.delete(cartItems).where(eq(cartItems.cartId, cart.id));
+    res.json({ message: "Cart cleared" });
+  } catch { res.status(500).json({ error: "Failed to clear cart" }); }
+});
+
 router.delete("/:productId", async (req, res) => {
   try {
     const user = await getSession(req);
