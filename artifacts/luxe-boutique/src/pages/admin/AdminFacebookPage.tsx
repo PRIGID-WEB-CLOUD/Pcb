@@ -258,12 +258,12 @@ export default function AdminFacebookPage() {
   const totalLikes      = publishedPosts.reduce((s, p) => s + p.likes, 0);
   const configuredCredsCount = FB_CRED_FIELDS.filter((f) => !!fbCreds[f.key]).length;
   const tabs: { key: ActiveTab; label: string; icon: string; badge?: number }[] = [
-    { key: "posts",       label: "Page Posts",     icon: "post_add",     badge: scheduledPosts.length || undefined },
-    { key: "credentials", label: "API Credentials",icon: "key"                                                    },
-    { key: "catalog",     label: "Catalog Rules",  icon: "database"      },
-    { key: "pixel",       label: "Pixel Events",   icon: "track_changes" },
-    { key: "audiences",   label: "Audiences",      icon: "group"         },
-    { key: "ads",         label: "Ad Performance", icon: "bar_chart"     },
+    { key: "posts",       label: "Live Posts",       icon: "dynamic_feed" },
+    { key: "credentials", label: "Real Credentials",  icon: "key"          },
+    { key: "catalog",     label: "Live Catalog",      icon: "database"     },
+    { key: "pixel",       label: "Live Pixel Events", icon: "track_changes"},
+    { key: "audiences",   label: "Live Audiences",    icon: "group"        },
+    { key: "ads",         label: "Live Ad Data",      icon: "bar_chart"    },
   ];
 
   if (loading) return (
