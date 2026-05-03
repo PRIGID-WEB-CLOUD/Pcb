@@ -6,8 +6,8 @@ import AccountSidebar from "@/components/AccountSidebar";
 
 export default function AccountSettingsPage() {
   const { user, loading, refetch } = useAuth();
-  const isCustomer = user?.role === "CUSTOMER" || user?.role === "USER";
   const [, navigate] = useLocation();
+  const isCustomer = user?.role === "CUSTOMER" || user?.role === "USER";
   const [name, setName] = useState("");
   const [currentPw, setCurrentPw] = useState("");
   const [newPw, setNewPw] = useState("");
