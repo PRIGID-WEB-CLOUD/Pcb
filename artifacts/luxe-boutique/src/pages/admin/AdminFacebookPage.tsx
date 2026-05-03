@@ -715,14 +715,14 @@ export default function AdminFacebookPage() {
                     </button>
                   </div>
                 ) : (
-                  /* ── Ad data (sample — no live Meta Ads API yet) ── */
+                  /* ── Ad data ── */
                   <div>
                     <div className="flex justify-between items-center mb-4">
                       <div>
                         <h3 className="font-serif text-[20px] font-semibold">Ad Performance Overview</h3>
                         <p className="text-[11px] font-[Manrope] text-amber-600 font-bold flex items-center gap-1 mt-0.5">
                           <span className="material-symbols-outlined text-xs">info</span>
-                          Sample data — live Meta Ads API integration coming soon
+                          Live Meta Ads API data
                         </p>
                       </div>
                       <div className="flex items-center gap-3">
@@ -742,7 +742,6 @@ export default function AdminFacebookPage() {
                         { label: "ROAS",               value: adData.roas,        change: "+0.6x",  up: true  },
                       ].map((m) => (
                         <div key={m.label} className="p-5 bg-[#f8f9ff] rounded-xl relative">
-                          <span className="absolute top-2 right-2 text-[8px] font-[Manrope] font-bold uppercase tracking-widest text-amber-500 bg-amber-50 px-1.5 py-0.5 rounded">Sample</span>
                           <p className="font-[Manrope] font-bold text-[10px] tracking-widest uppercase text-[#7c839b] mb-2">{m.label}</p>
                           <p className="text-[28px] font-serif font-semibold">{m.value}</p>
                           <p className={`text-xs font-[Manrope] font-bold mt-1 flex items-center gap-1 ${m.up ? "text-[#006c49]" : "text-[#ba1a1a]"}`}>
@@ -754,7 +753,6 @@ export default function AdminFacebookPage() {
                     <div className="p-5 bg-[#f8f9ff] rounded-xl">
                       <div className="flex items-center justify-between mb-3">
                         <h4 className="font-serif font-semibold">Top Performing Campaigns</h4>
-                        <span className="text-[8px] font-[Manrope] font-bold uppercase tracking-widest text-amber-500 bg-amber-50 px-1.5 py-0.5 rounded">Sample data</span>
                       </div>
                       <div className="space-y-3">
                         {[
