@@ -8,43 +8,11 @@ import { getSession } from "../lib/auth";
 
 const router = Router();
 
-const DEFAULT_CONFIGS = [
-  { channelId: "facebook", status: "CONNECTED", latency: 142 },
-  { channelId: "commerce", status: "CONNECTED", latency: 98 },
-  { channelId: "whatsapp", status: "CONNECTED", latency: 76 },
-  { channelId: "twitter",  status: "CONNECTED", latency: 210 },
-];
-
-const DEFAULT_WEBHOOKS = [
-  { webhookId: "order",    label: "Order Created",        url: "/v1/webhooks/order-created",        active: true  },
-  { webhookId: "product",  label: "Product Updated",      url: "/v1/webhooks/product-updated",      active: true  },
-  { webhookId: "cart",     label: "Cart Abandoned",       url: "/v1/webhooks/cart-abandoned",       active: false },
-  { webhookId: "customer", label: "Customer Registered",  url: "/v1/webhooks/customer-registered",  active: true  },
-];
-
-const DEFAULT_EVENTS = [
-  { channel: "Meta Commerce",  event: "Catalog Sync Complete", detail: "1,248 products pushed successfully",          type: "sync"    },
-  { channel: "WhatsApp API",   event: "Journey Triggered",     detail: "Abandoned Cart — 14 messages sent",           type: "info"    },
-  { channel: "Meta & Facebook",event: "Pixel Event Fired",     detail: "Purchase event — $1,240 attributed",          type: "info"    },
-  { channel: "X Social",       event: "Auto-Post Sent",        detail: "Silk Evening Blazer — 2.4K impressions",      type: "sync"    },
-  { channel: "WhatsApp API",   event: "Delivery Warning",      detail: "3 messages undelivered — invalid numbers",    type: "warning" },
-  { channel: "Meta Commerce",  event: "Rate Limit Warning",    detail: "Approaching 80% of daily API quota",          type: "warning" },
-];
-
-async function seedIfEmpty() {
-  const existing = await db.select().from(channelConfigs).limit(1);
-  if (existing.length) return;
-  await db.insert(channelConfigs).values(DEFAULT_CONFIGS.map(c => ({ ...c, lastSync: new Date() })));
-  await db.insert(channelWebhooks).values(DEFAULT_WEBHOOKS);
-  await db.insert(channelEventLogs).values(DEFAULT_EVENTS);
-}
-
 // GET /api/channels/configs
 router.get("/configs", async (req, res): Promise<void> => {
   try {
     const user = await getSession(req);
     if (!user || user.role !== "ADMIN") return res.status(401).json({ error: "Unauthorized" });
-    await seedIfEmpty();
     const configs = await db.select().from(channelConfigs);
     res.json(configs);
   } catch { res.status(500).json({ error: "Failed to fetch channel configs" }); }
@@ -145,7 +113,6 @@ router.get("/events", async (req, res): Promise<void> => {
   try {
     const user = await getSession(req);
     if (!user || user.role !== "ADMIN") return res.status(401).json({ error: "Unauthorized" });
-    await seedIfEmpty();
     const events = await db.select().from(channelEventLogs)
       .orderBy(desc(channelEventLogs.createdAt)).limit(50);
     res.json(events);
@@ -167,7 +134,6 @@ router.get("/webhooks", async (req, res): Promise<void> => {
   try {
     const user = await getSession(req);
     if (!user || user.role !== "ADMIN") return res.status(401).json({ error: "Unauthorized" });
-    await seedIfEmpty();
     const hooks = await db.select().from(channelWebhooks);
     res.json(hooks);
   } catch { res.status(500).json({ error: "Failed to fetch webhooks" }); }

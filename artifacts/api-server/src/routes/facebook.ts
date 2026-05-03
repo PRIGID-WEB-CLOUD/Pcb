@@ -34,102 +34,6 @@ const DEFAULT_AUDIENCES = [
   { name: "VIP Segment Lookalike",  size: "92K",   type: "Lookalike",   status: "Building" },
 ];
 
-const DEFAULT_POSTS = [
-  {
-    caption: "✨ Introducing the Silk Evening Blazer — crafted from pure mulberry silk and cut for the modern wardrobe. Available now in Ivory and Midnight Black. Shop the new arrival at the link in bio. #LuxeFashion #SS25",
-    imageUrl: "https://images.unsplash.com/photo-1539109136881-3be0616acf4b?w=800&q=80",
-    link: "https://luxeboutique.com/products/silk-evening-blazer",
-    postType: "Product Spotlight",
-    scheduledFor: null,
-    status: "Published",
-    likes: 1842, comments: 214, shares: 88, reach: 42000,
-  },
-  {
-    caption: "The SS25 Collection is here. Twelve new arrivals exploring the tension between restraint and expression — tailored pieces for those who dress with intention.\n\nExplore the full lookbook now. Link in bio.",
-    imageUrl: "https://images.unsplash.com/photo-1490481651871-ab68de25d43d?w=800&q=80",
-    link: "https://luxeboutique.com/ss25",
-    postType: "Collection Launch",
-    scheduledFor: null,
-    status: "Published",
-    likes: 3241, comments: 412, shares: 188, reach: 89000,
-  },
-  {
-    caption: "🖤 EXCLUSIVE OFFER — VIP members receive 20% off the entire Spring Outerwear edit this weekend only. Log in to your account to access your exclusive code before Sunday midnight.",
-    imageUrl: "https://images.unsplash.com/photo-1520975954732-35dd22299614?w=800&q=80",
-    link: "https://luxeboutique.com/vip",
-    postType: "Promotion",
-    scheduledFor: "Today 6:00 PM",
-    status: "Scheduled",
-    likes: 0, comments: 0, shares: 0, reach: 0,
-  },
-  {
-    caption: "Behind the seams: our ateliers work with only the finest European mills. Every thread, every stitch, every detail — chosen with purpose.\n\n#CoutureLuxe #SlowFashion #LuxeAesthetic",
-    imageUrl: "https://images.unsplash.com/photo-1558769132-cb1aea458c5e?w=800&q=80",
-    link: null,
-    postType: "Brand Story",
-    scheduledFor: "Tomorrow 9:00 AM",
-    status: "Scheduled",
-    likes: 0, comments: 0, shares: 0, reach: 0,
-  },
-  {
-    caption: "New season. New energy. The Cashmere Resort Edit — arriving this Thursday.",
-    imageUrl: null,
-    link: null,
-    postType: "Teaser",
-    scheduledFor: null,
-    status: "Draft",
-    likes: 0, comments: 0, shares: 0, reach: 0,
-  },
-];
-
-const DEFAULT_TEMPLATES = [
-  {
-    name: "new_arrival",
-    postType: "Product Spotlight",
-    body: "✨ NEW ARRIVAL — Introducing the {{product_name}}.\n\n{{product_description}}\n\nAvailable now in {{colours}}. Shop at the link in bio.\n\n#LuxeFashion #NewIn",
-  },
-  {
-    name: "collection_launch",
-    postType: "Collection Launch",
-    body: "The {{collection_name}} Collection is here.\n\n{{collection_description}}\n\nExplore the full lookbook at the link in bio. #LuxeFashion #{{season}}",
-  },
-  {
-    name: "vip_promotion",
-    postType: "Promotion",
-    body: "🖤 EXCLUSIVE OFFER — {{offer_detail}}.\n\nLog in to your account to access your code before {{expiry}}.\n\n#LuxeVIP",
-  },
-  {
-    name: "brand_story",
-    postType: "Brand Story",
-    body: "{{story_intro}}\n\nEvery detail — chosen with purpose.\n\n#CoutureLuxe #SlowFashion #LuxeAesthetic",
-  },
-  {
-    name: "flash_sale",
-    postType: "Promotion",
-    body: "⚡ FLASH SALE — {{product_name}} is {{discount}}% off for the next {{hours}} hours only. Limited stock. Shop now at the link in bio.\n\n#LuxeSale",
-  },
-  {
-    name: "event_announcement",
-    postType: "Event",
-    body: "📍 YOU'RE INVITED — Join us at our {{city}} pop-up on {{date}} from {{time}}.\n\n{{event_detail}}\n\nRSVP at the link in bio.",
-  },
-];
-
-async function seedIfEmpty() {
-  const existing = await db.select().from(facebookConnections).limit(1);
-  if (existing.length) return;
-  await db.insert(facebookConnections).values(DEFAULT_CONNECTIONS);
-  await db.insert(facebookCatalogSettings).values([{}]);
-  await db.insert(facebookPixelEvents).values(DEFAULT_PIXEL_EVENTS);
-  await db.insert(facebookAudiences).values(DEFAULT_AUDIENCES);
-}
-
-async function seedPostsIfEmpty() {
-  const existing = await db.select().from(facebookPagePosts).limit(1);
-  if (existing.length) return;
-  await db.insert(facebookPagePosts).values(DEFAULT_POSTS);
-  await db.insert(facebookPostTemplates).values(DEFAULT_TEMPLATES);
-}
 
 // ── Connections ──────────────────────────────────────────────────────────────
 
@@ -137,7 +41,6 @@ router.get("/connections", async (req, res) => {
   try {
     const user = await getSession(req);
     if (!user || user.role !== "ADMIN") return res.status(401).json({ error: "Unauthorized" });
-    await seedIfEmpty();
     res.json(await db.select().from(facebookConnections));
   } catch { res.status(500).json({ error: "Failed" }); }
 });
@@ -160,7 +63,6 @@ router.get("/catalog", async (req, res) => {
   try {
     const user = await getSession(req);
     if (!user || user.role !== "ADMIN") return res.status(401).json({ error: "Unauthorized" });
-    await seedIfEmpty();
     const [settings] = await db.select().from(facebookCatalogSettings).limit(1);
     res.json({ ...settings, includedCategories: JSON.parse(settings.includedCategories) });
   } catch { res.status(500).json({ error: "Failed" }); }
@@ -186,7 +88,6 @@ router.get("/pixel-events", async (req, res) => {
   try {
     const user = await getSession(req);
     if (!user || user.role !== "ADMIN") return res.status(401).json({ error: "Unauthorized" });
-    await seedIfEmpty();
     res.json(await db.select().from(facebookPixelEvents));
   } catch { res.status(500).json({ error: "Failed" }); }
 });
@@ -209,7 +110,6 @@ router.get("/audiences", async (req, res) => {
   try {
     const user = await getSession(req);
     if (!user || user.role !== "ADMIN") return res.status(401).json({ error: "Unauthorized" });
-    await seedIfEmpty();
     res.json(await db.select().from(facebookAudiences));
   } catch { res.status(500).json({ error: "Failed" }); }
 });
@@ -252,7 +152,6 @@ router.get("/posts", async (req, res) => {
   try {
     const user = await getSession(req);
     if (!user || user.role !== "ADMIN") return res.status(401).json({ error: "Unauthorized" });
-    await seedPostsIfEmpty();
     const posts = await db.select().from(facebookPagePosts).orderBy(desc(facebookPagePosts.createdAt));
     res.json(posts);
   } catch { res.status(500).json({ error: "Failed" }); }
@@ -315,7 +214,6 @@ router.get("/post-templates", async (req, res) => {
   try {
     const user = await getSession(req);
     if (!user || user.role !== "ADMIN") return res.status(401).json({ error: "Unauthorized" });
-    await seedPostsIfEmpty();
     res.json(await db.select().from(facebookPostTemplates).orderBy(desc(facebookPostTemplates.usageCount)));
   } catch { res.status(500).json({ error: "Failed" }); }
 });

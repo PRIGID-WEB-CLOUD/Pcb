@@ -9,45 +9,11 @@ import { getSession } from "../lib/auth";
 
 const router = Router();
 
-const DEFAULT_HASHTAGS = ["#LuxeFashion", "#EditorialStyle", "#SlowFashion", "#LuxeAesthetic", "#FashionWeek", "#CoutureLuxe"];
-
-const DEFAULT_RULES = [
-  { trigger: "New Product Published",    action: "Post immediately",   template: "new_arrival",   active: true  },
-  { trigger: "Price Drop > 20%",         action: "Post in 30 minutes", template: "price_drop",    active: true  },
-  { trigger: "Back In Stock",            action: "Post immediately",   template: "restock_alert", active: false },
-  { trigger: "Order Milestone (100/wk)", action: "Post weekly digest", template: "weekly_recap",  active: false },
-];
-
-const DEFAULT_QUEUE = [
-  { text: "✨ NEW ARRIVAL — Introducing the Silk Evening Blazer. Crafted from premium mulberry silk, this piece redefines modern elegance. Available now. #LuxeFashion #EditorialStyle", scheduledFor: "Today 6:00 PM",      status: "Queued", imageStyle: "Single Product High-Res" },
-  { text: "🖤 PRICE DROP — The Cashmere Overcoat is now 25% off. Timeless investment dressing at its finest. #SlowFashion #CoutureLuxe",                                               scheduledFor: "Tomorrow 9:00 AM",    status: "Queued", imageStyle: "Single Product High-Res" },
-  { text: "SS25 COLLECTION — 12 new arrivals just dropped. Explore the full lookbook at luxeboutique.com/ss25 #FashionWeek #LuxeAesthetic",                                            scheduledFor: "Yesterday 7:00 PM",   status: "Sent",   imageStyle: "Grid (4-up)"             },
-  { text: "🔁 RESTOCKED — The Milanese Reserve Tote is back. Limited inventory. #LuxeFashion",                                                                                         scheduledFor: "Yesterday 9:00 AM",   status: "Sent",   imageStyle: "Single Product High-Res" },
-];
-
-const DEFAULT_TEMPLATES = [
-  { name: "new_arrival",   usageCount: 42, body: "✨ NEW ARRIVAL — Introducing the {{product_name}}. {{product_description}} Available now. {{hashtags}}" },
-  { name: "price_drop",    usageCount: 18, body: "🖤 PRICE DROP — The {{product_name}} is now {{discount}}% off. {{product_description}} {{hashtags}}"   },
-  { name: "restock_alert", usageCount: 7,  body: "🔁 RESTOCKED — The {{product_name}} is back. Limited inventory. {{hashtags}}"                           },
-  { name: "weekly_recap",  usageCount: 12, body: "This week at Luxe Boutique: {{new_count}} new arrivals, {{orders}} orders fulfilled. {{hashtags}}"      },
-];
-
-async function seedIfEmpty() {
-  const existing = await db.select().from(twitterHashtags).limit(1);
-  if (existing.length) return;
-  await db.insert(twitterHashtags).values(DEFAULT_HASHTAGS.map(tag => ({ tag })));
-  await db.insert(twitterAutoRules).values(DEFAULT_RULES);
-  await db.insert(twitterTweetQueue).values(DEFAULT_QUEUE);
-  await db.insert(twitterContentTemplates).values(DEFAULT_TEMPLATES);
-  await db.insert(twitterSchedulerSettings).values([{}]);
-}
-
 // GET /api/twitter/hashtags
 router.get("/hashtags", async (req, res) => {
   try {
     const user = await getSession(req);
     if (!user || user.role !== "ADMIN") return res.status(401).json({ error: "Unauthorized" });
-    await seedIfEmpty();
     res.json(await db.select().from(twitterHashtags));
   } catch { res.status(500).json({ error: "Failed" }); }
 });
@@ -78,7 +44,6 @@ router.get("/rules", async (req, res) => {
   try {
     const user = await getSession(req);
     if (!user || user.role !== "ADMIN") return res.status(401).json({ error: "Unauthorized" });
-    await seedIfEmpty();
     res.json(await db.select().from(twitterAutoRules));
   } catch { res.status(500).json({ error: "Failed" }); }
 });
@@ -111,7 +76,6 @@ router.get("/queue", async (req, res) => {
   try {
     const user = await getSession(req);
     if (!user || user.role !== "ADMIN") return res.status(401).json({ error: "Unauthorized" });
-    await seedIfEmpty();
     res.json(await db.select().from(twitterTweetQueue).orderBy(desc(twitterTweetQueue.createdAt)));
   } catch { res.status(500).json({ error: "Failed" }); }
 });
@@ -154,7 +118,6 @@ router.get("/templates", async (req, res) => {
   try {
     const user = await getSession(req);
     if (!user || user.role !== "ADMIN") return res.status(401).json({ error: "Unauthorized" });
-    await seedIfEmpty();
     res.json(await db.select().from(twitterContentTemplates));
   } catch { res.status(500).json({ error: "Failed" }); }
 });
@@ -190,7 +153,6 @@ router.get("/scheduler", async (req, res) => {
   try {
     const user = await getSession(req);
     if (!user || user.role !== "ADMIN") return res.status(401).json({ error: "Unauthorized" });
-    await seedIfEmpty();
     const [settings] = await db.select().from(twitterSchedulerSettings).limit(1);
     res.json(settings);
   } catch { res.status(500).json({ error: "Failed" }); }
