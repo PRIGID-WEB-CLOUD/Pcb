@@ -40,7 +40,7 @@ async function seedIfEmpty() {
 }
 
 // GET /api/channels/configs
-router.get("/configs", async (req, res) => {
+router.get("/configs", async (req, res): Promise<void> => {
   try {
     const user = await getSession(req);
     if (!user || user.role !== "ADMIN") return res.status(401).json({ error: "Unauthorized" });
@@ -51,7 +51,7 @@ router.get("/configs", async (req, res) => {
 });
 
 // PUT /api/channels/configs/:channelId/status
-router.put("/configs/:channelId/status", async (req, res) => {
+router.put("/configs/:channelId/status", async (req, res): Promise<void> => {
   try {
     const user = await getSession(req);
     if (!user || user.role !== "ADMIN") return res.status(401).json({ error: "Unauthorized" });
@@ -65,7 +65,7 @@ router.put("/configs/:channelId/status", async (req, res) => {
 });
 
 // POST /api/channels/configs/:channelId/sync
-router.post("/configs/:channelId/sync", async (req, res) => {
+router.post("/configs/:channelId/sync", async (req, res): Promise<void> => {
   try {
     const user = await getSession(req);
     if (!user || user.role !== "ADMIN") return res.status(401).json({ error: "Unauthorized" });
@@ -83,7 +83,7 @@ router.post("/configs/:channelId/sync", async (req, res) => {
 });
 
 // POST /api/channels/configs/sync-all
-router.post("/configs/sync-all", async (req, res) => {
+router.post("/configs/sync-all", async (req, res): Promise<void> => {
   try {
     const user = await getSession(req);
     if (!user || user.role !== "ADMIN") return res.status(401).json({ error: "Unauthorized" });
@@ -97,7 +97,7 @@ router.post("/configs/sync-all", async (req, res) => {
 });
 
 // POST /api/channels/configs/:channelId/test
-router.post("/configs/:channelId/test", async (req, res) => {
+router.post("/configs/:channelId/test", async (req, res): Promise<void> => {
   try {
     const user = await getSession(req);
     if (!user || user.role !== "ADMIN") return res.status(401).json({ error: "Unauthorized" });
@@ -141,7 +141,7 @@ router.post("/configs/:channelId/test", async (req, res) => {
 });
 
 // GET /api/channels/events
-router.get("/events", async (req, res) => {
+router.get("/events", async (req, res): Promise<void> => {
   try {
     const user = await getSession(req);
     if (!user || user.role !== "ADMIN") return res.status(401).json({ error: "Unauthorized" });
@@ -153,7 +153,7 @@ router.get("/events", async (req, res) => {
 });
 
 // DELETE /api/channels/events
-router.delete("/events", async (req, res) => {
+router.delete("/events", async (req, res): Promise<void> => {
   try {
     const user = await getSession(req);
     if (!user || user.role !== "ADMIN") return res.status(401).json({ error: "Unauthorized" });
@@ -163,7 +163,7 @@ router.delete("/events", async (req, res) => {
 });
 
 // GET /api/channels/webhooks
-router.get("/webhooks", async (req, res) => {
+router.get("/webhooks", async (req, res): Promise<void> => {
   try {
     const user = await getSession(req);
     if (!user || user.role !== "ADMIN") return res.status(401).json({ error: "Unauthorized" });
@@ -174,7 +174,7 @@ router.get("/webhooks", async (req, res) => {
 });
 
 // PUT /api/channels/webhooks/:webhookId
-router.put("/webhooks/:webhookId", async (req, res) => {
+router.put("/webhooks/:webhookId", async (req, res): Promise<void> => {
   try {
     const user = await getSession(req);
     if (!user || user.role !== "ADMIN") return res.status(401).json({ error: "Unauthorized" });
@@ -188,7 +188,7 @@ router.put("/webhooks/:webhookId", async (req, res) => {
 });
 
 // GET /api/channels/credentials/:channel
-router.get("/credentials/:channel", async (req, res) => {
+router.get("/credentials/:channel", async (req, res): Promise<void> => {
   try {
     const user = await getSession(req);
     if (!user || user.role !== "ADMIN") return res.status(401).json({ error: "Unauthorized" });
@@ -202,7 +202,7 @@ router.get("/credentials/:channel", async (req, res) => {
 });
 
 // PUT /api/channels/credentials/:channel
-router.put("/credentials/:channel", async (req, res) => {
+router.put("/credentials/:channel", async (req, res): Promise<void> => {
   try {
     const user = await getSession(req);
     if (!user || user.role !== "ADMIN") return res.status(401).json({ error: "Unauthorized" });
@@ -221,6 +221,15 @@ router.put("/credentials/:channel", async (req, res) => {
     }
     res.json({ ok: true });
   } catch { res.status(500).json({ error: "Failed" }); }
+});
+
+router.delete("/credentials/:channel", async (req, res): Promise<void> => {
+  try {
+    const user = await getSession(req);
+    if (!user || user.role !== "ADMIN") return res.status(401).json({ error: "Unauthorized" });
+    await db.delete(channelCredentials).where(eq(channelCredentials.channel, req.params.channel));
+    res.json({ ok: true });
+  } catch { res.status(500).json({ error: "Failed to revoke credentials" }); }
 });
 
 export default router;

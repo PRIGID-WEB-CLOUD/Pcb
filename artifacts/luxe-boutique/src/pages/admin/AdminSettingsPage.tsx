@@ -34,7 +34,7 @@ const SMTP_PRESETS: Record<string, { host: string; port: string; label: string }
 type CredField = { key: string; label: string; isSecret: boolean; hint: string };
 
 function ChannelCredsPanel({
-  channel, fields, icon, title, description, docsSteps, savedSection, onSaved,
+  channel, fields, icon, title, description, docsSteps, savedSection, onSaved, revocable = false,
 }: {
   channel: string;
   fields: CredField[];
@@ -44,6 +44,7 @@ function ChannelCredsPanel({
   docsSteps: { step: string; title: string; body: string }[];
   savedSection: Section | null;
   onSaved: () => void;
+  revocable?: boolean;
 }) {
   const [saved,  setSaved]  = useState<Record<string, string>>({});
   const [dirty,  setDirty]  = useState<Record<string, string>>({});
@@ -82,6 +83,17 @@ function ChannelCredsPanel({
     const res = await fetch(`/api/channels/configs/${channel}/test`, { method: "POST" });
     if (res.ok) setTestResult(await res.json());
     setTesting(false);
+  };
+
+  const revoke = async () => {
+    setSaving(true);
+    await fetch(`/api/channels/credentials/${channel}`, { method: "DELETE" });
+    setSaved({});
+    setDirty({});
+    setSaving(false);
+    setNotice("Credentials revoked.");
+    setTimeout(() => setNotice(null), 3000);
+    onSaved();
   };
 
   return (
@@ -181,20 +193,29 @@ function ChannelCredsPanel({
       </div>
 
       <div className="px-8 py-5 border-t border-[#e5eeff] bg-[#f8f9ff] flex items-center justify-between gap-4">
-        <button onClick={test} disabled={testing}
-          className="px-5 py-2 border border-[#c6c6cd] font-[Manrope] font-bold text-xs tracking-widest uppercase hover:bg-white transition-all rounded-lg flex items-center gap-2 disabled:opacity-60">
-          <span className={`material-symbols-outlined text-sm ${testing ? "animate-spin" : ""}`}>{testing ? "autorenew" : "wifi_tethering"}</span>
-          {testing ? "Testing…" : "Test Connection"}
-        </button>
-        <button onClick={save} disabled={saving}
-          className="px-8 py-2.5 bg-black text-white font-[Manrope] font-bold text-xs tracking-widest uppercase hover:bg-[#006c49] transition-all rounded-lg shadow disabled:opacity-60 flex items-center gap-2">
-          {saving
-            ? <><span className="material-symbols-outlined text-sm animate-spin">autorenew</span> Saving…</>
-            : notice
-              ? <><span className="material-symbols-outlined text-sm">check</span> Saved!</>
-              : "Save Credentials"
-          }
-        </button>
+        <div className="flex items-center gap-3">
+          {revocable && (
+            <button onClick={revoke} disabled={saving}
+              className="px-5 py-2 border border-red-200 text-red-600 bg-red-50 font-[Manrope] font-bold text-xs tracking-widest uppercase hover:bg-red-100 transition-all rounded-lg flex items-center gap-2 disabled:opacity-60">
+              <span className="material-symbols-outlined text-sm">block</span>
+              Revoke
+            </button>
+          )}
+          <button onClick={test} disabled={testing}
+            className="px-5 py-2 border border-[#c6c6cd] font-[Manrope] font-bold text-xs tracking-widest uppercase hover:bg-white transition-all rounded-lg flex items-center gap-2 disabled:opacity-60">
+            <span className={`material-symbols-outlined text-sm ${testing ? "animate-spin" : ""}`}>{testing ? "autorenew" : "wifi_tethering"}</span>
+            {testing ? "Testing…" : "Test Connection"}
+          </button>
+          <button onClick={save} disabled={saving}
+            className="px-8 py-2.5 bg-black text-white font-[Manrope] font-bold text-xs tracking-widest uppercase hover:bg-[#006c49] transition-all rounded-lg shadow disabled:opacity-60 flex items-center gap-2">
+            {saving
+              ? <><span className="material-symbols-outlined text-sm animate-spin">autorenew</span> Saving…</>
+              : notice
+                ? <><span className="material-symbols-outlined text-sm">check</span> Saved!</>
+                : "Save Credentials"
+            }
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -1242,6 +1263,7 @@ export default function AdminSettingsPage() {
                       description="Page posts, Pixel events, catalog sync, and ad attribution."
                       savedSection={savedSection}
                       onSaved={() => {}}
+                      revocable
                       fields={[
                         { key: "catalog_id",        label: "Commerce Catalog ID",  isSecret: false, hint: "Facebook Commerce Manager → Catalog → Settings → Catalog ID." },
                         { key: "app_id",             label: "App ID",               isSecret: false, hint: "Meta for Developers → App Dashboard → App ID." },
@@ -1283,6 +1305,7 @@ export default function AdminSettingsPage() {
                       description="Tweet scheduling, auto-post rules, and product drop announcements."
                       savedSection={savedSection}
                       onSaved={() => {}}
+                      revocable
                       fields={[
                         { key: "api_key",             label: "API Key (Consumer Key)",       isSecret: false, hint: "developer.x.com → Your App → Keys & Tokens → API Key." },
                         { key: "api_secret",          label: "API Secret (Consumer Secret)", isSecret: true,  hint: "developer.x.com → Your App → Keys & Tokens → API Secret." },
@@ -1323,6 +1346,7 @@ export default function AdminSettingsPage() {
                       description="Message templates, automated journeys, and subscriber opt-in flows."
                       savedSection={savedSection}
                       onSaved={() => {}}
+                      revocable
                       fields={[
                         { key: "phone_number_id",     label: "Cloud API Phone Number ID",    isSecret: false, hint: "WhatsApp Business Platform → Phone Numbers → Phone Number ID." },
                         { key: "waba_id",             label: "WhatsApp Business Account ID", isSecret: false, hint: "Meta Business Manager → WhatsApp Accounts → Account ID." },
