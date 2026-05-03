@@ -169,6 +169,10 @@ export async function sendPasswordResetEmail(email: string, resetLink: string, n
   return { dev: false };
 }
 
+export async function sendCustomerResetEmail(email: string, resetLink: string, name?: string | null): Promise<{ dev: boolean }> {
+  return sendPasswordResetEmail(email, resetLink, name);
+}
+
 export async function sendTeamInvite(
   to: string,
   opts: { invitedBy: string; role: string; name?: string | null; inviteLink: string; expiryDays?: number },
