@@ -6,7 +6,7 @@ import { db } from "@workspace/db";
 import { users, sessions, adminOtpCodes } from "@workspace/db/schema";
 import { eq, and, gt } from "drizzle-orm";
 import { getSession } from "../lib/auth";
-import { sendAdminOtp } from "../lib/email";
+import { sendAdminOtp, sendPasswordResetEmail } from "../lib/email";
 
 const router = Router();
 
@@ -131,6 +131,19 @@ router.post("/register", async (req, res) => {
     await db.insert(users).values({ name, email, password: hashed, role: "USER" });
     res.json({ message: "User registered successfully" });
   } catch { res.status(500).json({ error: "Registration failed" }); }
+});
+
+router.post("/forgot-password", async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: "Email is required" });
+    const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+    if (!user) return res.json({ success: true });
+    const origin = process.env.FRONTEND_URL || `https://${process.env.REPLIT_DEV_DOMAIN ?? ""}`;
+    const resetLink = `${origin.replace(/\/$/, "")}/reset-password?email=${encodeURIComponent(email)}`;
+    await sendPasswordResetEmail(email, resetLink, user.name);
+    res.json({ success: true });
+  } catch { res.status(500).json({ error: "Failed to send password reset email" }); }
 });
 
 // ── Google OAuth ─────────────────────────────────────────────────────────────

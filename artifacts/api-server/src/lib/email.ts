@@ -101,6 +101,74 @@ export async function sendAdminOtp(email: string, code: string, name?: string | 
   return { dev: false };
 }
 
+export async function sendPasswordResetEmail(email: string, resetLink: string, name?: string | null): Promise<{ dev: boolean }> {
+  const built = await buildTransport();
+
+  const html = `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"/></head>
+<body style="margin:0;padding:0;background:#f8f9ff;font-family:Manrope,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="padding:48px 0;">
+    <tr><td align="center">
+      <table width="520" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+        <tr>
+          <td style="background:#080e0b;padding:32px 40px;text-align:center;">
+            <span style="color:#fff;font-size:13px;font-weight:700;letter-spacing:0.2em;text-transform:uppercase;">✦ Luxe Boutique</span>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:40px 40px 8px;">
+            <p style="font-size:13px;color:#7c839b;margin:0 0 6px;">Hello${name ? `, ${name}` : ""},</p>
+            <h1 style="font-size:22px;color:#0a0f0d;margin:0 0 12px;font-weight:600;">Reset your password</h1>
+            <p style="font-size:14px;color:#7c839b;margin:0 0 32px;line-height:1.6;">
+              Click the button below to create a new password. This link expires in <strong style="color:#0a0f0d;">15 minutes</strong>.
+            </p>
+            <table cellpadding="0" cellspacing="0" style="margin-bottom:32px;">
+              <tr>
+                <td style="background:#0a0f0d;border-radius:10px;padding:0;">
+                  <a href="${resetLink}" style="display:block;padding:16px 36px;color:#fff;font-size:12px;font-weight:700;letter-spacing:0.15em;text-transform:uppercase;text-decoration:none;">
+                    Reset Password →
+                  </a>
+                </td>
+              </tr>
+            </table>
+            <p style="font-size:11px;color:#b0b8cc;line-height:1.7;margin:0 0 8px;">
+              Or copy and paste this link:<br/>
+              <a href="${resetLink}" style="color:#006c49;word-break:break-all;">${resetLink}</a>
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="background:#f8f9ff;padding:20px 40px;border-top:1px solid #f1f3f9;text-align:center;">
+            <p style="font-size:11px;color:#b0b8cc;margin:0;">
+              If you didn't request this, you can safely ignore this email.
+            </p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+  if (!built) {
+    console.log(`\n${"─".repeat(50)}`);
+    console.log(`  PASSWORD RESET (dev — SMTP not configured)`);
+    console.log(`  To:   ${email}`);
+    console.log(`  Link: ${resetLink}`);
+    console.log(`${"─".repeat(50)}\n`);
+    return { dev: true };
+  }
+
+  await built.transport.sendMail({
+    from: built.from,
+    to: email,
+    subject: `Reset your Luxe Boutique password`,
+    html,
+  });
+  return { dev: false };
+}
+
 export async function sendTeamInvite(
   to: string,
   opts: { invitedBy: string; role: string; name?: string | null; inviteLink: string; expiryDays?: number },

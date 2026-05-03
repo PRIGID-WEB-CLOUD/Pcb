@@ -4,10 +4,25 @@ import { Link } from "wouter";
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
   const [submitted, setSubmitted] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setLoading(true);
+    setError("");
+    const res = await fetch("/api/auth/forgot-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+    if (!res.ok) {
+      setError("Unable to send reset link right now.");
+      setLoading(false);
+      return;
+    }
     setSubmitted(true);
+    setLoading(false);
   };
 
   return (
@@ -29,6 +44,7 @@ export default function ForgotPasswordPage() {
           <>
             <h1 className="font-serif text-3xl text-slate-900 mb-2 text-center">Forgot Password</h1>
             <p className="text-slate-400 text-sm text-center mb-10">Enter your email and we'll send a reset link.</p>
+            {error && <p className="text-red-500 text-xs text-center mb-4">{error}</p>}
             <form onSubmit={handleSubmit} className="space-y-6">
               <div>
                 <label className="text-[10px] uppercase tracking-widest font-bold text-slate-500 block mb-2">Email Address</label>
@@ -37,9 +53,9 @@ export default function ForgotPasswordPage() {
                   className="w-full border-b border-slate-200 py-3 text-sm focus:outline-none focus:border-slate-900 bg-transparent transition-colors"
                 />
               </div>
-              <button type="submit"
+              <button type="submit" disabled={loading}
                 className="w-full py-4 bg-slate-900 text-white text-xs tracking-widest uppercase font-bold hover:bg-emerald-700 transition-colors">
-                Send Reset Link
+                {loading ? "Sending..." : "Send Reset Link"}
               </button>
             </form>
             <p className="text-center mt-6 text-xs text-slate-400">
