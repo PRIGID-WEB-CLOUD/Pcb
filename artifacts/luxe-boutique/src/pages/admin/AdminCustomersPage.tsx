@@ -5,7 +5,7 @@ type User = {
   id: string;
   name: string | null;
   email: string;
-  role: "USER" | "ADMIN";
+  role: "CUSTOMER" | "ADMIN";
   createdAt: string;
 };
 
@@ -35,7 +35,7 @@ export default function AdminCustomersPage() {
   });
 
   const admins = users.filter(u => u.role === "ADMIN");
-  const regularUsers = users.filter(u => u.role === "USER");
+  const regularUsers = users.filter(u => u.role === "CUSTOMER");
 
   return (
     <AdminLayout sidebar="main">

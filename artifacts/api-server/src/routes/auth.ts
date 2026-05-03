@@ -128,7 +128,7 @@ router.post("/register", async (req, res) => {
     const [existing] = await db.select().from(users).where(eq(users.email, email)).limit(1);
     if (existing) return res.status(400).json({ error: "User already exists" });
     const hashed = await bcrypt.hash(password, 10);
-    await db.insert(users).values({ name, email, password: hashed, role: "USER" });
+    await db.insert(users).values({ name, email, password: hashed, role: "CUSTOMER" });
     res.json({ message: "User registered successfully" });
   } catch { res.status(500).json({ error: "Registration failed" }); }
 });

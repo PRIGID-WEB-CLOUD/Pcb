@@ -18,7 +18,7 @@ export default function LoginPage() {
     setLoading(true); setError("");
     const result = await login(email, password);
     if (result.error) { setError(result.error); setLoading(false); }
-    else navigate("/");
+    else navigate("/account");
   };
 
   const handleGoogle = () => {
