@@ -4,11 +4,11 @@ import { CheckCircle, XCircle } from "lucide-react";
 
 export default function CheckoutVerifyPage() {
   const [status, setStatus] = useState<"loading" | "success" | "failed">("loading");
-  const [, navigate] = useLocation();
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const reference = params.get("reference") || params.get("trxref");
+    const provider = params.get("provider") || "paystack";
 
     if (!reference) {
       setStatus("failed");
@@ -19,10 +19,11 @@ export default function CheckoutVerifyPage() {
 
     const run = async () => {
       try {
-        const verifyRes = await fetch(`/api/payments/verify/${reference}`);
+        const verifyRes = await fetch(`/api/payments/verify/${reference}?provider=${provider}`);
         const verifyData = await verifyRes.json();
 
         const isSuccess =
+          (provider === "flutterwave" && verifyData.status === "successful") ||
           (verifyData.status && verifyData.data?.status === "success") ||
           reference.startsWith("demo_");
 

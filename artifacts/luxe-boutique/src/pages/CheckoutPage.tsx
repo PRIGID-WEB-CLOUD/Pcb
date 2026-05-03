@@ -8,6 +8,7 @@ export default function CheckoutPage() {
   const [loading, setLoading] = useState(true);
   const [shippingAddress, setShippingAddress] = useState("");
   const [processing, setProcessing] = useState(false);
+  const [provider, setProvider] = useState<"paystack" | "flutterwave">("paystack");
   const { formatPrice } = useCurrency();
 
   useEffect(() => {
@@ -24,10 +25,11 @@ export default function CheckoutPage() {
       sessionStorage.setItem("checkout_shipping", shippingAddress);
       const initRes = await fetch("/api/payments/initialize", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount: total, callbackUrl: `${window.location.origin}/checkout/verify` }),
+        body: JSON.stringify({ amount: total, provider, callbackUrl: `${window.location.origin}/checkout/verify?provider=${provider}` }),
       });
       const data = await initRes.json();
-      if (data.status) window.location.assign(data.data.authorization_url);
+      const redirectUrl = provider === "flutterwave" ? data?.data?.link : data?.data?.authorization_url;
+      if (redirectUrl) window.location.assign(redirectUrl);
     } catch { console.error("Checkout error"); } finally { setProcessing(false); }
   };
 
@@ -59,6 +61,17 @@ export default function CheckoutPage() {
               </div>
               <div className="bg-slate-50 border border-slate-200 rounded-xl p-6">
                 <p className="text-slate-600 text-sm">You will be redirected to our secure payment gateway to complete the purchase.</p>
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] uppercase tracking-widest font-bold text-slate-500">Payment Provider</label>
+                <div className="grid grid-cols-2 gap-3">
+                  {(["paystack", "flutterwave"] as const).map((p) => (
+                    <button key={p} type="button" onClick={() => setProvider(p)}
+                      className={`py-3 rounded-xl border text-xs font-bold uppercase tracking-widest transition-colors ${provider === p ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"}`}>
+                      {p}
+                    </button>
+                  ))}
+                </div>
               </div>
               <button type="submit" disabled={processing || !cart?.items?.length} className="w-full bg-slate-900 text-white py-5 rounded-none font-bold uppercase tracking-widest text-xs flex items-center justify-center gap-2 hover:bg-emerald-600 transition-all disabled:opacity-50">
                 <Lock size={14} />
