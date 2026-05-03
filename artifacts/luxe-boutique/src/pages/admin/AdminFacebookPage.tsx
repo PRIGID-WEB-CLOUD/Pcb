@@ -386,259 +386,40 @@ export default function AdminFacebookPage() {
                   {/* ── LEFT: Composer ── */}
                   <div className="col-span-12 lg:col-span-5 space-y-5">
                     <div className="flex items-center justify-between">
-                      <h3 className="font-serif text-[20px] font-semibold">Compose Post</h3>
-                      <button onClick={() => setShowTemplates((v) => !v)}
-                        className="flex items-center gap-1.5 text-xs font-[Manrope] font-bold text-[#006c49] hover:text-black transition-colors">
-                        <span className="material-symbols-outlined text-sm">description</span>
-                        Templates ({postTemplates.length})
-                      </button>
+                      <h3 className="font-serif text-[20px] font-semibold">Live Posts</h3>
                     </div>
 
-                    {/* Template picker */}
-                    {showTemplates && (
-                      <div className="bg-[#f8f9ff] rounded-xl border border-dashed border-slate-200 p-4 space-y-3">
-                        <div className="flex justify-between items-center">
-                          <span className="font-[Manrope] font-bold text-xs tracking-widest uppercase text-[#45464d]">Post Templates</span>
-                          <button onClick={() => setShowNewTpl((v) => !v)} className="text-xs font-[Manrope] font-bold text-[#006c49] hover:text-black transition-colors flex items-center gap-1">
-                            <span className="material-symbols-outlined text-xs">add</span> New
-                          </button>
-                        </div>
-                        {showNewTpl && (
-                          <div className="space-y-2 p-3 bg-white rounded-lg border border-slate-200">
-                            <input value={newTplName} onChange={(e) => setNewTplName(e.target.value)} placeholder="Template name…"
-                              className="w-full bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-sm font-[Manrope] outline-none focus:border-[#006c49]" />
-                            <select value={newTplType} onChange={(e) => setNewTplType(e.target.value)}
-                              className="w-full bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-sm font-[Manrope] outline-none focus:border-[#006c49]">
-                              {POST_TYPES.map((t) => <option key={t}>{t}</option>)}
-                            </select>
-                            <textarea value={newTplBody} onChange={(e) => setNewTplBody(e.target.value)} rows={3} placeholder="Caption body with {{variables}}…"
-                              className="w-full bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-sm font-[Manrope] outline-none focus:border-[#006c49] resize-none" />
-                            <div className="flex gap-2">
-                              <button onClick={saveNewTemplate} className="flex-1 bg-black text-white py-1.5 text-xs font-[Manrope] font-bold uppercase tracking-widest hover:bg-[#006c49] transition-colors rounded-lg">Save</button>
-                              <button onClick={() => setShowNewTpl(false)} className="px-4 py-1.5 border border-slate-200 text-xs font-[Manrope] font-bold rounded-lg">Cancel</button>
-                            </div>
-                          </div>
-                        )}
-                        <div className="space-y-2 max-h-52 overflow-y-auto pr-0.5">
-                          {postTemplates.map((tpl) => (
-                            <div key={tpl.id} className="flex items-start gap-3 p-3 bg-white rounded-lg border border-slate-100 hover:border-[#006c49] transition-colors group">
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 mb-0.5">
-                                  <code className="font-mono text-xs font-bold text-[#0b1c30]">{tpl.name}</code>
-                                  <span className={`text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-full ${postTypeColor[tpl.postType] ?? "bg-slate-100 text-slate-600"}`}>{tpl.postType}</span>
-                                </div>
-                                <p className="text-xs text-[#7c839b] font-[Manrope] line-clamp-1">{tpl.body}</p>
-                              </div>
-                              <button onClick={() => useTemplate(tpl)}
-                                className="shrink-0 px-3 py-1 bg-black text-white text-[10px] font-[Manrope] font-bold uppercase tracking-widest hover:bg-[#006c49] transition-colors rounded opacity-0 group-hover:opacity-100">
-                                Use
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
+                    <div className="text-sm text-[#7c839b] font-[Manrope]">Templates removed.</div>
 
-                    {/* Caption */}
-                    <div className="space-y-2">
-                      <label className="font-[Manrope] font-bold text-[10px] tracking-widest uppercase text-[#45464d]">Caption</label>
-                      <textarea ref={captionRef} value={caption} onChange={(e) => setCaption(e.target.value)} rows={6}
-                        placeholder="Write your post caption…&#10;&#10;Use {{product_name}}, {{price}}, {{link}} as placeholders."
-                        className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm font-[Manrope] outline-none focus:border-[#006c49] resize-none transition-colors" />
-                      <p className="text-right text-[10px] text-[#7c839b] font-[Manrope]">{caption.length} chars</p>
-                    </div>
-
-                    {/* Post type + Image */}
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1.5">
-                        <label className="font-[Manrope] font-bold text-[10px] tracking-widest uppercase text-[#45464d]">Post Type</label>
-                        <select value={postType} onChange={(e) => setPostType(e.target.value)}
-                          className="w-full bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-sm font-[Manrope] outline-none focus:border-[#006c49]">
-                          {POST_TYPES.map((t) => <option key={t}>{t}</option>)}
-                        </select>
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="font-[Manrope] font-bold text-[10px] tracking-widest uppercase text-[#45464d]">Image URL</label>
-                        <input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} placeholder="https://…"
-                          className="w-full bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-sm font-[Manrope] outline-none focus:border-[#006c49]" />
-                      </div>
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="font-[Manrope] font-bold text-[10px] tracking-widest uppercase text-[#45464d]">Link URL</label>
-                      <input value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} placeholder="https://luxeboutique.com/…"
-                        className="w-full bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-sm font-[Manrope] outline-none focus:border-[#006c49]" />
-                    </div>
-
-                    {/* Schedule toggle */}
-                    <div className="flex gap-2">
-                      {(["now","schedule"] as const).map((opt) => (
-                        <button key={opt} onClick={() => setScheduleWhen(opt)}
-                          className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-[Manrope] font-bold uppercase tracking-widest border transition-all ${scheduleWhen === opt ? "bg-black text-white border-black" : "bg-white text-[#7c839b] border-slate-200 hover:border-black"}`}>
-                          <span className="material-symbols-outlined text-sm">{opt === "now" ? "send" : "schedule_send"}</span>
-                          {opt === "now" ? "Post Now" : "Schedule"}
-                        </button>
-                      ))}
-                    </div>
-                    {scheduleWhen === "schedule" && (
-                      <div className="space-y-1.5">
-                        <label className="font-[Manrope] font-bold text-[10px] tracking-widest uppercase text-[#45464d]">Scheduled Date & Time</label>
-                        <input type="datetime-local" value={scheduleTime} onChange={(e) => setScheduleTime(e.target.value)}
-                          className="w-full bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-sm font-[Manrope] outline-none focus:border-[#006c49]" />
-                      </div>
-                    )}
-
-                    {/* Action buttons */}
-                    <div className="grid grid-cols-3 gap-2 pt-1">
-                      <button onClick={() => submitPost("Draft")} disabled={postSubmitting !== "idle"}
-                        className="py-2.5 border border-slate-200 rounded-lg text-xs font-[Manrope] font-bold uppercase tracking-widest text-[#7c839b] hover:border-black hover:text-black disabled:opacity-50 transition-colors flex items-center justify-center gap-1">
-                        <span className="material-symbols-outlined text-sm">save</span>Draft
-                      </button>
-                      {scheduleWhen === "schedule" ? (
-                        <button onClick={() => submitPost("Scheduled")} disabled={postSubmitting !== "idle"}
-                          className="col-span-2 py-2.5 bg-blue-600 text-white rounded-lg text-xs font-[Manrope] font-bold uppercase tracking-widest hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-1.5">
-                          <span className={`material-symbols-outlined text-sm ${postSubmitting === "scheduling" ? "animate-spin" : ""}`}>{postSubmitting === "scheduling" ? "refresh" : "schedule_send"}</span>
-                          {postSubmitting === "scheduling" ? "Scheduling…" : "Schedule Post"}
-                        </button>
-                      ) : (
-                        <button onClick={() => submitPost("Published")} disabled={postSubmitting !== "idle"}
-                          className="col-span-2 py-2.5 bg-[#006c49] text-white rounded-lg text-xs font-[Manrope] font-bold uppercase tracking-widest hover:bg-black disabled:opacity-50 transition-colors flex items-center justify-center gap-1.5">
-                          <span className={`material-symbols-outlined text-sm ${postSubmitting === "posting" ? "animate-spin" : ""}`}>{postSubmitting === "posting" ? "refresh" : "send"}</span>
-                          {postSubmitting === "posting" ? "Publishing…" : "Publish Now"}
-                        </button>
-                      )}
-                    </div>
+                    <div className="text-sm text-[#7c839b] font-[Manrope]">Composer removed.</div>
                   </div>
 
                   {/* ── RIGHT: Post Feed ── */}
                   <div className="col-span-12 lg:col-span-7">
                     <div className="flex items-center justify-between mb-5">
                       <h3 className="font-serif text-[20px] font-semibold">Post Feed</h3>
-                      <div className="flex gap-1 bg-slate-100 rounded-lg p-1">
-                        {(["All","Published","Scheduled","Draft"] as PostFilter[]).map((f) => {
-                          const count = f === "All" ? posts.length : posts.filter((p) => p.status === f).length;
-                          return (
-                            <button key={f} onClick={() => setPostFilter(f)}
-                              className={`px-3 py-1 text-xs font-[Manrope] font-bold rounded-md transition-all ${postFilter === f ? "bg-white text-black shadow-sm" : "text-[#7c839b] hover:text-black"}`}>
-                              {f} {count > 0 && <span className="ml-0.5 opacity-60">({count})</span>}
-                            </button>
-                          );
-                        })}
-                      </div>
                     </div>
 
                     {filteredPosts.length === 0 ? (
                       <div className="flex flex-col items-center justify-center py-16 text-[#7c839b] font-[Manrope]">
                         <span className="material-symbols-outlined text-4xl mb-3 text-slate-200">post_add</span>
-                        No {postFilter === "All" ? "" : postFilter.toLowerCase()} posts yet.
+                        No posts yet.
                       </div>
                     ) : (
                       <div className="space-y-4 max-h-[820px] overflow-y-auto pr-1">
                         {filteredPosts.map((post) => (
-                          <div key={post.id} className={`rounded-xl border overflow-hidden transition-all ${post.status === "Published" ? "border-slate-100" : post.status === "Scheduled" ? "border-blue-100" : "border-dashed border-slate-200"}`}>
-                            {/* FB-style post header */}
+                          <div key={post.id} className="rounded-xl border overflow-hidden">
                             <div className="bg-white px-4 pt-4 pb-3">
                               <div className="flex items-start justify-between mb-3">
-                                <div className="flex items-center gap-2.5">
-                                  <div className="w-9 h-9 rounded-full bg-[#1877F2] flex items-center justify-center text-white text-xs font-bold shrink-0">LB</div>
-                                  <div>
-                                    <p className="font-[Manrope] font-bold text-sm text-[#0b1c30] leading-none">Luxe Boutique</p>
-                                    <div className="flex items-center gap-2 mt-0.5">
-                                      <span className="text-[10px] text-[#7c839b] font-[Manrope]">
-                                        {post.status === "Published" ? "Published" : post.status === "Scheduled" ? `Scheduled · ${post.scheduledFor ?? ""}` : "Draft"}
-                                      </span>
-                                      <span className={`text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-full ${postTypeColor[post.postType] ?? "bg-slate-100 text-slate-600"}`}>{post.postType}</span>
-                                    </div>
-                                  </div>
+                                <div>
+                                  <p className="font-[Manrope] font-bold text-sm text-[#0b1c30] leading-none">Luxe Boutique</p>
+                                  <p className="text-[10px] text-[#7c839b] font-[Manrope]">{post.status}</p>
                                 </div>
-                                <div className="flex items-center gap-1.5">
-                                  <span className={`text-[9px] font-[Manrope] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full ${postStatusStyle[post.status] ?? "bg-slate-100 text-slate-500"}`}>{post.status}</span>
-                                  <button onClick={() => deletePost(post)} className="text-[#7c839b] hover:text-red-500 transition-colors p-1">
-                                    <span className="material-symbols-outlined text-base">delete</span>
-                                  </button>
-                                </div>
+                                <span className="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600">{post.postType}</span>
                               </div>
 
-                              {/* Caption */}
                               <p className="text-sm font-[Manrope] text-[#0b1c30] whitespace-pre-line line-clamp-4 mb-3">{post.caption}</p>
-
-                              {/* Image preview */}
-                              {post.imageUrl && (
-                                <div className="rounded-lg overflow-hidden mb-3 bg-slate-100" style={{ maxHeight: 200 }}>
-                                  <img src={post.imageUrl} alt="" className="w-full object-cover" style={{ maxHeight: 200 }} onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                                </div>
-                              )}
-
-                              {/* Link chip */}
-                              {post.link && (
-                                <div className="flex items-center gap-2 text-xs font-[Manrope] text-[#006c49] bg-[#f0faf6] border border-[#c3eed8] rounded-lg px-3 py-1.5 mb-3">
-                                  <span className="material-symbols-outlined text-sm">link</span>
-                                  <span className="truncate">{post.link}</span>
-                                </div>
-                              )}
-
-                              {/* Engagement (published) */}
-                              {post.status === "Published" && (
-                                <div className="flex items-center gap-4 pt-2 border-t border-slate-50">
-                                  {[
-                                    { icon: "thumb_up", val: post.likes,    label: "Likes"    },
-                                    { icon: "comment",  val: post.comments, label: "Comments" },
-                                    { icon: "share",    val: post.shares,   label: "Shares"   },
-                                    { icon: "visibility", val: post.reach,  label: "Reach"    },
-                                  ].map((m) => (
-                                    <div key={m.label} className="flex items-center gap-1 text-xs font-[Manrope] text-[#45464d]">
-                                      <span className="material-symbols-outlined text-sm text-[#7c839b]">{m.icon}</span>
-                                      <span className="font-bold">{fmt(m.val)}</span>
-                                      <span className="text-[#7c839b] hidden sm:inline">{m.label}</span>
-                                    </div>
-                                  ))}
-                                  <div className="ml-auto flex items-center gap-2">
-                                    <div className="flex items-center gap-1 text-[10px] font-[Manrope] font-bold text-[#006c49]">
-                                      <span className="material-symbols-outlined text-xs">trending_up</span>
-                                      {post.reach > 0 ? `${((post.likes / post.reach) * 100).toFixed(1)}% ER` : "—"}
-                                    </div>
-                                    <button className="text-xs font-[Manrope] font-bold text-[#1877F2] border border-[#1877F2]/30 px-3 py-1 rounded hover:bg-blue-50 transition-colors flex items-center gap-1">
-                                      <span className="material-symbols-outlined text-xs">bolt</span>Boost
-                                    </button>
-                                  </div>
-                                </div>
-                              )}
-
-                              {/* Draft / Scheduled actions */}
-                              {post.status !== "Published" && (
-                                <div className="flex gap-2 pt-2 border-t border-slate-50">
-                                  {post.status === "Draft" && (
-                                    <button onClick={() => publishPost(post)} disabled={publishingId === post.id}
-                                      className="flex-1 py-1.5 bg-[#006c49] text-white text-xs font-[Manrope] font-bold uppercase tracking-widest rounded-lg hover:bg-black disabled:opacity-60 transition-colors flex items-center justify-center gap-1">
-                                      <span className={`material-symbols-outlined text-xs ${publishingId === post.id ? "animate-spin" : ""}`}>{publishingId === post.id ? "refresh" : "send"}</span>
-                                      {publishingId === post.id ? "Publishing…" : "Publish Now"}
-                                    </button>
-                                  )}
-                                  {post.status === "Scheduled" && (
-                                    <div className="flex-1 flex items-center gap-1.5 text-xs font-[Manrope] text-blue-600 font-bold">
-                                      <span className="material-symbols-outlined text-sm">schedule</span>
-                                      Scheduled · {post.scheduledFor}
-                                    </div>
-                                  )}
-                                </div>
-                              )}
                             </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Page-level engagement summary */}
-                    {publishedPosts.length > 0 && (
-                      <div className="mt-6 grid grid-cols-3 gap-3">
-                        {[
-                          { label: "Total Likes",    value: fmt(totalLikes),                       icon: "thumb_up"   },
-                          { label: "Total Reach",    value: fmt(totalReach),                       icon: "visibility" },
-                          { label: "Avg. Eng. Rate", value: totalReach ? `${((totalLikes/totalReach)*100).toFixed(1)}%` : "—", icon: "trending_up" },
-                        ].map((s) => (
-                          <div key={s.label} className="bg-[#f8f9ff] rounded-xl p-3 text-center">
-                            <span className="material-symbols-outlined text-[#006c49] text-lg block mb-1">{s.icon}</span>
-                            <p className="text-[18px] font-serif font-semibold">{s.value}</p>
-                            <p className="text-[10px] font-[Manrope] font-bold uppercase tracking-widest text-[#7c839b]">{s.label}</p>
                           </div>
                         ))}
                       </div>

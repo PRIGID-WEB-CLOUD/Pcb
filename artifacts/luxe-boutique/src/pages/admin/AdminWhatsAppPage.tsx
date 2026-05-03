@@ -283,21 +283,6 @@ export default function AdminWhatsAppPage() {
                     })}
                   </div>
 
-                  {/* Webhook section */}
-                  <div className="p-4 bg-slate-50 rounded-xl border border-dashed border-slate-200">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h4 className="font-serif font-bold text-sm mb-1">Webhook Callback URL</h4>
-                        <code className="text-[#006c49] text-xs">https://api.yourdomain.com/v1/whatsapp/webhook</code>
-                        {webhookConfigured && <p className="text-xs text-[#006c49] font-[Manrope] font-bold mt-1 flex items-center gap-1"><span className="material-symbols-outlined text-xs">check_circle</span>Verified & active</p>}
-                      </div>
-                      <button onClick={() => { setWebhookConfigured(true); showToast("Webhook verified successfully."); }}
-                        className={`font-[Manrope] font-bold text-[10px] tracking-widest uppercase border px-3 py-1.5 rounded-lg transition-all ${webhookConfigured ? "border-[#006c49] text-[#006c49] bg-emerald-50" : "border-black hover:bg-black hover:text-white"}`}>
-                        {webhookConfigured ? "VERIFIED" : "VERIFY"}
-                      </button>
-                    </div>
-                  </div>
-
                   <div className="flex gap-3 pt-1">
                     <button onClick={saveWaCreds} disabled={credsSaving}
                       className="flex-1 py-3 bg-black text-white font-[Manrope] font-bold text-xs tracking-widest uppercase hover:bg-[#006c49] disabled:opacity-60 transition-colors rounded-lg flex items-center justify-center gap-2">
@@ -317,52 +302,20 @@ export default function AdminWhatsAppPage() {
                     </div>
                   )}
 
-                  {/* Send test message */}
                   <div className="p-5 bg-[#f8f9ff] rounded-xl border border-slate-100">
-                    <h4 className="font-serif font-semibold mb-3 flex items-center gap-2"><span className="material-symbols-outlined text-[#006c49] text-base">send</span>Send Test Message</h4>
-                    <div className="flex gap-3">
-                      <input value={testPhone} onChange={(e) => setTestPhone(e.target.value)} placeholder="+1 555 000 0000"
-                        className="flex-1 bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm font-[Manrope] outline-none focus:border-[#006c49]" />
-                      <select value={testTemplate} onChange={(e) => setTestTemplate(e.target.value)}
-                        className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm font-[Manrope] outline-none focus:border-[#006c49]">
-                        {templates.filter((t) => t.status === "Approved").map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-                      </select>
-                      <button onClick={sendTestMessage} disabled={sendingTest}
-                        className="px-5 py-2 bg-[#006c49] text-white font-[Manrope] font-bold text-xs tracking-widest uppercase hover:bg-black disabled:opacity-60 transition-colors rounded-lg flex items-center gap-2">
-                        <span className={`material-symbols-outlined text-sm ${sendingTest ? "animate-spin" : ""}`}>{sendingTest ? "refresh" : "send"}</span>
-                        {sendingTest ? "Sending…" : "Send"}
-                      </button>
-                    </div>
+                    <h4 className="font-serif font-semibold mb-3 flex items-center gap-2"><span className="material-symbols-outlined text-[#006c49] text-base">send</span>Template Coverage</h4>
+                    <p className="text-sm text-[#7c839b] font-[Manrope]">{templates.length} templates loaded</p>
                   </div>
                 </div>
 
                 <div className="col-span-12 lg:col-span-5 space-y-4">
                   <div className="p-5 bg-[#f8f9ff] rounded-xl border border-slate-100 space-y-4">
-                    <h4 className="font-serif font-semibold flex items-center gap-2"><span className="material-symbols-outlined text-[#006c49] text-base">help</span>Where to find your credentials</h4>
-                    {[
-                      { step: "1", title: "Create a Meta App", body: "Go to developers.facebook.com → My Apps → Create App. Select Business type for WhatsApp access." },
-                      { step: "2", title: "Add WhatsApp Product", body: "In your app dashboard, click Add Product → WhatsApp. This generates your Phone Number ID and WABA ID." },
-                      { step: "3", title: "Generate System Token", body: "Meta Business Manager → System Users → Add → assign WhatsApp permissions → Generate Token. Select 'Never' for expiry." },
-                      { step: "4", title: "Set Webhook Verify Token", body: "Choose any secret string as your verify token. Enter it here and paste the same value in the Meta webhook configuration." },
-                    ].map((s) => (
-                      <div key={s.step} className="flex gap-3">
-                        <span className="w-5 h-5 rounded-full bg-[#25D366] text-white text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">{s.step}</span>
-                        <div><p className="font-[Manrope] font-bold text-sm mb-0.5">{s.title}</p><p className="text-xs text-[#7c839b] font-[Manrope]">{s.body}</p></div>
-                      </div>
-                    ))}
+                    <h4 className="font-serif font-semibold flex items-center gap-2"><span className="material-symbols-outlined text-[#006c49] text-base">help</span>Connected Data</h4>
+                    <p className="text-xs text-[#7c839b] font-[Manrope]">Templates and opt-in settings are loaded from the database.</p>
                   </div>
                   <div className="bg-black text-white p-5 rounded-xl">
-                    <h4 className="font-serif font-semibold mb-2">Catalog Sync</h4>
-                    <p className="text-white/60 text-sm font-[Manrope] mb-4">1,248 products synced to Meta</p>
-                    <div className="flex items-center gap-2 mb-4">
-                      {syncing ? <><span className="material-symbols-outlined text-amber-400 text-sm animate-spin">refresh</span><span className="text-sm font-[Manrope] text-amber-400">Syncing...</span></>
-                        : syncDone ? <><span className="material-symbols-outlined text-[#4edea3] text-sm">check_circle</span><span className="text-sm font-[Manrope] text-[#4edea3]">Sync complete</span></>
-                        : <><div className="w-2 h-2 rounded-full bg-[#4edea3] animate-pulse"></div><span className="text-sm font-[Manrope] text-[#4edea3]">Live & Synced</span></>}
-                    </div>
-                    <button onClick={forceResync} disabled={syncing}
-                      className="w-full bg-white/10 hover:bg-white/20 disabled:opacity-50 transition-colors text-white py-2 px-4 font-[Manrope] font-bold text-xs tracking-widest uppercase flex items-center justify-center gap-2 rounded-lg">
-                      <span className={`material-symbols-outlined text-sm ${syncing ? "animate-spin" : ""}`}>refresh</span>{syncing ? "Syncing..." : "Force Resync"}
-                    </button>
+                    <h4 className="font-serif font-semibold mb-2">Template Status</h4>
+                    <p className="text-white/60 text-sm font-[Manrope]">{templates.filter((t) => t.status === "Approved").length} approved</p>
                   </div>
                   <div className="p-4 bg-amber-50 border border-amber-100 rounded-xl">
                     <p className="text-xs font-[Manrope] text-amber-800 flex items-start gap-2">

@@ -20,7 +20,7 @@ export default function AdminTwitterPage() {
   const [scheduler, setScheduler]             = useState<Scheduler | null>(null);
   const [loading, setLoading]                 = useState(true);
 
-  const [tweetText, setTweetText]             = useState("✨ NEW ARRIVAL — Introducing the Silk Evening Blazer. Crafted from premium mulberry silk, this piece redefines modern elegance. Available now. #LuxeFashion #EditorialStyle");
+  const [tweetText, setTweetText]             = useState("");
   const [newTag, setNewTag]                   = useState("");
   const [scheduling, setScheduling]           = useState(false);
   const [toast, setToast]                     = useState<string | null>(null);
@@ -270,90 +270,26 @@ export default function AdminTwitterPage() {
               <div className="grid grid-cols-12 gap-8">
                 <div className="col-span-12 lg:col-span-7 space-y-6">
                   <div>
-                    <div className="flex justify-between items-center mb-3">
-                      <h3 className="font-serif font-semibold text-lg">Hashtag Bank <span className="text-[#7c839b] text-sm font-[Manrope] font-normal">{hashtags.length}/10</span></h3>
-                    </div>
-                    <div className="flex flex-wrap gap-2 mb-3 min-h-[36px]">
-                      {hashtags.map((h) => (
-                        <span key={h.id} className="bg-[#eff4ff] text-[#0b1c30] px-3 py-1.5 rounded-full text-xs font-[Manrope] font-bold flex items-center gap-1">
-                          {h.tag}
-                          <button onClick={() => removeHashtag(h)} className="text-[#45464d] hover:text-red-500 ml-1 transition-colors">
-                            <span className="material-symbols-outlined text-xs">close</span>
-                          </button>
-                        </span>
-                      ))}
-                      {hashtags.length === 0 && <span className="text-sm text-[#7c839b] italic font-[Manrope]">No hashtags yet.</span>}
-                    </div>
-                    <div className="flex gap-2">
-                      <input ref={tagInputRef} value={newTag} onChange={(e) => setNewTag(e.target.value)} onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addHashtag())}
-                        placeholder="Add hashtag…" className="flex-1 bg-slate-50 border border-slate-100 rounded-lg px-4 py-2 text-sm font-[Manrope] outline-none focus:border-[#006c49]" />
-                      <button onClick={addHashtag} className="px-4 py-2 bg-black text-white font-[Manrope] font-bold text-xs tracking-widest uppercase hover:bg-[#006c49] transition-colors rounded-lg">Add</button>
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="flex justify-between items-center mb-3">
-                      <h3 className="font-serif font-semibold text-lg">Tweet Composer</h3>
-                      <div className="flex items-center gap-2">
-                        <svg width="26" height="26" viewBox="0 0 26 26">
-                          <circle cx="13" cy="13" r={r} fill="none" stroke="#e2e8f0" strokeWidth="3" />
-                          <circle cx="13" cy="13" r={r} fill="none" stroke={circleColor} strokeWidth="3" strokeDasharray={circ} strokeDashoffset={circ - (circ * circlePercent) / 100} strokeLinecap="round" transform="rotate(-90 13 13)" style={{ transition: "stroke-dashoffset 0.2s, stroke 0.2s" }} />
-                        </svg>
-                        <span className={`font-[Manrope] font-bold text-sm ${overLimit ? "text-[#ba1a1a]" : charsLeft <= 20 ? "text-amber-600" : "text-[#7c839b]"}`}>{charsLeft}</span>
+                    <h3 className="font-serif font-semibold text-lg">Live Queue</h3>
+                    {queue.length === 0 ? <div className="text-sm text-[#7c839b] font-[Manrope] py-6">No queued posts yet.</div> : (
+                      <div className="space-y-3">
+                        {queue.map((tw) => (
+                          <div key={tw.id} className="p-4 bg-[#f8f9ff] rounded-xl border border-slate-100">
+                            <p className="text-sm font-[Manrope] text-[#0b1c30]">{tw.text}</p>
+                            <div className="mt-2 text-xs text-[#7c839b] font-[Manrope]">{tw.scheduledFor} · {tw.status}</div>
+                          </div>
+                        ))}
                       </div>
-                    </div>
-                    <div className="border border-slate-200 rounded-xl p-4 mb-3">
-                      <div className="flex items-start gap-3 mb-3">
-                        <div className="w-9 h-9 rounded-full bg-black flex items-center justify-center text-white text-xs font-bold shrink-0">LB</div>
-                        <div>
-                          <p className="font-bold text-sm">Luxe Boutique</p>
-                          <p className="text-xs text-slate-400 font-[Manrope]">@luxeboutique · {scheduler?.dropFrequency === "Real-time (Immediate)" ? "now" : scheduler?.dropFrequency === "Daily Digest (6 PM)" ? "6:00 PM" : "Mon 9:00 AM"}</p>
-                        </div>
-                      </div>
-                      <p className="text-sm font-[Manrope] mb-3 whitespace-pre-wrap break-words min-h-[36px]">{tweetText || <span className="text-slate-300">Start typing…</span>}</p>
-                      <div className="bg-slate-100 rounded-lg h-20 flex items-center justify-center">
-                        <span className="text-xs text-slate-300 font-[Manrope]">{scheduler?.imageStyle}</span>
-                      </div>
-                    </div>
-                    <textarea className="w-full bg-slate-50 border border-slate-100 rounded-lg px-4 py-3 text-sm font-[Manrope] outline-none focus:border-[#006c49] resize-none transition-colors" rows={3}
-                      placeholder="Compose your tweet…" value={tweetText} onChange={(e) => setTweetText(e.target.value)} />
-                    <div className="flex gap-3 mt-3">
-                      <button onClick={() => { const tags = hashtags.slice(0, 3).map(h => h.tag).join(" "); setTweetText((p) => p.includes(tags) ? p : `${p} ${tags}`.trim()); }}
-                        className="px-4 py-2 border border-slate-200 rounded-lg text-xs font-[Manrope] font-bold uppercase tracking-widest hover:border-[#006c49] hover:text-[#006c49] transition-colors flex items-center gap-1">
-                        <span className="material-symbols-outlined text-sm">tag</span> Insert Tags
-                      </button>
-                      <button onClick={() => setTweetText("")} className="px-4 py-2 border border-slate-200 rounded-lg text-xs font-[Manrope] font-bold uppercase tracking-widest hover:border-red-300 hover:text-red-500 transition-colors">Clear</button>
-                      <button onClick={scheduleTweet} disabled={overLimit || !tweetText.trim() || scheduling}
-                        className="flex-1 bg-black text-white py-2 rounded-lg font-[Manrope] font-bold text-xs tracking-widest uppercase hover:bg-[#006c49] disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2">
-                        {scheduling ? <><span className="material-symbols-outlined text-sm animate-spin">refresh</span>Scheduling…</> : <><span className="material-symbols-outlined text-sm">schedule_send</span>Add to Queue</>}
-                      </button>
-                    </div>
+                    )}
                   </div>
                 </div>
 
-                <div className="col-span-12 lg:col-span-5 space-y-5">
-                  <div className="bg-white border border-slate-100 rounded-xl p-5">
-                    <h3 className="font-serif font-semibold mb-4">Channel Performance</h3>
-                    {[{ label: "Followers", value: "48.2K", change: "+1.2K", up: true }, { label: "Avg. Impressions/Post", value: "12.4K", change: "+8.4%", up: true }, { label: "Engagement Rate", value: "4.8%", change: "+0.3%", up: true }, { label: "Link Clicks", value: "2,841", change: "+22%", up: true }].map((s) => (
-                      <div key={s.label} className="flex justify-between items-center py-2.5 border-b border-slate-50 last:border-0">
-                        <span className="font-[Manrope] text-sm text-[#45464d]">{s.label}</span>
-                        <div className="text-right"><span className="font-[Manrope] font-bold">{s.value}</span><span className={`text-xs font-[Manrope] font-bold ml-2 ${s.up ? "text-[#006c49]" : "text-[#ba1a1a]"}`}>{s.change}</span></div>
-                      </div>
-                    ))}
+                  <div className="col-span-12 lg:col-span-5 space-y-5">
+                    <div className="bg-white border border-slate-100 rounded-xl p-5">
+                      <h3 className="font-serif font-semibold mb-4">Queue Status</h3>
+                      <p className="text-sm text-[#7c839b] font-[Manrope]">{queuedCount} queued · {sentCount} sent</p>
+                    </div>
                   </div>
-                  <div className="bg-white border border-slate-100 rounded-xl p-5">
-                    <h3 className="font-serif font-semibold mb-3">Best Times to Post</h3>
-                    {[{ time: "9:00 AM", day: "Tue–Thu", score: 92 }, { time: "7:00 PM", day: "Fri–Sat", score: 88 }, { time: "12:00 PM", day: "Monday", score: 74 }].map((t) => (
-                      <div key={t.time} className="flex items-center justify-between p-3 bg-[#f8f9ff] rounded-lg mb-2 last:mb-0">
-                        <div><span className="font-[Manrope] font-bold text-sm">{t.time}</span><span className="text-xs text-[#7c839b] font-[Manrope] ml-2">{t.day}</span></div>
-                        <div className="flex items-center gap-2">
-                          <div className="w-16 h-1.5 bg-slate-200 rounded-full overflow-hidden"><div className="bg-[#006c49] h-full rounded-full" style={{ width: `${t.score}%` }}></div></div>
-                          <span className="text-xs font-[Manrope] font-bold text-[#006c49]">{t.score}%</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
               </div>
             )}
 
@@ -432,39 +368,12 @@ export default function AdminTwitterPage() {
                 </div>
                 <div className="col-span-12 lg:col-span-5 space-y-4">
                   <div className="p-5 bg-[#f8f9ff] rounded-xl border border-slate-100 space-y-4">
-                    <h4 className="font-serif font-semibold flex items-center gap-2"><span className="material-symbols-outlined text-[#006c49] text-base">help</span>Where to find your credentials</h4>
-                    {[
-                      { step: "1", title: "Create a Developer App", body: "Go to developer.x.com → Developer Portal → Projects & Apps → Create App. Select Read & Write access." },
-                      { step: "2", title: "Get API Key & Secret", body: "App Settings → Keys & Tokens → API Key and Secret. These are your Consumer credentials — keep the Secret confidential." },
-                      { step: "3", title: "Generate Bearer Token", body: "Keys & Tokens → Bearer Token → Generate. Used for read-only API v2 access without user context." },
-                      { step: "4", title: "Generate Access Token", body: "Keys & Tokens → Access Token & Secret → Generate. These authorize calls on behalf of your @luxeboutique account." },
-                    ].map((s) => (
-                      <div key={s.step} className="flex gap-3">
-                        <span className="w-5 h-5 rounded-full bg-black text-white text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">{s.step}</span>
-                        <div><p className="font-[Manrope] font-bold text-sm mb-0.5">{s.title}</p><p className="text-xs text-[#7c839b] font-[Manrope]">{s.body}</p></div>
-                      </div>
-                    ))}
+                    <h4 className="font-serif font-semibold flex items-center gap-2"><span className="material-symbols-outlined text-[#006c49] text-base">help</span>Connected Data</h4>
+                    <p className="text-xs text-[#7c839b] font-[Manrope]">Credentials and queue data are loaded from the database.</p>
                   </div>
                   <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
-                    <h4 className="font-serif font-semibold text-sm">Required API Access Level</h4>
-                    {[
-                      { label: "API v2 — Read & Write", needed: true },
-                      { label: "OAuth 1.0a (for posting)", needed: true },
-                      { label: "OAuth 2.0 (for analytics)", needed: true },
-                      { label: "Elevated access (for search)", needed: false },
-                    ].map((item) => (
-                      <div key={item.label} className="flex items-center gap-2 text-xs font-[Manrope]">
-                        <span className={`material-symbols-outlined text-sm ${item.needed ? "text-[#006c49]" : "text-[#7c839b]"}`}>{item.needed ? "check_circle" : "radio_button_unchecked"}</span>
-                        <span className={item.needed ? "text-[#0b1c30] font-semibold" : "text-[#7c839b]"}>{item.label}</span>
-                        {item.needed && <span className="text-[9px] font-bold uppercase tracking-widest bg-[#6cf8bb] text-[#00714d] px-1.5 py-0.5 rounded-full">Required</span>}
-                      </div>
-                    ))}
-                  </div>
-                  <div className="p-4 bg-amber-50 border border-amber-100 rounded-xl">
-                    <p className="text-xs font-[Manrope] text-amber-800 flex items-start gap-2">
-                      <span className="material-symbols-outlined text-sm shrink-0 mt-0.5">lock</span>
-                      Credentials are stored in the database and never exposed in client-side code. Secret fields are masked during display.
-                    </p>
+                    <h4 className="font-serif font-semibold text-sm">Queue Summary</h4>
+                    <p className="text-xs text-[#7c839b] font-[Manrope]">{queuedCount} queued · {sentCount} sent</p>
                   </div>
                 </div>
               </div>
