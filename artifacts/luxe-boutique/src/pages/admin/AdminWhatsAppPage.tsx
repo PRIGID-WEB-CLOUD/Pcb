@@ -22,7 +22,7 @@ const categoryStyle: Record<string, string> = {
 type CopyState = Record<string, boolean>;
 
 export default function AdminWhatsAppPage() {
-  const [activeTab, setActiveTab]           = useState<ActiveTab>("config");
+  const [activeTab, setActiveTab]           = useState<ActiveTab>("credentials");
   const [templates, setTemplates]           = useState<Template[]>([]);
   const [journeys, setJourneys]             = useState<Journey[]>([]);
   const [optinSettings, setOptinSettings]   = useState<OptinSettings | null>(null);
