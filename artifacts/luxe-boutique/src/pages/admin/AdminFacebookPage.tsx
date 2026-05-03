@@ -250,10 +250,10 @@ export default function AdminFacebookPage() {
   };
 
   // ── Derived ──────────────────────────────────────────────────────────────
-  const filteredPosts = postFilter === "All" ? posts : posts.filter((p) => p.status === postFilter);
   const publishedPosts  = posts.filter((p) => p.status === "Published");
   const scheduledPosts  = posts.filter((p) => p.status === "Scheduled");
   const draftPosts      = posts.filter((p) => p.status === "Draft");
+  const filteredPosts = publishedPosts;
   const totalReach      = publishedPosts.reduce((s, p) => s + p.reach, 0);
   const totalLikes      = publishedPosts.reduce((s, p) => s + p.likes, 0);
   const configuredCredsCount = FB_CRED_FIELDS.filter((f) => !!fbCreds[f.key]).length;
@@ -358,11 +358,10 @@ export default function AdminFacebookPage() {
             {activeTab === "posts" && (
               <div>
                 {/* Stats row */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
                   {[
                     { label: "Published",    value: publishedPosts.length,    icon: "check_circle",  cls: "text-[#006c49]"  },
                     { label: "Scheduled",    value: scheduledPosts.length,    icon: "schedule",      cls: "text-blue-600"   },
-                    { label: "Drafts",       value: draftPosts.length,        icon: "edit_note",     cls: "text-slate-500"  },
                     { label: "Total Reach",  value: fmt(totalReach),          icon: "visibility",    cls: "text-[#006c49]"  },
                   ].map((s) => (
                     <div key={s.label} className="bg-[#f8f9ff] rounded-xl p-4">
@@ -378,7 +377,6 @@ export default function AdminFacebookPage() {
                 <div className="space-y-5">
                   <div className="flex items-center justify-between">
                     <h3 className="font-serif text-[20px] font-semibold">Post Feed</h3>
-                    <div className="text-sm text-[#7c839b] font-[Manrope]">{filteredPosts.length} live posts</div>
                   </div>
 
                   {filteredPosts.length === 0 ? (
