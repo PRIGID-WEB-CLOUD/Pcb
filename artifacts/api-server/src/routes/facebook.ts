@@ -182,7 +182,7 @@ router.put("/posts/:id", async (req, res) => {
   } catch { res.status(500).json({ error: "Failed" }); }
 });
 
-// POST /api/facebook/posts/:id/publish — simulates publishing (adds mock engagement)
+// POST /api/facebook/posts/:id/publish — publishes to the real Facebook Graph API
 router.post("/posts/:id/publish", async (req, res) => {
   try {
     const user = await getSession(req);

@@ -189,11 +189,11 @@ export default function AdminWhatsAppPage() {
           <div className="flex justify-between items-end">
             <div>
               <h1 className="text-[40px] font-serif font-bold text-[#0b1c30] mb-2">WhatsApp API Console</h1>
-              <p className="font-[Manrope] text-[16px] text-[#7c839b] max-w-2xl">Configure your cloud API, manage message templates, automated journeys, and subscriber opt-in settings.</p>
+              <p className="font-[Manrope] text-[16px] text-[#7c839b] max-w-2xl">Configure your Cloud API credentials, manage message templates, automated journeys, and subscriber opt-in settings.</p>
             </div>
             <div className="flex items-center gap-3 px-4 py-2 bg-emerald-50 border border-[#6cf8bb] rounded-full">
               <span className="w-2 h-2 rounded-full bg-[#006c49] animate-pulse"></span>
-              <span className="text-[#006c49] font-[Manrope] font-bold text-[11px] tracking-widest uppercase">Connected</span>
+              <span className="text-[#006c49] font-[Manrope] font-bold text-[11px] tracking-widest uppercase">Configured</span>
             </div>
           </div>
         </header>
