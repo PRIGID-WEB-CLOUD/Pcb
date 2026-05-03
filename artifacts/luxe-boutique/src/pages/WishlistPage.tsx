@@ -10,6 +10,7 @@ const FALLBACK_IMAGE = "https://images.unsplash.com/photo-1529139574466-a303027c
 
 export default function WishlistPage() {
   const { user, loading: authLoading } = useAuth();
+  const isCustomer = user?.role === "CUSTOMER" || user?.role === "USER";
   const [, navigate] = useLocation();
   const [wishlist, setWishlist] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -17,16 +18,16 @@ export default function WishlistPage() {
 
   useEffect(() => {
     if (!authLoading && !user) navigate("/login");
-    else if (!authLoading && user && user.role !== "CUSTOMER") navigate("/");
+    else if (!authLoading && user && !isCustomer) navigate("/");
     else if (user) { fetch("/api/wishlist").then(r => r.json()).then(d => { setWishlist(Array.isArray(d) ? d : []); setLoading(false); }); }
-  }, [user, authLoading, navigate]);
+  }, [user, authLoading, navigate, isCustomer]);
 
   const removeItem = async (productId: string) => {
     await fetch(`/api/wishlist/${productId}`, { method: "DELETE" });
     setWishlist(prev => prev.filter((item: any) => item.productId !== productId));
   };
 
-  if (authLoading || loading || (user && user.role !== "CUSTOMER")) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-slate-900"></div></div>;
+  if (authLoading || loading || (user && !isCustomer)) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-slate-900"></div></div>;
 
   return (
     <div className="bg-slate-50 min-h-screen py-24">

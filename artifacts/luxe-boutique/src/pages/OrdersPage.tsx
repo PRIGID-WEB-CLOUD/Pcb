@@ -9,6 +9,7 @@ const FALLBACK_IMAGE = "https://images.unsplash.com/photo-1529139574466-a303027c
 
 export default function OrdersPage() {
   const { user, loading: authLoading } = useAuth();
+  const isCustomer = user?.role === "CUSTOMER" || user?.role === "USER";
   const [, navigate] = useLocation();
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -16,11 +17,11 @@ export default function OrdersPage() {
 
   useEffect(() => {
     if (!authLoading && !user) navigate("/login");
-    else if (!authLoading && user && user.role !== "CUSTOMER") navigate("/");
+    else if (!authLoading && user && !isCustomer) navigate("/");
     else if (user) fetch("/api/orders").then(r => r.json()).then(d => { setOrders(Array.isArray(d) ? d : []); setLoading(false); });
-  }, [user, authLoading, navigate]);
+  }, [user, authLoading, navigate, isCustomer]);
 
-  if (authLoading || loading || (user && user.role !== "CUSTOMER")) return <div className="max-w-7xl mx-auto px-8 py-20 text-center uppercase tracking-widest font-bold font-serif">Retrieving History...</div>;
+  if (authLoading || loading || (user && !isCustomer)) return <div className="max-w-7xl mx-auto px-8 py-20 text-center uppercase tracking-widest font-bold font-serif">Retrieving History...</div>;
 
   return (
     <div className="bg-slate-50 min-h-screen py-24">

@@ -6,6 +6,7 @@ import AccountSidebar from "@/components/AccountSidebar";
 
 export default function AccountSettingsPage() {
   const { user, loading, refetch } = useAuth();
+  const isCustomer = user?.role === "CUSTOMER" || user?.role === "USER";
   const [, navigate] = useLocation();
   const [name, setName] = useState("");
   const [currentPw, setCurrentPw] = useState("");
@@ -15,11 +16,11 @@ export default function AccountSettingsPage() {
 
   useEffect(() => {
     if (!loading && !user) navigate("/login");
-    else if (!loading && user && user.role !== "CUSTOMER") navigate("/");
+    else if (!loading && user && !isCustomer) navigate("/");
     if (user) setName(user.name || "");
-  }, [user, loading, navigate]);
+  }, [user, loading, navigate, isCustomer]);
 
-  if (loading || !user || user.role !== "CUSTOMER") return null;
+  if (loading || !user || !isCustomer) return null;
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();

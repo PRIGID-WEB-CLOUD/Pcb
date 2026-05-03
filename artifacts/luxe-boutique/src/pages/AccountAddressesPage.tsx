@@ -6,14 +6,15 @@ import { MapPin } from "lucide-react";
 
 export default function AccountAddressesPage() {
   const { user, loading } = useAuth();
+  const isCustomer = user?.role === "CUSTOMER" || user?.role === "USER";
   const [, navigate] = useLocation();
 
   useEffect(() => {
     if (!loading && !user) navigate("/login");
-    else if (!loading && user && user.role !== "CUSTOMER") navigate("/");
-  }, [user, loading, navigate]);
+    else if (!loading && user && !isCustomer) navigate("/");
+  }, [user, loading, navigate, isCustomer]);
 
-  if (loading || !user || user.role !== "CUSTOMER") return null;
+  if (loading || !user || !isCustomer) return null;
 
   return (
     <div className="pt-24 pb-16 px-4 max-w-7xl mx-auto">
