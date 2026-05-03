@@ -3,7 +3,7 @@ import { appSettings } from "@workspace/db/schema";
 import { inArray } from "drizzle-orm";
 
 export const MASK = "●●●●●●●●●●●●";
-export const SENSITIVE = new Set(["smtp_pass", "cloudinary_api_key", "cloudinary_api_secret"]);
+export const SENSITIVE = new Set(["smtp_pass", "cloudinary_api_key", "cloudinary_api_secret", "paystack_secret_key", "flutterwave_secret_key"]);
 
 export async function getSettings(keys?: string[]): Promise<Record<string, string>> {
   try {
@@ -20,9 +20,8 @@ export async function getSetting(key: string): Promise<string | null> {
 }
 
 export async function upsertSettings(values: Record<string, string>): Promise<void> {
-  const { eq } = await import("drizzle-orm");
   for (const [key, value] of Object.entries(values)) {
-    if (!value || value === MASK) continue;
+    if (value === undefined || value === null || value === "" || value === MASK) continue;
     await db
       .insert(appSettings)
       .values({ key, value })
@@ -48,5 +47,15 @@ export async function getCloudinaryConfig() {
     apiKey:       map.cloudinary_api_key       || process.env.CLOUDINARY_API_KEY       || null,
     apiSecret:    map.cloudinary_api_secret    || process.env.CLOUDINARY_API_SECRET    || null,
     uploadPreset: map.cloudinary_upload_preset || process.env.CLOUDINARY_UPLOAD_PRESET || null,
+  };
+}
+
+export async function getPaymentConfig() {
+  const map = await getSettings(["paystack_secret_key", "paystack_public_key", "flutterwave_secret_key", "flutterwave_public_key"]);
+  return {
+    paystackSecretKey: map.paystack_secret_key || process.env.PAYSTACK_SECRET_KEY || null,
+    paystackPublicKey: map.paystack_public_key || process.env.PAYSTACK_PUBLIC_KEY || null,
+    flutterwaveSecretKey: map.flutterwave_secret_key || process.env.FLUTTERWAVE_SECRET_KEY || null,
+    flutterwavePublicKey: map.flutterwave_public_key || process.env.FLUTTERWAVE_PUBLIC_KEY || null,
   };
 }
