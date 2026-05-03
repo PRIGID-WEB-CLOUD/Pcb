@@ -201,10 +201,10 @@ export default function AdminWhatsAppPage() {
         {/* Stats bar */}
         <div className="grid grid-cols-4 gap-4 mb-8">
           {[
-            { label: "Messages Sent (30d)", value: "14,820", sub: "+8.2%",          icon: "send"            },
-            { label: "Delivery Rate",        value: "99.3%",  sub: "14,711 delivered", icon: "mark_email_read" },
-            { label: "Read Rate",            value: "61.5%",  sub: "9,108 opened",   icon: "visibility"      },
-            { label: "Conversions",          value: "482",    sub: "+14% vs last mo", icon: "shopping_bag"    },
+            { label: "Templates", value: templates.length, sub: `${templates.filter((t) => t.status === "Approved").length} approved`, icon: "description" },
+            { label: "Journeys", value: journeys.length, sub: `${journeys.filter((j) => j.active).length} active`, icon: "route" },
+            { label: "Opt-in", value: localOptin?.doubleOptin ? "On" : "Off", sub: localOptin?.optinKeyword ?? "not set", icon: "manage_accounts" },
+            { label: "Credentials", value: configuredCredsCount, sub: `${WA_CRED_FIELDS.length} total`, icon: "key" },
           ].map((s) => (
             <div key={s.label} className="bg-white p-4 rounded-xl shadow-[0px_4px_20px_rgba(15,23,42,0.05)]">
               <div className="flex justify-between items-start mb-2">

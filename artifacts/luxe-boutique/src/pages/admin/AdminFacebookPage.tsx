@@ -19,11 +19,6 @@ interface PostTemplate    { id: string; name: string; body: string; postType: st
 const ALL_CATEGORIES = ["Ready-to-Wear","Footwear","Accessories","Bags & Luggage","Jewellery","Outerwear","Swimwear"];
 const POST_TYPES = ["Standard","Product Spotlight","Collection Launch","Promotion","Brand Story","Event","Teaser"];
 
-const adRanges: Record<string, { impressions: string; ctr: string; cpc: string; roas: string }> = {
-  "7":  { impressions: "620K",  ctr: "4.1%", cpc: "$0.38", roas: "4.8x" },
-  "30": { impressions: "2.4M",  ctr: "3.8%", cpc: "$0.42", roas: "4.2x" },
-  "90": { impressions: "6.8M",  ctr: "3.5%", cpc: "$0.47", roas: "3.9x" },
-};
 const audienceTypeStyle: Record<string, string> = {
   Custom: "bg-blue-50 text-blue-700", Lookalike: "bg-purple-50 text-purple-700", Retargeting: "bg-amber-50 text-amber-700",
 };
@@ -69,7 +64,6 @@ export default function AdminFacebookPage() {
 
   const [activeTab,   setActiveTab]   = useState<ActiveTab>("posts");
   const [syncState,   setSyncState]   = useState<"idle"|"syncing"|"done">("idle");
-  const [adRange,     setAdRange]     = useState<"7"|"30"|"90">("30");
   const [toast,       setToast]       = useState<string | null>(null);
   const [postFilter,  setPostFilter]  = useState<PostFilter>("All");
 
@@ -256,7 +250,6 @@ export default function AdminFacebookPage() {
   };
 
   // ── Derived ──────────────────────────────────────────────────────────────
-  const adData = adRanges[adRange];
   const filteredPosts = postFilter === "All" ? posts : posts.filter((p) => p.status === postFilter);
   const publishedPosts  = posts.filter((p) => p.status === "Published");
   const scheduledPosts  = posts.filter((p) => p.status === "Scheduled");
@@ -720,59 +713,26 @@ export default function AdminFacebookPage() {
                     <div className="flex justify-between items-center mb-4">
                       <div>
                         <h3 className="font-serif text-[20px] font-semibold">Ad Performance Overview</h3>
-                        <p className="text-[11px] font-[Manrope] text-amber-600 font-bold flex items-center gap-1 mt-0.5">
+                        <p className="text-[11px] font-[Manrope] text-[#7c839b] font-bold flex items-center gap-1 mt-0.5">
                           <span className="material-symbols-outlined text-xs">info</span>
-                          Live Meta Ads API data
+                          Live data only
                         </p>
                       </div>
-                      <div className="flex items-center gap-3">
-                        <span className="text-[10px] font-[Manrope] text-[#7c839b]">Account: <code className="text-black font-mono">{fbCreds.ad_account_id}</code></span>
-                        <div className="flex gap-1 bg-slate-100 rounded-lg p-1">
-                          {(["7","30","90"] as const).map((r) => (
-                            <button key={r} onClick={() => setAdRange(r)} className={`px-4 py-1.5 text-xs font-[Manrope] font-bold rounded-md transition-all ${adRange === r ? "bg-white text-black shadow-sm" : "text-[#7c839b] hover:text-black"}`}>{r}d</button>
-                          ))}
-                        </div>
-                      </div>
+                      <span className="text-[10px] font-[Manrope] text-[#7c839b]">Account: <code className="text-black font-mono">{fbCreds.ad_account_id}</code></span>
                     </div>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-5 mb-8">
                       {[
-                        { label: "Impressions",        value: adData.impressions, change: "+12.5%", up: true  },
-                        { label: "Click-Through Rate", value: adData.ctr,         change: "+0.4%",  up: true  },
-                        { label: "Cost Per Click",     value: adData.cpc,         change: "-$0.08", up: false },
-                        { label: "ROAS",               value: adData.roas,        change: "+0.6x",  up: true  },
+                        { label: "Impressions", value: fmt(totalReach), note: "live posts" },
+                        { label: "Engagement", value: fmt(totalLikes + totalReach), note: "live totals" },
+                        { label: "Comments", value: fmt(publishedPosts.reduce((s, p) => s + p.comments, 0)), note: "live posts" },
+                        { label: "Shares", value: fmt(publishedPosts.reduce((s, p) => s + p.shares, 0)), note: "live posts" },
                       ].map((m) => (
-                        <div key={m.label} className="p-5 bg-[#f8f9ff] rounded-xl relative">
+                        <div key={m.label} className="p-5 bg-[#f8f9ff] rounded-xl">
                           <p className="font-[Manrope] font-bold text-[10px] tracking-widest uppercase text-[#7c839b] mb-2">{m.label}</p>
                           <p className="text-[28px] font-serif font-semibold">{m.value}</p>
-                          <p className={`text-xs font-[Manrope] font-bold mt-1 flex items-center gap-1 ${m.up ? "text-[#006c49]" : "text-[#ba1a1a]"}`}>
-                            <span className="material-symbols-outlined text-xs">{m.up ? "trending_up" : "trending_down"}</span>{m.change}
-                          </p>
+                          <p className="text-xs font-[Manrope] font-bold mt-1 text-[#7c839b]">{m.note}</p>
                         </div>
                       ))}
-                    </div>
-                    <div className="p-5 bg-[#f8f9ff] rounded-xl">
-                      <div className="flex items-center justify-between mb-3">
-                        <h4 className="font-serif font-semibold">Top Performing Campaigns</h4>
-                      </div>
-                      <div className="space-y-3">
-                        {[
-                          { name: "SS25 Collection — Retargeting",    spend: "$4,820", roas: "5.2x", status: "Active" },
-                          { name: "Lookalike — High LTV Prospecting", spend: "$2,140", roas: "3.8x", status: "Active" },
-                          { name: "Cart Recovery Automation",          spend: "$980",   roas: "6.1x", status: "Active" },
-                          { name: "Brand Awareness — Broad",           spend: "$1,560", roas: "2.1x", status: "Paused" },
-                        ].map((c) => (
-                          <div key={c.name} className="flex items-center justify-between py-2 border-b border-slate-100 last:border-0">
-                            <div className="flex items-center gap-3">
-                              <span className={`w-2 h-2 rounded-full ${c.status === "Active" ? "bg-[#006c49]" : "bg-slate-300"}`}></span>
-                              <span className="font-[Manrope] font-semibold text-sm">{c.name}</span>
-                            </div>
-                            <div className="flex items-center gap-6 text-sm font-[Manrope]">
-                              <span className="text-[#7c839b]">Spend: <strong className="text-black">{c.spend}</strong></span>
-                              <span className="text-[#006c49] font-bold">ROAS {c.roas}</span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
                     </div>
                   </div>
                 )}
