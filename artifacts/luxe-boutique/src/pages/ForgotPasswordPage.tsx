@@ -6,11 +6,13 @@ export default function ForgotPasswordPage() {
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError("");
+    setMessage("");
     const res = await fetch("/api/auth/forgot-password", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -21,6 +23,7 @@ export default function ForgotPasswordPage() {
       setLoading(false);
       return;
     }
+    setMessage("Magic link sent. Check your inbox.");
     setSubmitted(true);
     setLoading(false);
   };
@@ -32,7 +35,7 @@ export default function ForgotPasswordPage() {
           <div className="text-center">
             <h1 className="font-serif text-3xl text-slate-900 mb-3">Check Your Inbox</h1>
             <p className="text-slate-500 text-sm mb-8">
-              If an account exists for <strong>{email}</strong>, a password reset link will be sent shortly.
+              {message || `If an account exists for ${email}, a password reset link will be sent shortly.`}
             </p>
             <Link href="/login">
               <button className="text-xs tracking-widest uppercase font-bold text-slate-500 hover:text-slate-900 transition-colors border-b border-slate-300 pb-0.5">
@@ -43,7 +46,7 @@ export default function ForgotPasswordPage() {
         ) : (
           <>
             <h1 className="font-serif text-3xl text-slate-900 mb-2 text-center">Forgot Password</h1>
-            <p className="text-slate-400 text-sm text-center mb-10">Enter your email and we'll send a reset link.</p>
+            <p className="text-slate-400 text-sm text-center mb-10">Enter your email and we’ll send a magic link to reset your password.</p>
             {error && <p className="text-red-500 text-xs text-center mb-4">{error}</p>}
             <form onSubmit={handleSubmit} className="space-y-6">
               <div>
