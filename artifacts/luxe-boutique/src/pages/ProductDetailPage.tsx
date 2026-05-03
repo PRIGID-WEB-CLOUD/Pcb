@@ -6,6 +6,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { useCart } from "@/contexts/CartContext";
 
+const FALLBACK_IMAGE = "https://images.unsplash.com/photo-1529139574466-a303027c1d8b?q=80&w=1000&auto=format&fit=crop";
+
 export default function ProductDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [, navigate] = useLocation();
@@ -87,7 +89,7 @@ export default function ProductDetailPage() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-16 mb-24">
         <div className="lg:col-span-7">
           <div className="aspect-[3/4] relative bg-slate-50 overflow-hidden rounded-xl shadow-sm group">
-            <img src={product.imageUrl || "https://picsum.photos/seed/product/800/1000"} alt={product.name} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" referrerPolicy="no-referrer" />
+            <img src={product.imageUrl || FALLBACK_IMAGE} alt={product.name} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" referrerPolicy="no-referrer" onError={(e) => { const target = e.currentTarget; if (target.src !== FALLBACK_IMAGE) target.src = FALLBACK_IMAGE; }} />
             <button onClick={toggleWishlist} disabled={addingToWishlist} className="absolute top-6 right-6 w-12 h-12 bg-white/90 backdrop-blur rounded-full flex items-center justify-center hover:bg-slate-900 hover:text-white transition-all shadow-sm">
               <Heart size={20} className={isWishlisted ? "fill-slate-900 text-slate-900" : ""} />
             </button>

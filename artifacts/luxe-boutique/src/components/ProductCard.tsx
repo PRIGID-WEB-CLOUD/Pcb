@@ -10,6 +10,8 @@ interface ProductCardProps {
   category: string;
 }
 
+const FALLBACK_IMAGE = "https://images.unsplash.com/photo-1529139574466-a303027c1d8b?q=80&w=800&auto=format&fit=crop";
+
 export default function ProductCard({ id, name, price, imageUrl, category }: ProductCardProps) {
   const { formatPrice } = useCurrency();
   return (
@@ -17,10 +19,14 @@ export default function ProductCard({ id, name, price, imageUrl, category }: Pro
       <Link href={`/products/${id}`} className="block space-y-6">
         <div className="relative aspect-[3/4] overflow-hidden bg-white shadow-sm ring-1 ring-slate-100">
           <img
-            src={imageUrl || "https://picsum.photos/seed/product/600/800"}
+            src={imageUrl || FALLBACK_IMAGE}
             alt={name}
             className="object-cover w-full h-full transition-transform duration-700 group-hover:scale-105"
             referrerPolicy="no-referrer"
+            onError={(e) => {
+              const target = e.currentTarget;
+              if (target.src !== FALLBACK_IMAGE) target.src = FALLBACK_IMAGE;
+            }}
           />
           <div className="absolute top-4 left-4 bg-white/90 backdrop-blur px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-slate-900 border border-slate-200">
             Exclusive

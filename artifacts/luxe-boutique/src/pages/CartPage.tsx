@@ -4,6 +4,8 @@ import { Minus, Plus, Trash2, ArrowRight } from "lucide-react";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { useCart } from "@/contexts/CartContext";
 
+const FALLBACK_IMAGE = "https://images.unsplash.com/photo-1529139574466-a303027c1d8b?q=80&w=400&auto=format&fit=crop";
+
 export default function CartPage() {
   const [cart, setCart] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -46,7 +48,7 @@ export default function CartPage() {
             {cart.items.map((item: any) => (
               <div key={item.id} className="bg-white p-6 shadow-sm border border-slate-50 flex gap-6 rounded-lg transition-all hover:shadow-md">
                 <div className="w-32 h-40 relative bg-slate-50 rounded-lg overflow-hidden flex-shrink-0">
-                  <img src={item.product.imageUrl || "https://picsum.photos/seed/product/200/300"} alt={item.product.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                  <img src={item.product.imageUrl || FALLBACK_IMAGE} alt={item.product.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" onError={(e) => { const target = e.currentTarget; if (target.src !== FALLBACK_IMAGE) target.src = FALLBACK_IMAGE; }} />
                 </div>
                 <div className="flex-1 flex flex-col justify-between py-2">
                   <div className="flex justify-between items-start">

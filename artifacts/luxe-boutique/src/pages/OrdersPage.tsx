@@ -5,6 +5,8 @@ import AccountSidebar from "@/components/AccountSidebar";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCurrency } from "@/contexts/CurrencyContext";
 
+const FALLBACK_IMAGE = "https://images.unsplash.com/photo-1529139574466-a303027c1d8b?q=80&w=400&auto=format&fit=crop";
+
 export default function OrdersPage() {
   const { user, loading: authLoading } = useAuth();
   const [, navigate] = useLocation();
@@ -46,7 +48,7 @@ export default function OrdersPage() {
                         {order.items?.map((item: any) => (
                           <div key={item.id} className="flex gap-4">
                             <div className="w-16 h-20 bg-slate-100 rounded overflow-hidden flex-shrink-0">
-                              <img src={item.product?.imageUrl} alt={item.product?.name} className="w-full h-full object-cover" />
+                              <img src={item.product?.imageUrl || FALLBACK_IMAGE} alt={item.product?.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" onError={(e) => { const target = e.currentTarget; if (target.src !== FALLBACK_IMAGE) target.src = FALLBACK_IMAGE; }} />
                             </div>
                             <div><p className="text-sm font-bold">{item.product?.name}</p><p className="text-xs text-slate-400 mt-1">Qty: {item.quantity}</p></div>
                           </div>

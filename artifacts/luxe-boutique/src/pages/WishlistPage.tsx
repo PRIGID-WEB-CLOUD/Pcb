@@ -6,6 +6,8 @@ import AccountSidebar from "@/components/AccountSidebar";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCurrency } from "@/contexts/CurrencyContext";
 
+const FALLBACK_IMAGE = "https://images.unsplash.com/photo-1529139574466-a303027c1d8b?q=80&w=800&auto=format&fit=crop";
+
 export default function WishlistPage() {
   const { user, loading: authLoading } = useAuth();
   const [, navigate] = useLocation();
@@ -42,7 +44,7 @@ export default function WishlistPage() {
                     </button>
                     <Link href={`/products/${item.productId}`} className="block">
                       <div className="aspect-[3/4] relative">
-                        <img src={item.product?.imageUrl} alt={item.product?.name} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+                        <img src={item.product?.imageUrl || FALLBACK_IMAGE} alt={item.product?.name} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" referrerPolicy="no-referrer" onError={(e) => { const target = e.currentTarget; if (target.src !== FALLBACK_IMAGE) target.src = FALLBACK_IMAGE; }} />
                       </div>
                       <div className="p-4">
                         <p className="text-[10px] text-slate-400 uppercase tracking-widest">{item.product?.category?.name}</p>
