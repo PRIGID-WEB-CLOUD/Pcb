@@ -79,7 +79,6 @@ export default function AdminFacebookPage() {
   const [scheduleWhen,  setScheduleWhen]  = useState<"now"|"schedule">("now");
   const [scheduleTime,  setScheduleTime]  = useState("");
   const [postSubmitting, setPostSubmitting] = useState<"idle"|"posting"|"scheduling"|"drafting">("idle");
-  const [publishingId,  setPublishingId]  = useState<string | null>(null);
   const [showTemplates, setShowTemplates] = useState(false);
   const [newTplName,    setNewTplName]    = useState("");
   const [newTplBody,    setNewTplBody]    = useState("");
@@ -95,6 +94,7 @@ export default function AdminFacebookPage() {
   const [showSecret,  setShowSecret]  = useState<Record<string, boolean>>({});
   const [testingConn, setTestingConn] = useState(false);
   const [testResult,  setTestResult]  = useState<{pass: boolean; latency: number; missing?: string[]} | null>(null);
+  const [publishingId, setPublishingId] = useState<string | null>(null);
 
   const FB_CRED_FIELDS = [
     { key: "page_id",            label: "Facebook Page ID",      isSecret: false, hint: "Go to your Facebook Page → About → scroll to the bottom → Page ID. Required to publish posts and use Messenger." },
@@ -223,8 +223,13 @@ export default function AdminFacebookPage() {
 
   const publishPost = async (post: PagePost) => {
     setPublishingId(post.id);
-    const res = await fetch(`/api/facebook/posts/${post.id}/publish`, { method: "POST" });
+    const res = await fetch(`/api/facebook/posts/${post.id}/publish`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pageId: fbCreds.page_id, pageAccessToken: fbCreds.page_access_token }),
+    });
     if (res.ok) { const updated = await res.json(); setPosts((p) => p.map((x) => x.id === post.id ? updated : x)); showToast("Post published to Facebook Page."); }
+    else { const err = await res.json().catch(() => ({})); showToast(err.error || "Facebook publish failed."); }
     setPublishingId(null);
   };
 
@@ -400,6 +405,17 @@ export default function AdminFacebookPage() {
                             <p className="text-sm font-[Manrope] text-[#0b1c30] whitespace-pre-line line-clamp-4 mb-3">{post.caption}</p>
                             {post.imageUrl && <img src={post.imageUrl} alt="" className="w-full rounded-lg mb-3 object-cover max-h-80" />}
                             {post.link && <div className="text-xs font-[Manrope] text-[#006c49] bg-[#f0faf6] border border-[#c3eed8] rounded-lg px-3 py-2">{post.link}</div>}
+                            <div className="mt-4 flex items-center gap-3">
+                              {post.status !== "Published" && (
+                                <button
+                                  onClick={() => publishPost(post)}
+                                  disabled={publishingId === post.id || !fbCreds.page_id || !fbCreds.page_access_token}
+                                  className="px-4 py-2 rounded-lg bg-black text-white text-xs font-bold uppercase tracking-widest disabled:opacity-50"
+                                >
+                                  {publishingId === post.id ? "Publishing…" : "Add post to Facebook"}
+                                </button>
+                              )}
+                            </div>
                           </div>
                         </div>
                       ))}
