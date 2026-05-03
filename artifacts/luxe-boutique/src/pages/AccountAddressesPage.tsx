@@ -10,9 +10,10 @@ export default function AccountAddressesPage() {
 
   useEffect(() => {
     if (!loading && !user) navigate("/login");
+    else if (!loading && user && user.role !== "CUSTOMER") navigate("/");
   }, [user, loading, navigate]);
 
-  if (loading || !user) return null;
+  if (loading || !user || user.role !== "CUSTOMER") return null;
 
   return (
     <div className="pt-24 pb-16 px-4 max-w-7xl mx-auto">

@@ -15,12 +15,13 @@ export default function AccountPage() {
 
   useEffect(() => {
     if (!authLoading && !user) navigate("/login");
+    else if (!authLoading && user && user.role !== "CUSTOMER") navigate("/");
     else if (user) {
       fetch("/api/orders").then(r => r.json()).then(d => { setOrders(Array.isArray(d) ? d.slice(0, 3) : []); setLoading(false); });
     }
   }, [user, authLoading]);
 
-  if (authLoading || loading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-slate-900"></div></div>;
+  if (authLoading || loading || (user && user.role !== "CUSTOMER")) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-slate-900"></div></div>;
 
   return (
     <div className="bg-slate-50 min-h-screen py-24">

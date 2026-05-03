@@ -15,10 +15,11 @@ export default function AccountSettingsPage() {
 
   useEffect(() => {
     if (!loading && !user) navigate("/login");
+    else if (!loading && user && user.role !== "CUSTOMER") navigate("/");
     if (user) setName(user.name || "");
   }, [user, loading, navigate]);
 
-  if (loading || !user) return null;
+  if (loading || !user || user.role !== "CUSTOMER") return null;
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();

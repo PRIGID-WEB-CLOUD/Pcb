@@ -1,18 +1,24 @@
 import { useEffect, useState } from "react";
+import { useLocation } from "wouter";
 import { CheckCircle } from "lucide-react";
 import AccountSidebar from "@/components/AccountSidebar";
+import { useAuth } from "@/contexts/AuthContext";
 import { useCurrency } from "@/contexts/CurrencyContext";
 
 export default function OrdersPage() {
+  const { user, loading: authLoading } = useAuth();
+  const [, navigate] = useLocation();
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const { formatPrice } = useCurrency();
 
   useEffect(() => {
-    fetch("/api/orders").then(r => r.json()).then(d => { setOrders(Array.isArray(d) ? d : []); setLoading(false); });
-  }, []);
+    if (!authLoading && !user) navigate("/login");
+    else if (!authLoading && user && user.role !== "CUSTOMER") navigate("/");
+    else if (user) fetch("/api/orders").then(r => r.json()).then(d => { setOrders(Array.isArray(d) ? d : []); setLoading(false); });
+  }, [user, authLoading, navigate]);
 
-  if (loading) return <div className="max-w-7xl mx-auto px-8 py-20 text-center uppercase tracking-widest font-bold font-serif">Retrieving History...</div>;
+  if (authLoading || loading || (user && user.role !== "CUSTOMER")) return <div className="max-w-7xl mx-auto px-8 py-20 text-center uppercase tracking-widest font-bold font-serif">Retrieving History...</div>;
 
   return (
     <div className="bg-slate-50 min-h-screen py-24">
