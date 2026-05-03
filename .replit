@@ -42,5 +42,6 @@ channel = "stable-25_05"
 
 [userenv.shared]
 SMTP_PORT = "587"
-SMTP_FROM = "Luxe Boutique <no-reply@luxeboutique.com>"
+SMTP_FROM = "Prigid commerce Group <prigidcollection@gmail.com>"
 FRONTEND_URL = ""
+SMTP_HOST = "smtp-relay.brevo.com"
