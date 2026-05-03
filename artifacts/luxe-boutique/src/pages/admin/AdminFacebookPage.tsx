@@ -375,49 +375,38 @@ export default function AdminFacebookPage() {
                   ))}
                 </div>
 
-                <div className="grid grid-cols-12 gap-8">
-                  {/* ── LEFT: Composer ── */}
-                  <div className="col-span-12 lg:col-span-5 space-y-5">
-                    <div className="flex items-center justify-between">
-                      <h3 className="font-serif text-[20px] font-semibold">Live Posts</h3>
-                    </div>
-
-                    <div className="text-sm text-[#7c839b] font-[Manrope]">Templates removed.</div>
-
-                    <div className="text-sm text-[#7c839b] font-[Manrope]">Composer removed.</div>
+                <div className="space-y-5">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-serif text-[20px] font-semibold">Post Feed</h3>
+                    <div className="text-sm text-[#7c839b] font-[Manrope]">{filteredPosts.length} live posts</div>
                   </div>
 
-                  {/* ── RIGHT: Post Feed ── */}
-                  <div className="col-span-12 lg:col-span-7">
-                    <div className="flex items-center justify-between mb-5">
-                      <h3 className="font-serif text-[20px] font-semibold">Post Feed</h3>
+                  {filteredPosts.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-16 text-[#7c839b] font-[Manrope]">
+                      <span className="material-symbols-outlined text-4xl mb-3 text-slate-200">post_add</span>
+                      No posts yet.
                     </div>
-
-                    {filteredPosts.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center py-16 text-[#7c839b] font-[Manrope]">
-                        <span className="material-symbols-outlined text-4xl mb-3 text-slate-200">post_add</span>
-                        No posts yet.
-                      </div>
-                    ) : (
-                      <div className="space-y-4 max-h-[820px] overflow-y-auto pr-1">
-                        {filteredPosts.map((post) => (
-                          <div key={post.id} className="rounded-xl border overflow-hidden">
-                            <div className="bg-white px-4 pt-4 pb-3">
-                              <div className="flex items-start justify-between mb-3">
-                                <div>
-                                  <p className="font-[Manrope] font-bold text-sm text-[#0b1c30] leading-none">Luxe Boutique</p>
-                                  <p className="text-[10px] text-[#7c839b] font-[Manrope]">{post.status}</p>
-                                </div>
-                                <span className="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600">{post.postType}</span>
+                  ) : (
+                    <div className="space-y-4">
+                      {filteredPosts.map((post) => (
+                        <div key={post.id} className="rounded-xl border overflow-hidden bg-white">
+                          <div className="px-4 pt-4 pb-3">
+                            <div className="flex items-start justify-between mb-3">
+                              <div>
+                                <p className="font-[Manrope] font-bold text-sm text-[#0b1c30] leading-none">Luxe Boutique</p>
+                                <p className="text-[10px] text-[#7c839b] font-[Manrope]">{post.status}</p>
                               </div>
-
-                              <p className="text-sm font-[Manrope] text-[#0b1c30] whitespace-pre-line line-clamp-4 mb-3">{post.caption}</p>
+                              <span className="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600">{post.postType}</span>
                             </div>
+
+                            <p className="text-sm font-[Manrope] text-[#0b1c30] whitespace-pre-line line-clamp-4 mb-3">{post.caption}</p>
+                            {post.imageUrl && <img src={post.imageUrl} alt="" className="w-full rounded-lg mb-3 object-cover max-h-80" />}
+                            {post.link && <div className="text-xs font-[Manrope] text-[#006c49] bg-[#f0faf6] border border-[#c3eed8] rounded-lg px-3 py-2">{post.link}</div>}
                           </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -708,7 +697,6 @@ export default function AdminFacebookPage() {
                     </button>
                   </div>
                 ) : (
-                  /* ── Ad data ── */
                   <div>
                     <div className="flex justify-between items-center mb-4">
                       <div>
