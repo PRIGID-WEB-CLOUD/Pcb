@@ -156,13 +156,23 @@ export default function AdminFacebookPage() {
     setCatalog(updated);
     await fetch("/api/facebook/catalog", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(updated) });
   };
-  const runSync = () => {
+  const runSync = async () => {
     setSyncState("syncing");
-    setTimeout(async () => {
+    try {
+      const res = await fetch("/api/facebook/catalog/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+      });
+      const d = await res.json();
       setSyncState("done");
-      showToast(`Catalog sync complete — ${catalog?.includedCategories.length ?? 0} categories.`);
-      setTimeout(() => setSyncState("idle"), 3000);
-    }, 2500);
+      if (!res.ok) showToast(`Sync error: ${d.error ?? "Failed"}`);
+      else showToast(`Synced ${d.synced ?? 0} products to Meta Commerce.`);
+    } catch {
+      setSyncState("done");
+      showToast("Catalog sync failed — check credentials.");
+    }
+    setTimeout(() => setSyncState("idle"), 3000);
   };
 
   // ── Pixel ────────────────────────────────────────────────────────────────

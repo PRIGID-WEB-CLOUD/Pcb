@@ -154,6 +154,19 @@ router.get("/catalog/info", async (req, res) => {
   }
 });
 
+router.get("/catalog/products", async (req, res) => {
+  try {
+    if (!await adminOnly(req, res)) return;
+    const creds = await getCredMap("commerce", CATALOG_CREDS);
+    const missing = missingCreds(creds, ["catalog_id", "page_access_token"]);
+    if (missing.length) { res.status(400).json({ error: `Missing credentials: ${missing.join(", ")}`, missing }); return; }
+    const data = await Meta.getCatalogProducts(creds.catalog_id, creds.page_access_token);
+    res.json(data);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message ?? "Failed to fetch catalog products" });
+  }
+});
+
 router.post("/catalog/sync", async (req, res) => {
   try {
     if (!await adminOnly(req, res)) return;

@@ -5,14 +5,50 @@ import {
 } from "@workspace/db/schema";
 import { eq, desc, and } from "drizzle-orm";
 import { getSession } from "../lib/auth";
+import * as Meta from "../lib/social/meta";
+import * as WA from "../lib/social/whatsapp";
+import * as Twitter from "../lib/social/twitter";
 
 const router = Router();
+
+const DEFAULT_CHANNEL_CONFIGS = [
+  { channelId: "facebook",  status: "DISCONNECTED" as const, latency: 0 },
+  { channelId: "instagram", status: "DISCONNECTED" as const, latency: 0 },
+  { channelId: "commerce",  status: "DISCONNECTED" as const, latency: 0 },
+  { channelId: "ads",       status: "DISCONNECTED" as const, latency: 0 },
+  { channelId: "whatsapp",  status: "DISCONNECTED" as const, latency: 0 },
+  { channelId: "twitter",   status: "DISCONNECTED" as const, latency: 0 },
+];
+
+const DEFAULT_WEBHOOKS = [
+  { webhookId: "wh-order-created",   label: "Order Created",    url: "/webhooks/orders/created",    active: true  },
+  { webhookId: "wh-cart-abandoned",  label: "Cart Abandoned",   url: "/webhooks/cart/abandoned",    active: true  },
+  { webhookId: "wh-product-updated", label: "Product Updated",  url: "/webhooks/products/updated",  active: false },
+  { webhookId: "wh-review-posted",   label: "Review Posted",    url: "/webhooks/reviews/posted",    active: false },
+];
+
+async function ensureChannelDefaults() {
+  const existing = await db.select().from(channelConfigs);
+  const existingIds = new Set(existing.map((c) => c.channelId));
+  for (const cfg of DEFAULT_CHANNEL_CONFIGS) {
+    if (!existingIds.has(cfg.channelId)) {
+      await db.insert(channelConfigs).values(cfg);
+    }
+  }
+  const existingHooks = await db.select().from(channelWebhooks);
+  if (existingHooks.length === 0) {
+    for (const hook of DEFAULT_WEBHOOKS) {
+      await db.insert(channelWebhooks).values(hook);
+    }
+  }
+}
 
 // GET /api/channels/configs
 router.get("/configs", async (req, res): Promise<void> => {
   try {
     const user = await getSession(req);
     if (!user || user.role !== "ADMIN") return res.status(401).json({ error: "Unauthorized" });
+    await ensureChannelDefaults();
     const configs = await db.select().from(channelConfigs);
     res.json(configs);
   } catch { res.status(500).json({ error: "Failed to fetch channel configs" }); }
@@ -70,26 +106,96 @@ router.post("/configs/:channelId/test", async (req, res): Promise<void> => {
     const user = await getSession(req);
     if (!user || user.role !== "ADMIN") return res.status(401).json({ error: "Unauthorized" });
 
-    // Determine which credentials are required per channel
-    const requiredKeys: Record<string, string[]> = {
-      facebook: ["page_id", "app_id", "app_secret", "page_access_token"],
-      commerce:  ["catalog_id", "app_id", "app_secret"],
-      whatsapp: ["phone_number_id", "waba_id", "system_access_token"],
-      twitter:  ["api_key", "api_secret", "access_token", "access_token_secret"],
-    };
-
     const channelId = req.params.channelId;
-    const required = requiredKeys[channelId] ?? [];
 
     // Load saved credentials for this channel
-    const creds = await db.select().from(channelCredentials)
+    const credsRows = await db.select().from(channelCredentials)
       .where(eq(channelCredentials.channel, channelId));
     const credMap: Record<string, string> = {};
-    for (const c of creds) credMap[c.keyName] = c.value;
+    for (const c of credsRows) credMap[c.keyName] = c.value;
 
-    const missing = required.filter((k) => !credMap[k] || credMap[k].trim() === "");
-    const pass = missing.length === 0;
-    const latency = pass ? Math.floor(Math.random() * 100) + 40 : 0;
+    let pass = false;
+    let latency = 0;
+    let detail = "";
+    const missing: string[] = [];
+
+    const t0 = Date.now();
+
+    try {
+      if (channelId === "facebook" || channelId === "instagram") {
+        const needed = ["page_id", "page_access_token"];
+        const miss = needed.filter((k) => !credMap[k]?.trim());
+        if (miss.length) {
+          missing.push(...miss);
+          detail = `Missing credentials: ${miss.join(", ")}`;
+        } else {
+          await Meta.getPageInfo(credMap.page_id, credMap.page_access_token);
+          latency = Date.now() - t0;
+          pass = true;
+          detail = `Meta Graph API responded in ${latency}ms`;
+        }
+      } else if (channelId === "commerce") {
+        const needed = ["catalog_id", "page_access_token"];
+        const miss = needed.filter((k) => !credMap[k]?.trim());
+        if (miss.length) {
+          missing.push(...miss);
+          detail = `Missing credentials: ${miss.join(", ")}`;
+        } else {
+          await Meta.getCatalogInfo(credMap.catalog_id, credMap.page_access_token);
+          latency = Date.now() - t0;
+          pass = true;
+          detail = `Meta Commerce API responded in ${latency}ms`;
+        }
+      } else if (channelId === "ads") {
+        const needed = ["ad_account_id", "page_access_token"];
+        const miss = needed.filter((k) => !credMap[k]?.trim());
+        if (miss.length) {
+          missing.push(...miss);
+          detail = `Missing credentials: ${miss.join(", ")}`;
+        } else {
+          await Meta.getAdAccountInfo(credMap.ad_account_id, credMap.page_access_token);
+          latency = Date.now() - t0;
+          pass = true;
+          detail = `Meta Ads API responded in ${latency}ms`;
+        }
+      } else if (channelId === "whatsapp") {
+        const needed = ["phone_number_id", "system_access_token"];
+        const miss = needed.filter((k) => !credMap[k]?.trim());
+        if (miss.length) {
+          missing.push(...miss);
+          detail = `Missing credentials: ${miss.join(", ")}`;
+        } else {
+          await WA.getPhoneNumberInfo(credMap.phone_number_id, credMap.system_access_token);
+          latency = Date.now() - t0;
+          pass = true;
+          detail = `WhatsApp Cloud API responded in ${latency}ms`;
+        }
+      } else if (channelId === "twitter") {
+        const needed = ["api_key", "api_secret", "access_token", "access_token_secret"];
+        const miss = needed.filter((k) => !credMap[k]?.trim());
+        if (miss.length) {
+          missing.push(...miss);
+          detail = `Missing credentials: ${miss.join(", ")}`;
+        } else {
+          await Twitter.getMyUser({
+            api_key: credMap.api_key,
+            api_secret: credMap.api_secret,
+            access_token: credMap.access_token,
+            access_token_secret: credMap.access_token_secret,
+            bearer_token: credMap.bearer_token,
+          });
+          latency = Date.now() - t0;
+          pass = true;
+          detail = `Twitter API v2 responded in ${latency}ms`;
+        }
+      } else {
+        detail = "Unknown channel — no test available";
+      }
+    } catch (apiErr: any) {
+      pass = false;
+      latency = Date.now() - t0;
+      detail = `API error: ${apiErr.message ?? "Unknown error"}`;
+    }
 
     await db.update(channelConfigs)
       .set({ latency: pass ? latency : undefined, updatedAt: new Date() })
@@ -98,13 +204,11 @@ router.post("/configs/:channelId/test", async (req, res): Promise<void> => {
     await db.insert(channelEventLogs).values({
       channel: channelId,
       event: pass ? "Connection Test Passed" : "Connection Test Failed",
-      detail: pass
-        ? `All credentials present. Simulated latency: ${latency}ms`
-        : `Missing credentials: ${missing.join(", ")}`,
+      detail,
       type: pass ? "info" : "error",
     });
 
-    res.json({ pass, latency, missing });
+    res.json({ pass, latency, missing, detail });
   } catch { res.status(500).json({ error: "Failed to test connection" }); }
 });
 
