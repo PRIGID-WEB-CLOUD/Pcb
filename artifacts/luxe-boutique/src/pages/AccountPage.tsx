@@ -8,7 +8,7 @@ import { useCurrency } from "@/contexts/CurrencyContext";
 
 export default function AccountPage() {
   const { user, loading: authLoading } = useAuth();
-  const isCustomer = user?.role === "CUSTOMER";
+  const isCustomer = user?.role === "USER";
   const [, navigate] = useLocation();
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);

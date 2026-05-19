@@ -10,7 +10,7 @@ const FALLBACK_IMAGE = "https://images.unsplash.com/photo-1529139574466-a303027c
 export default function OrdersPage() {
   const { user, loading: authLoading } = useAuth();
   const [, navigate] = useLocation();
-  const isCustomer = user?.role === "CUSTOMER";
+  const isCustomer = user?.role === "USER";
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const { formatPrice } = useCurrency();
