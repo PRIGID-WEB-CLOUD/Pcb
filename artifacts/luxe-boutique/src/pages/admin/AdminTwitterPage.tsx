@@ -23,7 +23,11 @@ export default function AdminTwitterPage() {
   const [tweetText, setTweetText]             = useState("");
   const [newTag, setNewTag]                   = useState("");
   const [scheduling, setScheduling]           = useState(false);
+  const [publishing, setPublishing]           = useState(false);
+  const [publishResult, setPublishResult]     = useState<{ok: boolean; msg: string} | null>(null);
   const [toast, setToast]                     = useState<string | null>(null);
+  const [twitterUser, setTwitterUser]         = useState<{name?: string; username?: string; profile_image_url?: string; public_metrics?: Record<string, number>} | null>(null);
+  const [twitterUserErr, setTwitterUserErr]   = useState("");
 
   const [showNewRule, setShowNewRule]         = useState(false);
   const [newRuleTrigger, setNewRuleTrigger]   = useState("New Product Published");
@@ -87,24 +91,52 @@ export default function AdminTwitterPage() {
     await fetch(`/api/twitter/hashtags/${h.id}`, { method: "DELETE" });
   };
 
+  const publishNow = async () => {
+    if (!tweetText.trim() || tweetText.length > MAX_CHARS) return;
+    setPublishing(true); setPublishResult(null);
+    try {
+      const res = await fetch("/api/twitter/posts/publish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ text: tweetText }),
+      });
+      const d = await res.json();
+      if (!res.ok) {
+        setPublishResult({ ok: false, msg: d.error ?? "Publish failed" });
+      } else {
+        setPublishResult({ ok: true, msg: `Tweet published! ID: ${d.tweet?.id ?? ""}` });
+        setTweetText("");
+        if (d.queued) setQueue((p) => [d.queued, ...p]);
+      }
+    } catch {
+      setPublishResult({ ok: false, msg: "Network error" });
+    }
+    setPublishing(false);
+  };
+
   const scheduleTweet = async () => {
     if (!tweetText.trim() || tweetText.length > MAX_CHARS || !scheduler) return;
     setScheduling(true);
     const scheduledFor = scheduler.dropFrequency === "Real-time (Immediate)" ? "Posting now…"
       : scheduler.dropFrequency === "Daily Digest (6 PM)" ? "Today 6:00 PM" : "Next Monday 9:00 AM";
-    const res = await fetch("/api/twitter/queue", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: tweetText, scheduledFor, status: "Queued", imageStyle: scheduler.imageStyle }) });
+    const res = await fetch("/api/twitter/queue", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: tweetText, scheduledFor, status: "Queued", imageStyle: scheduler?.imageStyle ?? "None" }) });
     if (res.ok) {
       const created = await res.json();
       setQueue((p) => [created, ...p]);
       showToast("Tweet added to queue.");
-      if (scheduler.dropFrequency === "Real-time (Immediate)") {
-        setTimeout(async () => {
-          await fetch(`/api/twitter/queue/${created.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "Sent" }) });
-          setQueue((p) => p.map((t) => t.id === created.id ? { ...t, status: "Sent", scheduledFor: "Just now" } : t));
-        }, 2500);
-      }
     }
     setScheduling(false);
+  };
+
+  const loadTwitterUser = async () => {
+    setTwitterUserErr("");
+    try {
+      const r = await fetch("/api/twitter/me", { credentials: "include" });
+      const d = await r.json();
+      if (!r.ok) setTwitterUserErr(d.error ?? "Failed to fetch account");
+      else setTwitterUser((d as any).data ?? null);
+    } catch { setTwitterUserErr("Network error"); }
   };
 
   const cancelTweet = async (id: string) => {
@@ -165,8 +197,12 @@ export default function AdminTwitterPage() {
   };
   const testTwConn = async () => {
     setTestingConn(true); setTestResult(null);
-    const res = await fetch("/api/channels/configs/twitter/test", { method: "POST" });
-    if (res.ok) setTestResult(await res.json());
+    const r = await fetch("/api/twitter/verify", { credentials: "include" });
+    if (r.ok) {
+      const d = await r.json();
+      setTestResult({ pass: d.ok, latency: 0 });
+      if (d.user) setTwitterUser(d.user);
+    }
     setTestingConn(false);
   };
 
@@ -285,8 +321,58 @@ export default function AdminTwitterPage() {
                 </div>
 
                   <div className="col-span-12 lg:col-span-5 space-y-5">
+                    {/* Connected Account */}
+                    {twitterUser ? (
+                      <div className="bg-black text-white p-5 rounded-xl space-y-3">
+                        <div className="flex items-center gap-3">
+                          {twitterUser.profile_image_url && <img src={twitterUser.profile_image_url} alt={twitterUser.username} className="w-10 h-10 rounded-full" />}
+                          <div>
+                            <p className="font-semibold text-sm">{twitterUser.name}</p>
+                            <p className="text-white/60 text-xs">@{twitterUser.username}</p>
+                          </div>
+                        </div>
+                        {twitterUser.public_metrics && (
+                          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-white/10">
+                            <div><p className="text-xl font-bold">{twitterUser.public_metrics.followers_count?.toLocaleString()}</p><p className="text-white/50 text-xs">Followers</p></div>
+                            <div><p className="text-xl font-bold">{twitterUser.public_metrics.tweet_count?.toLocaleString()}</p><p className="text-white/50 text-xs">Tweets</p></div>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 text-center">
+                        <p className="text-sm text-slate-500 mb-3">Connect your X account to see profile</p>
+                        <button onClick={loadTwitterUser} className="px-4 py-2 bg-black text-white text-xs font-bold rounded-lg hover:bg-[#006c49] transition-colors font-[Manrope] tracking-widest uppercase">
+                          Load Account
+                        </button>
+                        {twitterUserErr && <p className="text-xs text-red-500 mt-2">{twitterUserErr}</p>}
+                      </div>
+                    )}
+                    {/* Publish Now */}
+                    <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
+                      <h4 className="font-serif font-semibold text-base">Publish Now</h4>
+                      <textarea value={tweetText} onChange={(e) => { setTweetText(e.target.value); setPublishResult(null); }} rows={4} maxLength={290}
+                        placeholder="What's happening?"
+                        className={`w-full border rounded-xl p-4 text-sm font-[Manrope] outline-none resize-none transition-colors ${overLimit ? "border-red-400 bg-red-50" : "border-slate-200 focus:border-black"}`} />
+                      <div className="flex items-center justify-between">
+                        <span className={`text-xs font-mono ${overLimit ? "text-red-500 font-bold" : charsLeft <= 20 ? "text-amber-500" : "text-slate-400"}`}>{charsLeft}</span>
+                        <div className="flex gap-2">
+                          <button onClick={scheduleTweet} disabled={scheduling || overLimit || !tweetText.trim()} className="px-3 py-2 border border-slate-200 text-[10px] font-[Manrope] font-bold tracking-widest uppercase rounded-lg hover:bg-slate-50 disabled:opacity-50 transition-colors">
+                            {scheduling ? "Queuing…" : "+ Queue"}
+                          </button>
+                          <button onClick={publishNow} disabled={publishing || overLimit || !tweetText.trim()} className="px-4 py-2 bg-black text-white text-[10px] font-[Manrope] font-bold tracking-widest uppercase rounded-lg hover:bg-[#006c49] disabled:opacity-50 transition-colors flex items-center gap-1">
+                            <span className="material-symbols-outlined text-sm">send</span>
+                            {publishing ? "Posting…" : "Publish Now"}
+                          </button>
+                        </div>
+                      </div>
+                      {publishResult && (
+                        <div className={`p-3 rounded-xl text-xs font-[Manrope] font-semibold border ${publishResult.ok ? "bg-[#f0faf6] text-[#006c49] border-[#c3eed8]" : "bg-red-50 text-red-600 border-red-200"}`}>
+                          {publishResult.msg}
+                        </div>
+                      )}
+                    </div>
                     <div className="bg-white border border-slate-100 rounded-xl p-5">
-                      <h3 className="font-serif font-semibold mb-4">Queue Status</h3>
+                      <h3 className="font-serif font-semibold mb-2">Queue Status</h3>
                       <p className="text-sm text-[#7c839b] font-[Manrope]">{queuedCount} queued · {sentCount} sent</p>
                     </div>
                   </div>

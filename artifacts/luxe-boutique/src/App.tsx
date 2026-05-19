@@ -42,6 +42,9 @@ import AdminCustomersPage from "@/pages/admin/AdminCustomersPage";
 import AdminCategoriesPage from "@/pages/admin/AdminCategoriesPage";
 import AdminChannelHubPage from "@/pages/admin/AdminChannelHubPage";
 import AdminFacebookPage from "@/pages/admin/AdminFacebookPage";
+import AdminInstagramPage from "@/pages/admin/AdminInstagramPage";
+import AdminMetaCommercePage from "@/pages/admin/AdminMetaCommercePage";
+import AdminMetaAdsPage from "@/pages/admin/AdminMetaAdsPage";
 import AdminTwitterPage from "@/pages/admin/AdminTwitterPage";
 import AdminWhatsAppPage from "@/pages/admin/AdminWhatsAppPage";
 import AdminSocialAnalyticsPage from "@/pages/admin/AdminSocialAnalyticsPage";
@@ -112,6 +115,9 @@ function Router() {
       <Route path="/admin/analytics" component={() => <AdminGuard><AdminAnalyticsPage /></AdminGuard>} />
       <Route path="/admin/channels" component={() => <AdminGuard><AdminChannelHubPage /></AdminGuard>} />
       <Route path="/admin/channels/facebook" component={() => <AdminGuard><AdminFacebookPage /></AdminGuard>} />
+      <Route path="/admin/channels/instagram" component={() => <AdminGuard><AdminInstagramPage /></AdminGuard>} />
+      <Route path="/admin/channels/meta-commerce" component={() => <AdminGuard><AdminMetaCommercePage /></AdminGuard>} />
+      <Route path="/admin/channels/meta-ads" component={() => <AdminGuard><AdminMetaAdsPage /></AdminGuard>} />
       <Route path="/admin/channels/whatsapp" component={() => <AdminGuard><AdminWhatsAppPage /></AdminGuard>} />
       <Route path="/admin/channels/twitter" component={() => <AdminGuard><AdminTwitterPage /></AdminGuard>} />
       <Route path="/admin/channels/analytics" component={() => <AdminGuard><AdminSocialAnalyticsPage /></AdminGuard>} />

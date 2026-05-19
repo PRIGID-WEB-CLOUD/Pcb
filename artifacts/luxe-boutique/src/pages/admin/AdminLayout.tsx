@@ -24,10 +24,13 @@ const mainNavItems = [
 ];
 
 const channelNavItems = [
-  { icon: "hub",        label: "Channel Hub",    href: "/admin/channels"          },
-  { icon: "storefront", label: "Meta & Facebook",href: "/admin/channels/facebook" },
-  { icon: "chat",       label: "WhatsApp API",   href: "/admin/channels/whatsapp" },
-  { icon: "share",      label: "X Social",       href: "/admin/channels/twitter"  },
+  { icon: "hub",          label: "Channel Hub",    href: "/admin/channels"                },
+  { icon: "thumb_up",     label: "Facebook Pages", href: "/admin/channels/facebook"       },
+  { icon: "photo_camera", label: "Instagram",      href: "/admin/channels/instagram"      },
+  { icon: "storefront",   label: "Meta Commerce",  href: "/admin/channels/meta-commerce"  },
+  { icon: "campaign",     label: "Meta Ads",       href: "/admin/channels/meta-ads"       },
+  { icon: "chat",         label: "WhatsApp API",   href: "/admin/channels/whatsapp"       },
+  { icon: "share",        label: "X / Twitter",    href: "/admin/channels/twitter"        },
 ];
 
 type Order = { id: string; status: string; total: number; createdAt: string };

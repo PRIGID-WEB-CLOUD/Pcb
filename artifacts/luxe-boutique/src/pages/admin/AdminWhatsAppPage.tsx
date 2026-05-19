@@ -120,17 +120,47 @@ export default function AdminWhatsAppPage() {
     showToast(`Template "${t.name}" deleted.`);
   };
 
-  const sendTestMessage = () => {
+  const [testMessageText, setTestMessageText] = useState("Hello from LUXE BOUTIQUE! 👋");
+  const [sendResult, setSendResult] = useState<{ok: boolean; msg: string} | null>(null);
+
+  const sendTestMessage = async () => {
     if (!testPhone.trim()) { showToast("Enter a phone number first."); return; }
-    const requiredCreds = ["phone_number_id", "waba_id", "system_access_token"];
+    const requiredCreds = ["phone_number_id", "system_access_token"];
     const missing = requiredCreds.filter((k) => !waCreds[k] || !waCreds[k].trim());
     if (missing.length > 0) {
       showToast(`Missing credentials: ${missing.join(", ")}. Add them in API Credentials first.`);
       setActiveTab("credentials");
       return;
     }
-    setSendingTest(true);
-    setTimeout(() => { setSendingTest(false); showToast(`Credentials present — connect WhatsApp Cloud API to send live messages.`); }, 1200);
+    setSendingTest(true); setSendResult(null);
+    try {
+      const res = await fetch("/api/whatsapp/messages/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ to: testPhone.replace(/\D/g, ""), text: testMessageText }),
+      });
+      const d = await res.json();
+      if (!res.ok) setSendResult({ ok: false, msg: d.error ?? "Send failed" });
+      else setSendResult({ ok: true, msg: `Message sent! ID: ${(d.result as any)?.messages?.[0]?.id ?? "ok"}` });
+    } catch {
+      setSendResult({ ok: false, msg: "Network error" });
+    }
+    setSendingTest(false);
+  };
+
+  const submitTemplateMeta = async (t: Template) => {
+    try {
+      const r = await fetch(`/api/whatsapp/templates/${t.id}/submit`, {
+        method: "POST", credentials: "include",
+      });
+      const d = await r.json();
+      if (!r.ok) showToast(d.error ?? "Submission failed");
+      else {
+        setTemplates((p) => p.map((x) => x.id === t.id ? { ...x, status: "Submitted" } : x));
+        showToast(`"${t.name}" submitted to Meta for approval.`);
+      }
+    } catch { showToast("Network error"); }
   };
 
   const saveOptinSettings = async () => {
@@ -309,18 +339,42 @@ export default function AdminWhatsAppPage() {
                 </div>
 
                 <div className="col-span-12 lg:col-span-5 space-y-4">
+                  {/* Live Send Message */}
                   <div className="p-5 bg-[#f8f9ff] rounded-xl border border-slate-100 space-y-4">
-                    <h4 className="font-serif font-semibold flex items-center gap-2"><span className="material-symbols-outlined text-[#006c49] text-base">help</span>Connected Data</h4>
-                    <p className="text-xs text-[#7c839b] font-[Manrope]">Templates and opt-in settings are loaded from the database.</p>
+                    <h4 className="font-serif font-semibold flex items-center gap-2">
+                      <span className="material-symbols-outlined text-[#006c49] text-base">send</span>Send Live Message
+                    </h4>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="font-[Manrope] font-bold text-[10px] tracking-widest uppercase text-[#45464d] block mb-1">Phone Number (with country code)</label>
+                        <input value={testPhone} onChange={(e) => setTestPhone(e.target.value)} placeholder="+1234567890"
+                          className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm font-[Manrope] outline-none focus:border-[#006c49] font-mono" />
+                      </div>
+                      <div>
+                        <label className="font-[Manrope] font-bold text-[10px] tracking-widest uppercase text-[#45464d] block mb-1">Message</label>
+                        <textarea value={testMessageText} onChange={(e) => setTestMessageText(e.target.value)} rows={3}
+                          className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm font-[Manrope] outline-none focus:border-[#006c49] resize-none" />
+                      </div>
+                      <button onClick={sendTestMessage} disabled={sendingTest}
+                        className="w-full py-2.5 bg-[#006c49] text-white font-[Manrope] font-bold text-xs tracking-widest uppercase hover:bg-black disabled:opacity-60 transition-colors rounded-lg flex items-center justify-center gap-2">
+                        <span className={`material-symbols-outlined text-sm ${sendingTest ? "animate-spin" : ""}`}>{sendingTest ? "refresh" : "send"}</span>
+                        {sendingTest ? "Sending…" : "Send Message Now"}
+                      </button>
+                      {sendResult && (
+                        <div className={`p-3 rounded-xl text-xs font-[Manrope] font-semibold border ${sendResult.ok ? "bg-[#f0faf6] text-[#006c49] border-[#c3eed8]" : "bg-red-50 text-red-600 border-red-200"}`}>
+                          {sendResult.msg}
+                        </div>
+                      )}
+                    </div>
                   </div>
                   <div className="bg-black text-white p-5 rounded-xl">
                     <h4 className="font-serif font-semibold mb-2">Template Status</h4>
-                    <p className="text-white/60 text-sm font-[Manrope]">{templates.filter((t) => t.status === "Approved").length} approved</p>
+                    <p className="text-white/60 text-sm font-[Manrope]">{templates.filter((t) => t.status === "Approved").length} approved · {templates.length} total</p>
                   </div>
                   <div className="p-4 bg-amber-50 border border-amber-100 rounded-xl">
                     <p className="text-xs font-[Manrope] text-amber-800 flex items-start gap-2">
                       <span className="material-symbols-outlined text-sm shrink-0 mt-0.5">lock</span>
-                      Credentials are stored in the database and never exposed in client-side code. Secret fields are masked during display.
+                      Credentials are stored in the database and never exposed in client-side code.
                     </p>
                   </div>
                 </div>
@@ -380,6 +434,11 @@ export default function AdminWhatsAppPage() {
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
                           <span className="text-xs font-[Manrope] text-[#7c839b]">{t.sentCount.toLocaleString()} sent</span>
+                          {t.status === "Pending" && (
+                            <button onClick={() => submitTemplateMeta(t)} className="text-[10px] font-[Manrope] font-bold uppercase tracking-widest px-3 py-1.5 bg-[#006c49] text-white rounded-lg hover:bg-black transition-colors">
+                              Submit to Meta
+                            </button>
+                          )}
                           {t.status !== "Approved" && (
                             <button onClick={() => deleteTemplate(t)} className="text-[#7c839b] hover:text-red-500 transition-colors ml-1">
                               <span className="material-symbols-outlined text-base">delete</span>
