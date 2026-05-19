@@ -72,7 +72,7 @@ router.get("/campaigns", async (req, res) => {
   try {
     const session = await getSession(req);
     if (!session || session.role !== "ADMIN") return res.status(401).json({ error: "Unauthorized" });
-    const campaigns = await db.select().from(newsletterCampaigns).orderBy(desc(newsletterCampaigns.sentAt));
+    const campaigns = await db.select().from(newsletterCampaigns).orderBy(desc(newsletterCampaigns.createdAt));
     res.json(campaigns);
   } catch { res.status(500).json({ error: "Internal server error" }); }
 });
@@ -82,9 +82,21 @@ router.post("/send", async (req, res) => {
     const session = await getSession(req);
     if (!session || session.role !== "ADMIN") return res.status(401).json({ error: "Unauthorized" });
 
-    const { subject, body } = req.body;
+    const { subject, body, saveAsDraft, scheduledFor } = req.body;
     if (!subject?.trim() || !body?.trim())
       return res.status(400).json({ error: "Subject and body are required" });
+
+    if (saveAsDraft) {
+      const [campaign] = await db.insert(newsletterCampaigns).values({
+        subject: subject.trim(),
+        body: body.trim(),
+        recipientCount: 0,
+        sentCount: 0,
+        status: "DRAFT",
+        scheduledFor: scheduledFor ? new Date(scheduledFor) : null,
+      }).returning();
+      return res.json({ message: "Draft saved", campaignId: campaign.id, status: "DRAFT" });
+    }
 
     const subscribers = await db.select().from(newsletter).orderBy(desc(newsletter.createdAt));
     if (subscribers.length === 0)
@@ -96,6 +108,7 @@ router.post("/send", async (req, res) => {
       recipientCount: subscribers.length,
       sentCount: 0,
       status: "SENDING",
+      sentAt: new Date(),
     }).returning();
 
     res.json({ message: "Campaign queued", campaignId: campaign.id, recipientCount: subscribers.length });
@@ -110,8 +123,77 @@ router.post("/send", async (req, res) => {
       }
     }
 
+    const finalStatus = sentCount === 0 ? "FAILED" : sentCount === subscribers.length ? "SENT" : "PARTIAL";
     await db.update(newsletterCampaigns)
-      .set({ sentCount, status: sentCount === subscribers.length ? "SENT" : "PARTIAL" })
+      .set({ sentCount, status: finalStatus, updatedAt: new Date() })
+      .where(eq(newsletterCampaigns.id, campaign.id));
+
+  } catch { res.status(500).json({ error: "Internal server error" }); }
+});
+
+router.put("/campaigns/:id", async (req, res) => {
+  try {
+    const session = await getSession(req);
+    if (!session || session.role !== "ADMIN") return res.status(401).json({ error: "Unauthorized" });
+
+    const { subject, body, status, scheduledFor } = req.body;
+    const updates: Record<string, unknown> = { updatedAt: new Date() };
+    if (subject?.trim()) updates.subject = subject.trim();
+    if (body?.trim())    updates.body    = body.trim();
+    if (status)          updates.status  = status;
+    if (scheduledFor !== undefined) updates.scheduledFor = scheduledFor ? new Date(scheduledFor) : null;
+
+    const [updated] = await db.update(newsletterCampaigns)
+      .set(updates)
+      .where(eq(newsletterCampaigns.id, req.params.id))
+      .returning();
+
+    if (!updated) return res.status(404).json({ error: "Campaign not found" });
+    res.json(updated);
+  } catch { res.status(500).json({ error: "Internal server error" }); }
+});
+
+router.delete("/campaigns/:id", async (req, res) => {
+  try {
+    const session = await getSession(req);
+    if (!session || session.role !== "ADMIN") return res.status(401).json({ error: "Unauthorized" });
+    await db.delete(newsletterCampaigns).where(eq(newsletterCampaigns.id, req.params.id));
+    res.json({ success: true });
+  } catch { res.status(500).json({ error: "Internal server error" }); }
+});
+
+router.post("/campaigns/:id/resend", async (req, res) => {
+  try {
+    const session = await getSession(req);
+    if (!session || session.role !== "ADMIN") return res.status(401).json({ error: "Unauthorized" });
+
+    const [campaign] = await db.select().from(newsletterCampaigns)
+      .where(eq(newsletterCampaigns.id, req.params.id))
+      .limit(1);
+    if (!campaign) return res.status(404).json({ error: "Campaign not found" });
+
+    const subscribers = await db.select().from(newsletter);
+    if (subscribers.length === 0) return res.status(400).json({ error: "No subscribers to send to" });
+
+    await db.update(newsletterCampaigns)
+      .set({ status: "SENDING", recipientCount: subscribers.length, sentCount: 0, sentAt: new Date(), updatedAt: new Date() })
+      .where(eq(newsletterCampaigns.id, campaign.id));
+
+    res.json({ message: "Resend queued", campaignId: campaign.id, recipientCount: subscribers.length });
+
+    let sentCount = 0;
+    for (const sub of subscribers) {
+      try {
+        await sendCampaignEmail(sub.email, campaign.subject, campaign.body);
+        sentCount++;
+      } catch (err) {
+        console.error(`Failed to resend to ${sub.email}:`, err);
+      }
+    }
+
+    const finalStatus = sentCount === 0 ? "FAILED" : sentCount === subscribers.length ? "SENT" : "PARTIAL";
+    await db.update(newsletterCampaigns)
+      .set({ sentCount, status: finalStatus, updatedAt: new Date() })
       .where(eq(newsletterCampaigns.id, campaign.id));
 
   } catch { res.status(500).json({ error: "Internal server error" }); }

@@ -13,6 +13,8 @@ export const users = pgTable("users", {
   oauthId: text("oauth_id"),
   avatarUrl: text("avatar_url"),
   role: roleEnum("role").default("USER").notNull(),
+  passwordResetToken: text("password_reset_token"),
+  passwordResetExpiry: timestamp("password_reset_expiry"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -20,6 +22,10 @@ export const users = pgTable("users", {
 export const categories = pgTable("categories", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   name: text("name").notNull().unique(),
+  parentId: text("parent_id"),
+  slug: text("slug"),
+  description: text("description"),
+  sortOrder: integer("sort_order").notNull().default(0),
 });
 
 export const products = pgTable("products", {
@@ -152,8 +158,11 @@ export const newsletterCampaigns = pgTable("newsletter_campaigns", {
   body: text("body").notNull(),
   recipientCount: integer("recipient_count").notNull().default(0),
   sentCount: integer("sent_count").notNull().default(0),
-  status: text("status").notNull().default("SENDING"),
-  sentAt: timestamp("sent_at").defaultNow().notNull(),
+  status: text("status").notNull().default("DRAFT"),
+  scheduledFor: timestamp("scheduled_for"),
+  sentAt: timestamp("sent_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
 export const sessions = pgTable("sessions", {
@@ -356,6 +365,27 @@ export const teamMembers = pgTable("team_members", {
   lastLoginAt: timestamp("last_login_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// ─── Provider Plugins ─────────────────────────────────────────────────────────
+
+export const providerPlugins = pgTable("provider_plugins", {
+  id:           text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  name:         text("name").notNull().unique(),
+  label:        text("label").notNull(),
+  description:  text("description").notNull().default(""),
+  logoUrl:      text("logo_url"),
+  enabled:      boolean("enabled").notNull().default(false),
+  connected:    boolean("connected").notNull().default(false),
+  apiKey:       text("api_key"),
+  apiSecret:    text("api_secret"),
+  storeId:      text("store_id"),
+  webhookUrl:   text("webhook_url"),
+  settings:     text("settings"),
+  lastSyncAt:   timestamp("last_sync_at"),
+  lastError:    text("last_error"),
+  createdAt:    timestamp("created_at").defaultNow().notNull(),
+  updatedAt:    timestamp("updated_at").defaultNow().notNull(),
 });
 
 // ─── API Keys ─────────────────────────────────────────────────────────────────

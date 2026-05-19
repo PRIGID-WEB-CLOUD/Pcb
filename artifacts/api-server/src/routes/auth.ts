@@ -139,11 +139,42 @@ router.post("/forgot-password", async (req, res) => {
     if (!email) return res.status(400).json({ error: "Email is required" });
     const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
     if (!user) return res.json({ success: true });
-    const origin = process.env.FRONTEND_URL || `https://${process.env.REPLIT_DEV_DOMAIN ?? ""}`;
-    const resetLink = `${origin.replace(/\/$/, "")}/reset-password?email=${encodeURIComponent(email)}`;
+
+    const token   = crypto.randomUUID();
+    const expiry  = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+    await db.update(users)
+      .set({ passwordResetToken: token, passwordResetExpiry: expiry, updatedAt: new Date() })
+      .where(eq(users.id, user.id));
+
+    const base      = process.env.FRONTEND_URL || `https://${process.env.REPLIT_DEV_DOMAIN ?? ""}`;
+    const resetLink = `${base.replace(/\/$/, "")}/reset-password?token=${token}`;
     await sendCustomerResetEmail(email, resetLink, user.name);
     res.json({ success: true });
   } catch { res.status(500).json({ error: "Failed to send password reset email" }); }
+});
+
+router.post("/reset-password", async (req, res) => {
+  try {
+    const { token, password } = req.body;
+    if (!token || !password) return res.status(400).json({ error: "Token and new password are required" });
+    if (password.length < 6)  return res.status(400).json({ error: "Password must be at least 6 characters" });
+
+    const [user] = await db.select().from(users)
+      .where(eq(users.passwordResetToken, token))
+      .limit(1);
+
+    if (!user) return res.status(400).json({ error: "Invalid or expired reset link" });
+    if (!user.passwordResetExpiry || new Date(user.passwordResetExpiry) < new Date()) {
+      return res.status(400).json({ error: "Reset link has expired. Please request a new one." });
+    }
+
+    const hashed = await bcrypt.hash(password, 10);
+    await db.update(users)
+      .set({ password: hashed, passwordResetToken: null, passwordResetExpiry: null, updatedAt: new Date() })
+      .where(eq(users.id, user.id));
+
+    res.json({ success: true });
+  } catch { res.status(500).json({ error: "Failed to reset password" }); }
 });
 
 // ── Google OAuth ─────────────────────────────────────────────────────────────
