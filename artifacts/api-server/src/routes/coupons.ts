@@ -79,7 +79,8 @@ router.delete("/:id", async (req, res) => {
 
 router.post("/validate", async (req, res) => {
   try {
-    const { code, orderTotal } = req.body;
+    const { code, orderTotal, orderAmount } = req.body;
+    const amount = orderTotal ?? orderAmount;
     if (!code) return res.status(400).json({ error: "code is required" });
 
     const [coupon] = await db.select().from(coupons).where(eq(coupons.code, code.trim().toUpperCase()));
@@ -87,16 +88,39 @@ router.post("/validate", async (req, res) => {
     if (!coupon.active) return res.status(400).json({ error: "This coupon is inactive" });
     if (coupon.expiresAt && new Date() > coupon.expiresAt) return res.status(400).json({ error: "This coupon has expired" });
     if (coupon.maxUses != null && coupon.usedCount >= coupon.maxUses) return res.status(400).json({ error: "This coupon has reached its usage limit" });
-    if (orderTotal != null && Number(orderTotal) < coupon.minOrderAmount) {
-      return res.status(400).json({ error: `Minimum order of $${coupon.minOrderAmount.toFixed(2)} required` });
+    if (amount != null && Number(amount) < coupon.minOrderAmount) {
+      return res.status(400).json({ error: `Minimum order of ${coupon.minOrderAmount} required`, minOrderAmount: coupon.minOrderAmount });
     }
 
-    const discount = coupon.discountType === "PERCENTAGE"
-      ? (Number(orderTotal ?? 0) * coupon.discountValue) / 100
+    const numAmount = Number(amount ?? 0);
+    const rawDiscount = coupon.discountType === "PERCENTAGE"
+      ? (numAmount * coupon.discountValue) / 100
       : coupon.discountValue;
+    const discount = Math.min(rawDiscount, numAmount > 0 ? numAmount : rawDiscount);
 
-    res.json({ valid: true, coupon, discount: Math.min(discount, Number(orderTotal ?? discount)) });
+    res.json({
+      valid:    true,
+      code:     coupon.code,
+      type:     coupon.discountType,
+      value:    coupon.discountValue,
+      discount,
+      minOrderAmount: coupon.minOrderAmount,
+      description: coupon.description,
+    });
   } catch { res.status(500).json({ error: "Failed to validate coupon" }); }
+});
+
+router.post("/redeem", async (req, res) => {
+  try {
+    const { code } = req.body;
+    if (!code) return res.status(400).json({ error: "code is required" });
+    const [coupon] = await db.select().from(coupons).where(eq(coupons.code, code.trim().toUpperCase()));
+    if (!coupon) return res.status(404).json({ error: "Coupon not found" });
+    await db.update(coupons)
+      .set({ usedCount: coupon.usedCount + 1, updatedAt: new Date() })
+      .where(eq(coupons.id, coupon.id));
+    res.json({ ok: true });
+  } catch { res.status(500).json({ error: "Failed to redeem coupon" }); }
 });
 
 export default router;
