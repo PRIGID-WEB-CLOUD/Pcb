@@ -3,6 +3,7 @@ import { db } from "@workspace/db";
 import { teamMembers } from "@workspace/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { getSession } from "../lib/auth";
+import { requireRole } from "../lib/rbac";
 import { sendTeamInvite } from "../lib/email";
 import crypto from "crypto";
 
@@ -84,11 +85,11 @@ router.get("/", async (req, res) => {
   } catch { res.status(500).json({ error: "Failed to fetch team members" }); }
 });
 
-// POST /api/team/invite
-router.post("/invite", async (req, res) => {
+// POST /api/team/invite  — requires Admin role or higher
+router.post("/invite", requireRole("Admin"), async (req, res) => {
   try {
     const user = await getSession(req);
-    if (!user || user.role !== "ADMIN") return res.status(401).json({ error: "Unauthorized" });
+    if (!user) return res.status(401).json({ error: "Unauthorized" });
     const { email, name, role } = req.body as { email: string; name?: string; role: string };
     if (!email || !role) return res.status(400).json({ error: "Email and role are required" });
 
@@ -133,11 +134,10 @@ router.post("/invite", async (req, res) => {
   }
 });
 
-// PUT /api/team/:id
-router.put("/:id", async (req, res) => {
+// PUT /api/team/:id  — requires Admin role or higher
+router.put("/:id", requireRole("Admin"), async (req, res) => {
   try {
     const user = await getSession(req);
-    if (!user || user.role !== "ADMIN") return res.status(401).json({ error: "Unauthorized" });
     const { role, status, name } = req.body as { role?: string; status?: string; name?: string };
     const updates: Record<string, unknown> = { updatedAt: new Date() };
     if (role)   updates.role   = role;
@@ -153,21 +153,19 @@ router.put("/:id", async (req, res) => {
   } catch { res.status(500).json({ error: "Failed to update member" }); }
 });
 
-// DELETE /api/team/:id
-router.delete("/:id", async (req, res) => {
+// DELETE /api/team/:id  — requires Owner role
+router.delete("/:id", requireRole("Owner"), async (req, res) => {
   try {
     const user = await getSession(req);
-    if (!user || user.role !== "ADMIN") return res.status(401).json({ error: "Unauthorized" });
     await db.delete(teamMembers).where(eq(teamMembers.id, req.params.id));
     res.json({ ok: true });
   } catch { res.status(500).json({ error: "Failed to remove member" }); }
 });
 
-// POST /api/team/:id/resend
-router.post("/:id/resend", async (req, res) => {
+// POST /api/team/:id/resend  — requires Admin role or higher
+router.post("/:id/resend", requireRole("Admin"), async (req, res) => {
   try {
     const user = await getSession(req);
-    if (!user || user.role !== "ADMIN") return res.status(401).json({ error: "Unauthorized" });
     const token = crypto.randomBytes(32).toString("hex");
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
     const [updated] = await db.update(teamMembers)

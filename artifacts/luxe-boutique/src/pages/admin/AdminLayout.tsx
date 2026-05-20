@@ -19,6 +19,7 @@ const mainNavItems = [
   { icon: "article",      label: "Journal",    href: "/admin/blog"        },
   { icon: "mail",         label: "Newsletter", href: "/admin/newsletter"  },
   { icon: "hub",          label: "Channels",   href: "/admin/channels"    },
+  { icon: "extension",    label: "Providers",  href: "/admin/providers"   },
   { icon: "group_add",    label: "Team",       href: "/admin/team"        },
   { icon: "settings",     label: "Settings",   href: "/admin/settings"    },
 ];

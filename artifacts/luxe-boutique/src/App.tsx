@@ -9,6 +9,7 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import CookieBanner from "@/components/CookieBanner";
 import AdminGuard from "@/components/AdminGuard";
+import CustomerGuard from "@/components/CustomerGuard";
 import HomePage from "@/pages/HomePage";
 import ProductsPage from "@/pages/ProductsPage";
 import ProductDetailPage from "@/pages/ProductDetailPage";
@@ -55,6 +56,8 @@ import AdminTeamPage from "@/pages/admin/AdminTeamPage";
 import AdminLoginPage from "@/pages/admin/AdminLoginPage";
 import AdminAcceptInvitePage from "@/pages/admin/AdminAcceptInvitePage";
 import AdminCouponsPage from "@/pages/admin/AdminCouponsPage";
+import AdminProvidersPage from "@/pages/admin/AdminProvidersPage";
+import ResetPasswordPage from "@/pages/ResetPasswordPage";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -95,13 +98,14 @@ function Router() {
       <Route path="/privacy" component={() => <StoreLayout><PrivacyPage /></StoreLayout>} />
       <Route path="/terms" component={() => <StoreLayout><TermsPage /></StoreLayout>} />
       <Route path="/shipping-returns" component={() => <StoreLayout><ShippingReturnsPage /></StoreLayout>} />
-      <Route path="/account" component={() => <StoreLayout><AccountPage /></StoreLayout>} />
-      <Route path="/account/orders" component={() => <StoreLayout><OrdersPage /></StoreLayout>} />
-      <Route path="/account/wishlist" component={() => <StoreLayout><WishlistPage /></StoreLayout>} />
-      <Route path="/account/settings" component={() => <StoreLayout><AccountSettingsPage /></StoreLayout>} />
-      <Route path="/account/addresses" component={() => <StoreLayout><AccountAddressesPage /></StoreLayout>} />
+      <Route path="/account" component={() => <StoreLayout><CustomerGuard><AccountPage /></CustomerGuard></StoreLayout>} />
+      <Route path="/account/orders" component={() => <StoreLayout><CustomerGuard><OrdersPage /></CustomerGuard></StoreLayout>} />
+      <Route path="/account/wishlist" component={() => <StoreLayout><CustomerGuard><WishlistPage /></CustomerGuard></StoreLayout>} />
+      <Route path="/account/settings" component={() => <StoreLayout><CustomerGuard><AccountSettingsPage /></CustomerGuard></StoreLayout>} />
+      <Route path="/account/addresses" component={() => <StoreLayout><CustomerGuard><AccountAddressesPage /></CustomerGuard></StoreLayout>} />
       <Route path="/login" component={() => <AuthLayout><LoginPage /></AuthLayout>} />
       <Route path="/forgot-password" component={() => <AuthLayout><ForgotPasswordPage /></AuthLayout>} />
+      <Route path="/reset-password" component={() => <AuthLayout><ResetPasswordPage /></AuthLayout>} />
       <Route path="/register" component={() => <AuthLayout><RegisterPage /></AuthLayout>} />
       <Route path="/admin/login" component={() => <AdminLoginPage />} />
       <Route path="/admin/accept-invite" component={() => <AdminAcceptInvitePage />} />
@@ -129,6 +133,7 @@ function Router() {
       <Route path="/admin/settings" component={() => <AdminGuard><AdminSettingsPage /></AdminGuard>} />
       <Route path="/admin/team" component={() => <AdminGuard><AdminTeamPage /></AdminGuard>} />
       <Route path="/admin/coupons" component={() => <AdminGuard><AdminCouponsPage /></AdminGuard>} />
+      <Route path="/admin/providers" component={() => <AdminGuard><AdminProvidersPage /></AdminGuard>} />
       <Route component={NotFound} />
     </Switch>
   );
