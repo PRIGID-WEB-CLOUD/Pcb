@@ -4,7 +4,7 @@ import passport from "passport";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import { db } from "@workspace/db";
 import { users, sessions, adminOtpCodes } from "@workspace/db/schema";
-import { eq, and, gt, lt } from "drizzle-orm";
+import { eq, and, gt, lt, sql } from "drizzle-orm";
 import { getSession } from "../lib/auth";
 import { sendAdminOtp, sendCustomerResetEmail } from "../lib/email";
 
@@ -205,6 +205,15 @@ router.get("/google/callback",
 
 // ── Admin OTP ─────────────────────────────────────────────────────────────────
 
+// Check whether any admin account exists (used by login page to show/hide bootstrap link)
+router.get("/admin/exists", async (req, res) => {
+  try {
+    const [admin] = await db.select({ id: users.id }).from(users)
+      .where(eq(users.role, "ADMIN")).limit(1);
+    res.json({ exists: !!admin });
+  } catch { res.json({ exists: false }); }
+});
+
 // Bootstrap: create the very first admin account (only works when no admin exists)
 router.post("/admin/bootstrap", async (req, res) => {
   try {
@@ -215,11 +224,12 @@ router.post("/admin/bootstrap", async (req, res) => {
     const { name, email } = req.body;
     if (!name || !email) return res.status(400).json({ error: "Name and email are required" });
 
-    const [existing] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+    const normalizedEmail = email.toLowerCase().trim();
+    const [existing] = await db.select().from(users).where(eq(users.email, normalizedEmail)).limit(1);
     if (existing) {
       await db.update(users).set({ role: "ADMIN" }).where(eq(users.id, existing.id));
     } else {
-      await db.insert(users).values({ name, email, role: "ADMIN" });
+      await db.insert(users).values({ name, email: normalizedEmail, role: "ADMIN" });
     }
     res.json({ success: true });
   } catch { res.status(500).json({ error: "Bootstrap failed" }); }
@@ -229,8 +239,11 @@ router.post("/admin/request-otp", async (req, res) => {
   try {
     const { email } = req.body;
     if (!email) return res.status(400).json({ error: "Email is required" });
+    const normalizedEmail = email.toLowerCase().trim();
 
-    const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+    const [user] = await db.select().from(users)
+      .where(eq(users.email, normalizedEmail))
+      .limit(1);
     // Always return same response to prevent email enumeration
     if (!user || user.role !== "ADMIN") {
       return res.json({ success: true, dev: false });
@@ -239,25 +252,25 @@ router.post("/admin/request-otp", async (req, res) => {
     // Invalidate previous unused codes for this email
     await db.update(adminOtpCodes)
       .set({ used: true })
-      .where(and(eq(adminOtpCodes.email, email), eq(adminOtpCodes.used, false)));
+      .where(and(eq(adminOtpCodes.email, normalizedEmail), eq(adminOtpCodes.used, false)));
 
     // Clean up expired records to keep table tidy
     await db.delete(adminOtpCodes).where(lt(adminOtpCodes.expiresAt, new Date()));
 
     const code      = String(Math.floor(100000 + Math.random() * 900000));
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
-    await db.insert(adminOtpCodes).values({ email, code, expiresAt });
+    await db.insert(adminOtpCodes).values({ email: normalizedEmail, code, expiresAt });
 
     let dev = false;
     try {
-      const result = await sendAdminOtp(email, code, user.name);
+      const result = await sendAdminOtp(normalizedEmail, code, user.name);
       dev = result.dev;
     } catch (emailErr) {
       // SMTP send failed — log it and fall back to console so admin isn't locked out
       console.error("[OTP] Email send failed, falling back to console:", emailErr);
       console.log(`\n${"=".repeat(50)}`);
       console.log(`  ADMIN OTP CODE (SMTP error — fallback)`);
-      console.log(`  To:   ${email}`);
+      console.log(`  To:   ${normalizedEmail}`);
       console.log(`  Code: ${code}`);
       console.log(`${"=".repeat(50)}\n`);
       dev = true;
@@ -274,11 +287,12 @@ router.post("/admin/verify-otp", async (req, res) => {
   try {
     const { email, code } = req.body;
     if (!email || !code) return res.status(400).json({ error: "Email and code are required" });
+    const normalizedEmail = email.toLowerCase().trim();
 
     const [otp] = await db.select().from(adminOtpCodes)
       .where(and(
-        eq(adminOtpCodes.email, email),
-        eq(adminOtpCodes.code, code),
+        eq(adminOtpCodes.email, normalizedEmail),
+        eq(adminOtpCodes.code, String(code).trim()),
         eq(adminOtpCodes.used, false),
         gt(adminOtpCodes.expiresAt, new Date()),
       ))
@@ -288,7 +302,9 @@ router.post("/admin/verify-otp", async (req, res) => {
 
     await db.update(adminOtpCodes).set({ used: true }).where(eq(adminOtpCodes.id, otp.id));
 
-    const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+    const [user] = await db.select().from(users)
+      .where(eq(users.email, normalizedEmail))
+      .limit(1);
     if (!user || user.role !== "ADMIN") return res.status(403).json({ error: "Access denied." });
 
     await createSession(res, user.id);

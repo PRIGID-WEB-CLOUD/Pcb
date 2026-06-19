@@ -5,15 +5,16 @@ import { useAuth } from "@/contexts/AuthContext";
 type Step = "email" | "otp" | "bootstrap";
 
 export default function AdminLoginPage() {
-  const [step, setStep]             = useState<Step>("email");
-  const [email, setEmail]           = useState("");
+  const [step, setStep]                   = useState<Step>("email");
+  const [email, setEmail]                 = useState("");
   const [bootstrapName, setBootstrapName] = useState("");
   const [bootstrapEmail, setBootstrapEmail] = useState("");
-  const [otp, setOtp]               = useState(["", "", "", "", "", ""]);
-  const [error, setError]           = useState("");
-  const [info, setInfo]             = useState("");
-  const [loading, setLoading]       = useState(false);
+  const [otp, setOtp]                     = useState(["", "", "", "", "", ""]);
+  const [error, setError]                 = useState("");
+  const [info, setInfo]                   = useState("");
+  const [loading, setLoading]             = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
+  const [adminExists, setAdminExists]     = useState<boolean | null>(null);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
   const { user, loading: authLoading, refetch } = useAuth();
   const [, navigate] = useLocation();
@@ -22,7 +23,13 @@ export default function AdminLoginPage() {
     if (!authLoading && user?.role === "ADMIN") navigate("/admin");
   }, [user, authLoading, navigate]);
 
-  // Countdown timer for resend cooldown
+  useEffect(() => {
+    fetch("/api/auth/admin/exists")
+      .then((r) => r.json())
+      .then((d) => setAdminExists(d.exists ?? false))
+      .catch(() => setAdminExists(false));
+  }, []);
+
   useEffect(() => {
     if (resendCooldown <= 0) return;
     const t = setTimeout(() => setResendCooldown((c) => c - 1), 1000);
@@ -31,26 +38,36 @@ export default function AdminLoginPage() {
 
   const requestOtp = async (e?: React.FormEvent) => {
     e?.preventDefault();
+    if (loading) return;
     setLoading(true); setError(""); setInfo("");
-    const res = await fetch("/api/auth/admin/request-otp", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email }),
-    });
-    setLoading(false);
-    if (!res.ok) { setError("Failed to send code. Please try again."); return; }
-    const data = await res.json();
-    setStep("otp");
-    setResendCooldown(60);
-    if (data.devCode) {
-      setInfo(`Dev mode — your code is: ${data.devCode}`);
-      // Auto-fill the OTP boxes
-      const digits = String(data.devCode).split("");
-      setOtp(digits);
-    } else {
-      setInfo(`A 6-digit sign-in code was sent to ${email}`);
+    try {
+      const res = await fetch("/api/auth/admin/request-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "Failed to send code. Please try again.");
+        setLoading(false);
+        return;
+      }
+      setStep("otp");
+      setResendCooldown(60);
+      if (data.devCode) {
+        const digits = String(data.devCode).split("");
+        setOtp(digits);
+        setInfo(`Dev mode — code: ${data.devCode}`);
+        setTimeout(() => verifyOtp(String(data.devCode)), 600);
+      } else {
+        setInfo(`A 6-digit sign-in code was sent to ${email.trim()}`);
+        setTimeout(() => inputRefs.current[0]?.focus(), 100);
+      }
+    } catch {
+      setError("Network error. Please check your connection and try again.");
+    } finally {
+      setLoading(false);
     }
-    setTimeout(() => inputRefs.current[0]?.focus(), 100);
   };
 
   const handleOtpChange = (idx: number, val: string) => {
@@ -59,7 +76,6 @@ export default function AdminLoginPage() {
     next[idx] = digit;
     setOtp(next);
     if (digit && idx < 5) inputRefs.current[idx + 1]?.focus();
-    // Auto-submit when all 6 digits filled
     if (digit && next.every((d) => d !== "") && idx === 5) {
       verifyOtp(next.join(""));
     }
@@ -74,53 +90,65 @@ export default function AdminLoginPage() {
   const handleOtpPaste = (e: React.ClipboardEvent) => {
     const pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
     if (pasted.length === 6) {
-      const digits = pasted.split("");
-      setOtp(digits);
+      setOtp(pasted.split(""));
       inputRefs.current[5]?.focus();
       verifyOtp(pasted);
+    }
+  };
+
+  const verifyOtp = async (code?: string) => {
+    const finalCode = code ?? otp.join("");
+    if (finalCode.length !== 6) { setError("Enter all 6 digits."); return; }
+    if (loading) return;
+    setLoading(true); setError("");
+    try {
+      const res = await fetch("/api/auth/admin/verify-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim(), code: finalCode }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        setError(data.error ?? "Invalid code. Please try again.");
+        setOtp(["", "", "", "", "", ""]);
+        setTimeout(() => inputRefs.current[0]?.focus(), 50);
+        setLoading(false);
+        return;
+      }
+      await refetch();
+      navigate("/admin");
+    } catch {
+      setError("Network error. Please check your connection and try again.");
+      setLoading(false);
     }
   };
 
   const bootstrapAdmin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true); setError("");
-    const res = await fetch("/api/auth/admin/bootstrap", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: bootstrapName, email: bootstrapEmail }),
-    });
-    setLoading(false);
-    const data = await res.json();
-    if (!res.ok) {
-      setError(data.error ?? "Setup failed. Please try again.");
-      return;
-    }
-    setEmail(bootstrapEmail);
-    setStep("email");
-    setError("");
-    setInfo("Admin account created! Enter your email below to sign in.");
-    setBootstrapName(""); setBootstrapEmail("");
-  };
-
-  const verifyOtp = async (code?: string) => {
-    const finalCode = code ?? otp.join("");
-    if (finalCode.length !== 6) { setError("Enter all 6 digits."); return; }
-    setLoading(true); setError("");
-    const res = await fetch("/api/auth/admin/verify-otp", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, code: finalCode }),
-    });
-    if (!res.ok) {
+    try {
+      const res = await fetch("/api/auth/admin/bootstrap", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: bootstrapName, email: bootstrapEmail.trim() }),
+      });
       const data = await res.json();
-      setError(data.error ?? "Invalid code. Please try again.");
-      setOtp(["", "", "", "", "", ""]);
-      setTimeout(() => inputRefs.current[0]?.focus(), 50);
+      if (!res.ok) {
+        setError(data.error ?? "Setup failed. Please try again.");
+        setLoading(false);
+        return;
+      }
+      setAdminExists(true);
+      setEmail(bootstrapEmail.trim());
+      setStep("email");
+      setError("");
+      setInfo("Admin account created! Enter your email below to sign in.");
+      setBootstrapName(""); setBootstrapEmail("");
+    } catch {
+      setError("Network error. Please check your connection and try again.");
+    } finally {
       setLoading(false);
-      return;
     }
-    await refetch();
-    navigate("/admin");
   };
 
   if (authLoading) {
@@ -141,7 +169,6 @@ export default function AdminLoginPage() {
         <div className="absolute top-[-120px] left-[-80px] w-[520px] h-[520px] bg-[#006c49] opacity-[0.12] rounded-full blur-[120px] pointer-events-none" />
         <div className="absolute bottom-[-80px] right-[-60px] w-[360px] h-[360px] bg-[#006c49] opacity-[0.08] rounded-full blur-[100px] pointer-events-none" />
 
-        {/* Logo */}
         <div className="relative z-10 p-12">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-[#006c49] rounded flex items-center justify-center">
@@ -151,7 +178,6 @@ export default function AdminLoginPage() {
           </div>
         </div>
 
-        {/* Centre */}
         <div className="relative z-10 flex-1 flex flex-col justify-center px-16 pb-16">
           <div className="space-y-6 max-w-[420px]">
             <div className="inline-flex items-center gap-2 bg-[#006c49]/15 border border-[#006c49]/30 px-4 py-2 rounded-full">
@@ -162,15 +188,14 @@ export default function AdminLoginPage() {
             <p className="text-white/50 text-[15px] leading-relaxed">Manage products, orders, customers, and marketing channels from a single command centre.</p>
           </div>
 
-          {/* How it works */}
           <div className="mt-14 max-w-[420px] space-y-5">
             <p className="text-white/30 text-[11px] font-bold tracking-[0.18em] uppercase">How sign-in works</p>
             {[
-              { step: "1", icon: "mail",        title: "Enter your admin email",        body: "We send a secure one-time code to your registered admin address." },
-              { step: "2", icon: "pin",         title: "Enter the 6-digit OTP",          body: "No password needed — the code expires in 10 minutes." },
-              { step: "3", icon: "verified",    title: "Role is verified",               body: "Only ADMIN accounts can access this portal." },
+              { icon: "mail",     title: "Enter your admin email",  body: "We send a secure one-time code to your registered admin address." },
+              { icon: "pin",      title: "Enter the 6-digit OTP",   body: "No password needed — the code expires in 10 minutes." },
+              { icon: "verified", title: "Role is verified",         body: "Only ADMIN accounts can access this portal." },
             ].map((s) => (
-              <div key={s.step} className="flex gap-4 items-start">
+              <div key={s.icon} className="flex gap-4 items-start">
                 <div className="w-8 h-8 rounded-full border border-[#006c49]/40 flex items-center justify-center shrink-0">
                   <span className="material-symbols-outlined text-[#4edea3] text-[16px]">{s.icon}</span>
                 </div>
@@ -183,7 +208,6 @@ export default function AdminLoginPage() {
           </div>
         </div>
 
-        {/* Bottom bar */}
         <div className="relative z-10 px-12 py-8 border-t border-white/[0.06] flex items-center justify-between">
           <p className="text-white/25 text-[11px] tracking-widest uppercase">Secure Admin Access</p>
           <div className="flex items-center gap-1.5">
@@ -196,7 +220,6 @@ export default function AdminLoginPage() {
       {/* ── Right panel ─────────────────────────────────────────────── */}
       <div className="flex-1 bg-[#f8f9ff] flex flex-col">
 
-        {/* Mobile logo */}
         <div className="lg:hidden flex items-center gap-3 p-8 border-b border-slate-100 bg-white">
           <div className="w-8 h-8 bg-[#006c49] rounded flex items-center justify-center">
             <span className="material-symbols-outlined text-white text-[18px]">storefront</span>
@@ -208,7 +231,7 @@ export default function AdminLoginPage() {
         <div className="flex-1 flex items-center justify-center p-8">
           <div className="w-full max-w-[400px] space-y-8">
 
-            {/* Step indicator */}
+            {/* Step indicator (hidden on bootstrap) */}
             {step !== "bootstrap" && (
               <div className="flex items-center gap-3">
                 <div className={`flex items-center justify-center w-7 h-7 rounded-full text-[11px] font-bold transition-all ${step === "email" ? "bg-[#0a0f0d] text-white" : "bg-[#006c49] text-white"}`}>
@@ -228,7 +251,7 @@ export default function AdminLoginPage() {
                 {step === "email"
                   ? "Passwordless access for administrators."
                   : step === "otp"
-                  ? `Check your inbox at ${email}`
+                  ? `Check your inbox at ${email.trim()}`
                   : "Create the first admin account for this store."}
               </p>
             </div>
@@ -261,29 +284,31 @@ export default function AdminLoginPage() {
                     className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3.5 text-sm outline-none focus:border-[#006c49] focus:ring-2 focus:ring-[#006c49]/10 transition-all placeholder:text-slate-300"
                   />
                 </div>
-                <button type="submit" disabled={loading}
+                <button type="submit" disabled={loading || !email.trim()}
                   className="w-full bg-[#0a0f0d] text-white py-4 rounded-xl font-bold text-[12px] tracking-[0.18em] uppercase hover:bg-[#006c49] transition-all active:scale-[0.98] disabled:opacity-60 flex items-center justify-center gap-2.5 shadow-lg shadow-black/10">
                   {loading
                     ? <><span className="material-symbols-outlined text-[16px] animate-spin">refresh</span>Sending code…</>
                     : <><span className="material-symbols-outlined text-[16px]">mail</span>Send Sign-In Code</>}
                 </button>
-                <p className="text-center text-[12px] text-[#b0b8cc]">
-                  Setting up for the first time?{" "}
-                  <button type="button" onClick={() => { setError(""); setInfo(""); setStep("bootstrap"); }}
-                    className="text-[#006c49] font-bold hover:underline">
-                    Create admin account
-                  </button>
-                </p>
+                {adminExists === false && (
+                  <p className="text-center text-[12px] text-[#b0b8cc]">
+                    Setting up for the first time?{" "}
+                    <button type="button" onClick={() => { setError(""); setInfo(""); setStep("bootstrap"); }}
+                      className="text-[#006c49] font-bold hover:underline">
+                      Create admin account
+                    </button>
+                  </p>
+                )}
               </form>
             )}
 
-            {/* STEP 0 — Bootstrap (first-time setup) */}
-            {step === "bootstrap" && (
+            {/* STEP 0 — Bootstrap (only shown when no admin exists) */}
+            {step === "bootstrap" && adminExists === false && (
               <form onSubmit={bootstrapAdmin} className="space-y-5">
                 <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
                   <span className="material-symbols-outlined text-amber-500 text-[18px] shrink-0 mt-0.5">info</span>
                   <p className="text-amber-800 text-[12px] leading-relaxed font-medium">
-                    This creates the <strong>first admin account</strong> for this store. If an admin already exists, this will be blocked.
+                    This creates the <strong>first admin account</strong>. Only one admin setup is allowed.
                   </p>
                 </div>
                 <div className="space-y-1.5">
@@ -320,7 +345,6 @@ export default function AdminLoginPage() {
             {/* STEP 2 — OTP */}
             {step === "otp" && (
               <div className="space-y-6">
-                {/* 6-box OTP input */}
                 <div>
                   <label className="text-[11px] font-bold uppercase tracking-widest text-[#45464d] block mb-3">6-Digit Code</label>
                   <div className="flex gap-2.5" onPaste={handleOtpPaste}>
@@ -349,7 +373,6 @@ export default function AdminLoginPage() {
                     : <><span className="material-symbols-outlined text-[16px]">lock_open</span>Verify & Sign In</>}
                 </button>
 
-                {/* Resend + change email */}
                 <div className="flex items-center justify-between text-sm">
                   <button onClick={() => { setStep("email"); setOtp(["","","","","",""]); setError(""); setInfo(""); }}
                     className="text-[#7c839b] hover:text-[#0a0f0d] transition-colors text-[12px] flex items-center gap-1">
