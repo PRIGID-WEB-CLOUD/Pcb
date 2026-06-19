@@ -91,7 +91,7 @@ export default function AdminBlogEditorPage() {
     }
   }, [form.title, slugLocked]);
 
-  const insertFormat = (pre: string, post: string, ref: React.RefObject<HTMLTextAreaElement>, field: "content" | "excerpt") => {
+  const insertFormat = (pre: string, post: string, ref: React.RefObject<HTMLTextAreaElement | null>, field: "content" | "excerpt") => {
     const ta = ref.current;
     if (!ta) return;
     const { selectionStart: s, selectionEnd: e, value } = ta;

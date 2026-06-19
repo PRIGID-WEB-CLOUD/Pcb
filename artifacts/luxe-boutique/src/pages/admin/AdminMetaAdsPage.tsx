@@ -108,7 +108,7 @@ export default function AdminMetaAdsPage() {
   ];
 
   return (
-    <AdminLayout sidebar="main">
+    <AdminLayout sidebar="channels">
       <div className="flex-1 ml-0 p-6 max-w-5xl mx-auto">
         <div className="flex items-center gap-3 mb-6">
           <Link href="/admin/channels" className="text-slate-400 hover:text-slate-600 transition-colors">

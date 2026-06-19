@@ -337,7 +337,7 @@ export default function AdminNewsletterPage() {
                       <span className="material-symbols-outlined text-sm">draft</span> Save Draft
                     </button>
                     <button
-                      onClick={() => sendMutation.mutate()}
+                      onClick={() => sendMutation.mutate({})}
                       disabled={!subject.trim() || !body.trim() || sendMutation.isPending || (data?.total ?? 0) === 0}
                       className="px-8 py-2.5 bg-[#006c49] text-white font-[Manrope] font-bold text-xs tracking-widest uppercase hover:bg-black transition-all rounded-lg shadow disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2">
                       {sendMutation.isPending

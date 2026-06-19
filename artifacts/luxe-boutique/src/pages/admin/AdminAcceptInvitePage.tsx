@@ -147,7 +147,7 @@ export default function AdminAcceptInvitePage() {
         )}
 
         {/* ── Ready to accept ── */}
-        {(stage.type === "ready" || stage.type === "accepting") && stage.type !== "loading" && (
+        {(stage.type === "ready" || stage.type === "accepting") && (
           (() => {
             const info = (stage as { type: "ready"; info: InviteInfo } | { type: "accepting" }).type === "ready"
               ? (stage as { type: "ready"; info: InviteInfo }).info
