@@ -33,11 +33,16 @@ router.post("/", async (req, res) => {
     const user = await getSession(req);
     if (!user) return res.status(401).json({ error: "Unauthorized" });
 
-    const { total, shippingAddress, items, paystackRef } = req.body;
+    const { total, shippingAddress, items, paystackRef, couponCode, discountAmount } = req.body;
     if (!total || !items?.length) return res.status(400).json({ error: "Missing required fields" });
 
     const [order] = await db.insert(orders).values({
-      userId: user.id, total, shippingAddress, paystackRef,
+      userId: user.id,
+      total: Number(total),
+      discountAmount: discountAmount ? Number(discountAmount) : 0,
+      couponCode: couponCode?.trim().toUpperCase() || null,
+      shippingAddress,
+      paystackRef,
     }).returning();
 
     for (const item of items) {

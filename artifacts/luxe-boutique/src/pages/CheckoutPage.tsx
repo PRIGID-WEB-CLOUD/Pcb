@@ -93,7 +93,13 @@ export default function CheckoutPage() {
     setProcessing(true);
     try {
       sessionStorage.setItem("checkout_shipping", shippingAddress);
-      if (coupon) sessionStorage.setItem("checkout_coupon", coupon.code);
+      if (coupon) {
+        sessionStorage.setItem("checkout_coupon", coupon.code);
+        sessionStorage.setItem("checkout_discount", String(coupon.discount));
+      } else {
+        sessionStorage.removeItem("checkout_coupon");
+        sessionStorage.removeItem("checkout_discount");
+      }
 
       const initRes = await fetch("/api/payments/initialize", {
         method: "POST",

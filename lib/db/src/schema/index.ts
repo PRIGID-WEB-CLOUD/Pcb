@@ -93,6 +93,8 @@ export const orders = pgTable("orders", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   total: real("total").notNull(),
+  discountAmount: real("discount_amount").default(0),
+  couponCode: text("coupon_code"),
   status: orderStatusEnum("status").default("PENDING").notNull(),
   shippingAddress: text("shipping_address"),
   paystackRef: text("paystack_ref"),
