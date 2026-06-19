@@ -2,11 +2,13 @@ import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 
-type Step = "email" | "otp";
+type Step = "email" | "otp" | "bootstrap";
 
 export default function AdminLoginPage() {
   const [step, setStep]             = useState<Step>("email");
   const [email, setEmail]           = useState("");
+  const [bootstrapName, setBootstrapName] = useState("");
+  const [bootstrapEmail, setBootstrapEmail] = useState("");
   const [otp, setOtp]               = useState(["", "", "", "", "", ""]);
   const [error, setError]           = useState("");
   const [info, setInfo]             = useState("");
@@ -77,6 +79,27 @@ export default function AdminLoginPage() {
       inputRefs.current[5]?.focus();
       verifyOtp(pasted);
     }
+  };
+
+  const bootstrapAdmin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true); setError("");
+    const res = await fetch("/api/auth/admin/bootstrap", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: bootstrapName, email: bootstrapEmail }),
+    });
+    setLoading(false);
+    const data = await res.json();
+    if (!res.ok) {
+      setError(data.error ?? "Setup failed. Please try again.");
+      return;
+    }
+    setEmail(bootstrapEmail);
+    setStep("email");
+    setError("");
+    setInfo("Admin account created! Enter your email below to sign in.");
+    setBootstrapName(""); setBootstrapEmail("");
   };
 
   const verifyOtp = async (code?: string) => {
@@ -186,23 +209,27 @@ export default function AdminLoginPage() {
           <div className="w-full max-w-[400px] space-y-8">
 
             {/* Step indicator */}
-            <div className="flex items-center gap-3">
-              <div className={`flex items-center justify-center w-7 h-7 rounded-full text-[11px] font-bold transition-all ${step === "email" ? "bg-[#0a0f0d] text-white" : "bg-[#006c49] text-white"}`}>
-                {step === "email" ? "1" : <span className="material-symbols-outlined text-[14px]">check</span>}
+            {step !== "bootstrap" && (
+              <div className="flex items-center gap-3">
+                <div className={`flex items-center justify-center w-7 h-7 rounded-full text-[11px] font-bold transition-all ${step === "email" ? "bg-[#0a0f0d] text-white" : "bg-[#006c49] text-white"}`}>
+                  {step === "email" ? "1" : <span className="material-symbols-outlined text-[14px]">check</span>}
+                </div>
+                <div className="flex-1 h-px bg-slate-200" />
+                <div className={`flex items-center justify-center w-7 h-7 rounded-full text-[11px] font-bold transition-all ${step === "otp" ? "bg-[#0a0f0d] text-white" : "bg-slate-200 text-slate-400"}`}>2</div>
               </div>
-              <div className="flex-1 h-px bg-slate-200" />
-              <div className={`flex items-center justify-center w-7 h-7 rounded-full text-[11px] font-bold transition-all ${step === "otp" ? "bg-[#0a0f0d] text-white" : "bg-slate-200 text-slate-400"}`}>2</div>
-            </div>
+            )}
 
             {/* Heading */}
             <div className="space-y-1.5">
               <h2 className="font-serif text-[30px] text-[#0a0f0d] font-semibold leading-tight">
-                {step === "email" ? "Admin Sign In" : "Enter your code"}
+                {step === "email" ? "Admin Sign In" : step === "otp" ? "Enter your code" : "First Time Setup"}
               </h2>
               <p className="text-[#7c839b] text-sm">
                 {step === "email"
                   ? "Passwordless access for administrators."
-                  : `Check your inbox at ${email}`}
+                  : step === "otp"
+                  ? `Check your inbox at ${email}`
+                  : "Create the first admin account for this store."}
               </p>
             </div>
 
@@ -239,6 +266,53 @@ export default function AdminLoginPage() {
                   {loading
                     ? <><span className="material-symbols-outlined text-[16px] animate-spin">refresh</span>Sending code…</>
                     : <><span className="material-symbols-outlined text-[16px]">mail</span>Send Sign-In Code</>}
+                </button>
+                <p className="text-center text-[12px] text-[#b0b8cc]">
+                  Setting up for the first time?{" "}
+                  <button type="button" onClick={() => { setError(""); setInfo(""); setStep("bootstrap"); }}
+                    className="text-[#006c49] font-bold hover:underline">
+                    Create admin account
+                  </button>
+                </p>
+              </form>
+            )}
+
+            {/* STEP 0 — Bootstrap (first-time setup) */}
+            {step === "bootstrap" && (
+              <form onSubmit={bootstrapAdmin} className="space-y-5">
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
+                  <span className="material-symbols-outlined text-amber-500 text-[18px] shrink-0 mt-0.5">info</span>
+                  <p className="text-amber-800 text-[12px] leading-relaxed font-medium">
+                    This creates the <strong>first admin account</strong> for this store. If an admin already exists, this will be blocked.
+                  </p>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-bold uppercase tracking-widest text-[#45464d]">Your Name</label>
+                  <input
+                    type="text" required autoFocus
+                    value={bootstrapName} onChange={(e) => setBootstrapName(e.target.value)}
+                    placeholder="Store Owner"
+                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3.5 text-sm outline-none focus:border-[#006c49] focus:ring-2 focus:ring-[#006c49]/10 transition-all placeholder:text-slate-300"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-bold uppercase tracking-widest text-[#45464d]">Admin Email</label>
+                  <input
+                    type="email" required
+                    value={bootstrapEmail} onChange={(e) => setBootstrapEmail(e.target.value)}
+                    placeholder="admin@luxeboutique.com"
+                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3.5 text-sm outline-none focus:border-[#006c49] focus:ring-2 focus:ring-[#006c49]/10 transition-all placeholder:text-slate-300"
+                  />
+                </div>
+                <button type="submit" disabled={loading}
+                  className="w-full bg-[#0a0f0d] text-white py-4 rounded-xl font-bold text-[12px] tracking-[0.18em] uppercase hover:bg-[#006c49] transition-all active:scale-[0.98] disabled:opacity-60 flex items-center justify-center gap-2.5 shadow-lg shadow-black/10">
+                  {loading
+                    ? <><span className="material-symbols-outlined text-[16px] animate-spin">refresh</span>Creating account…</>
+                    : <><span className="material-symbols-outlined text-[16px]">admin_panel_settings</span>Create Admin Account</>}
+                </button>
+                <button type="button" onClick={() => { setStep("email"); setError(""); setInfo(""); }}
+                  className="w-full text-[#7c839b] hover:text-[#0a0f0d] transition-colors text-[12px] flex items-center justify-center gap-1 py-1">
+                  <span className="material-symbols-outlined text-[14px]">arrow_back</span> Back to sign in
                 </button>
               </form>
             )}
