@@ -9,13 +9,14 @@ export default function SearchPage() {
 
   useEffect(() => {
     if (!query) { setLoading(false); return; }
-    fetch("/api/products").then(r => r.json()).then(all => {
-      const filtered = (Array.isArray(all) ? all : []).filter((p: any) =>
-        p.name?.toLowerCase().includes(query.toLowerCase()) || p.description?.toLowerCase().includes(query.toLowerCase())
-      );
-      setProducts(filtered);
-      setLoading(false);
-    });
+    setLoading(true);
+    fetch(`/api/products?search=${encodeURIComponent(query)}`)
+      .then(r => r.json())
+      .then(data => {
+        setProducts(Array.isArray(data) ? data : []);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
   }, [query]);
 
   return (

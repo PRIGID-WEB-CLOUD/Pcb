@@ -8,6 +8,7 @@ type Product = {
   name: string;
   description: string;
   price: number;
+  stock: number | null;
   imageUrl: string | null;
   categoryId: string;
   category: { id: string; name: string } | null;
@@ -53,7 +54,7 @@ export default function AdminCatalogPage() {
           </Link>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
           <div className="bg-white p-6 shadow-[0px_4px_20px_rgba(15,23,42,0.05)] border-l-4 border-black">
             <p className="text-[10px] font-[Manrope] font-bold tracking-widest uppercase text-[#7c839b]">Total Products</p>
             <h3 className="text-[24px] font-serif font-semibold mt-2">{products.length}</h3>
@@ -70,6 +71,12 @@ export default function AdminCatalogPage() {
               {products.length > 0
                 ? `$${(products.reduce((s, p) => s + p.price, 0) / products.length).toFixed(2)}`
                 : "—"}
+            </h3>
+          </div>
+          <div className="bg-white p-6 shadow-[0px_4px_20px_rgba(15,23,42,0.05)] border-l-4 border-amber-400">
+            <p className="text-[10px] font-[Manrope] font-bold tracking-widest uppercase text-[#7c839b]">Low / Out of Stock</p>
+            <h3 className="text-[24px] font-serif font-semibold mt-2 text-amber-600">
+              {products.filter(p => (p.stock ?? 0) <= 5).length}
             </h3>
           </div>
         </div>
@@ -90,13 +97,21 @@ export default function AdminCatalogPage() {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-[#eff4ff] border-b border-slate-100">
-                  {["Product", "Category", "Price", "Actions"].map((h) => (
+                  {["Product", "Category", "Price", "Stock", "Actions"].map((h) => (
                     <th key={h} className="p-6 font-[Manrope] font-bold text-[11px] text-[#7c839b] tracking-widest uppercase">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {products.map((p) => (
+                {products.map((p) => {
+                  const stock = p.stock ?? 0;
+                  const stockLabel = stock === 0 ? "Out of Stock" : stock <= 5 ? `Low (${stock})` : String(stock);
+                  const stockCls = stock === 0
+                    ? "text-[#ba1a1a] bg-[#ffdad6]"
+                    : stock <= 5
+                    ? "text-amber-700 bg-amber-50"
+                    : "text-[#006c49] bg-[#e6f7f1]";
+                  return (
                   <tr key={p.id} className="hover:bg-slate-50 transition-colors">
                     <td className="p-6">
                       <div className="flex items-center gap-4">
@@ -114,6 +129,11 @@ export default function AdminCatalogPage() {
                     </td>
                     <td className="p-6 text-sm text-[#0b1c30]">{p.category?.name ?? "—"}</td>
                     <td className="p-6 font-semibold text-[#0b1c30]">${p.price.toFixed(2)}</td>
+                    <td className="p-6">
+                      <span className={`inline-block px-2.5 py-1 rounded text-[10px] font-[Manrope] font-bold tracking-widest uppercase ${stockCls}`}>
+                        {stockLabel}
+                      </span>
+                    </td>
                     <td className="p-6">
                       <div className="flex items-center gap-3">
                         <Link href={`/admin/products/edit?id=${p.id}`}>
@@ -146,7 +166,8 @@ export default function AdminCatalogPage() {
                       </div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           )}

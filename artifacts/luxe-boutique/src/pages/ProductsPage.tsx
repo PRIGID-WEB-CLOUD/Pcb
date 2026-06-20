@@ -7,13 +7,18 @@ export default function ProductsPage() {
   const [products, setProducts] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
   const [selectedCategory, setSelectedCategory] = useState("all");
+  const [newOnly, setNewOnly] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const categoryParam = params.get("category");
+    const newParam = params.get("new");
+    if (newParam === "true") setNewOnly(true);
+
     const fetchData = async () => {
-      const [resP, resC] = await Promise.all([fetch("/api/products"), fetch("/api/categories")]);
+      const productsUrl = newParam === "true" ? "/api/products?new=true" : "/api/products";
+      const [resP, resC] = await Promise.all([fetch(productsUrl), fetch("/api/categories")]);
       const productsData = await resP.json();
       const categoriesData = await resC.json();
       setProducts(Array.isArray(productsData) ? productsData : []);
@@ -45,6 +50,13 @@ export default function ProductsPage() {
       </section>
 
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+        {newOnly && (
+          <div className="mb-8 text-center">
+            <span className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 text-white text-[10px] font-bold uppercase tracking-widest">
+              <span>✦</span> New Arrivals
+            </span>
+          </div>
+        )}
         <div className="flex flex-wrap gap-3 mb-12 justify-center">
           <button onClick={() => setSelectedCategory("all")} className={`px-6 py-3 text-[10px] font-bold uppercase tracking-widest border transition-all ${selectedCategory === "all" ? "bg-slate-900 text-white border-slate-900" : "border-slate-200 text-slate-600 hover:border-slate-900"}`}>
             All

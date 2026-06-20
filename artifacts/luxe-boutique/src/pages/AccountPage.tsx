@@ -11,6 +11,7 @@ export default function AccountPage() {
   const isCustomer = user?.role === "USER";
   const [, navigate] = useLocation();
   const [orders, setOrders] = useState<any[]>([]);
+  const [wishlistCount, setWishlistCount] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const { formatPrice } = useCurrency();
 
@@ -18,7 +19,14 @@ export default function AccountPage() {
     if (!authLoading && !user) navigate("/login");
     else if (!authLoading && user && !isCustomer) navigate("/");
     else if (user) {
-      fetch("/api/orders").then(r => r.json()).then(d => { setOrders(Array.isArray(d) ? d.slice(0, 3) : []); setLoading(false); });
+      Promise.all([
+        fetch("/api/orders").then(r => r.json()),
+        fetch("/api/wishlist").then(r => r.json()),
+      ]).then(([ordersData, wishlistData]) => {
+        setOrders(Array.isArray(ordersData) ? ordersData.slice(0, 3) : []);
+        setWishlistCount(Array.isArray(wishlistData) ? wishlistData.length : 0);
+        setLoading(false);
+      }).catch(() => setLoading(false));
     }
   }, [user, authLoading, isCustomer]);
 
@@ -36,9 +44,9 @@ export default function AccountPage() {
           <div className="lg:col-span-3 space-y-8">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {[
-                { label: "Total Orders", value: orders.length, icon: Package, color: "bg-blue-50 text-blue-600" },
-                { label: "Active Wishlist", value: "—", icon: ShoppingBag, color: "bg-emerald-50 text-emerald-600" },
-                { label: "Account Status", value: "Verified", icon: User, color: "bg-purple-50 text-purple-600" },
+                { label: "Total Orders",    value: orders.length,                                           icon: Package,    color: "bg-blue-50 text-blue-600"    },
+                { label: "Active Wishlist", value: wishlistCount !== null ? wishlistCount : "—",            icon: ShoppingBag, color: "bg-emerald-50 text-emerald-600" },
+                { label: "Account Status", value: "Verified",                                              icon: User,       color: "bg-purple-50 text-purple-600" },
               ].map((stat, i) => (
                 <motion.div key={i} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }} className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex items-center gap-6">
                   <div className={`h-14 w-14 ${stat.color} rounded-2xl flex items-center justify-center`}><stat.icon size={24} /></div>

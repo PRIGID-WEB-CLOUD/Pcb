@@ -17,6 +17,10 @@ export default function ProductDetailPage() {
   const [product, setProduct] = useState<any>(null);
   const [quantity, setQuantity] = useState(1);
   const [loading, setLoading] = useState(true);
+
+  const stock: number = product?.stock ?? 0;
+  const inStock = stock > 0;
+  const lowStock = stock > 0 && stock <= 5;
   const [addingToCart, setAddingToCart] = useState(false);
   const [isWishlisted, setIsWishlisted] = useState(false);
   const [addingToWishlist, setAddingToWishlist] = useState(false);
@@ -103,17 +107,39 @@ export default function ProductDetailPage() {
           </header>
           <p className="text-slate-600 text-base leading-relaxed">{product.description}</p>
           <div className="space-y-6 pt-6 border-t border-slate-100">
+            {product && (
+              <div className="flex items-center gap-2">
+                {inStock ? (
+                  lowStock ? (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-700 text-[10px] font-bold uppercase tracking-widest">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block" />
+                      Only {stock} left
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold uppercase tracking-widest">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
+                      In Stock
+                    </span>
+                  )
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 text-slate-500 text-[10px] font-bold uppercase tracking-widest">
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400 inline-block" />
+                    Out of Stock
+                  </span>
+                )}
+              </div>
+            )}
             <div className="flex items-center space-x-6">
               <span className="text-xs font-bold uppercase tracking-widest text-slate-900">Quantity</span>
               <div className="flex items-center border border-slate-200 rounded-lg p-2 gap-4">
                 <button onClick={() => setQuantity(Math.max(1, quantity - 1))} className="p-1 hover:text-emerald-600"><Minus size={16} /></button>
                 <span className="w-8 text-center font-bold">{quantity}</span>
-                <button onClick={() => setQuantity(quantity + 1)} className="p-1 hover:text-emerald-600"><Plus size={16} /></button>
+                <button onClick={() => setQuantity(q => Math.min(q + 1, stock > 0 ? stock : 99))} className="p-1 hover:text-emerald-600"><Plus size={16} /></button>
               </div>
             </div>
-            <button onClick={addToCart} disabled={addingToCart} className="w-full bg-slate-900 text-white py-5 rounded-none font-bold uppercase tracking-widest text-xs flex items-center justify-center space-x-3 hover:bg-emerald-600 transition-all active:scale-95 disabled:bg-slate-300 shadow-lg">
+            <button onClick={addToCart} disabled={addingToCart || !inStock} className="w-full bg-slate-900 text-white py-5 rounded-none font-bold uppercase tracking-widest text-xs flex items-center justify-center space-x-3 hover:bg-emerald-600 transition-all active:scale-95 disabled:bg-slate-300 shadow-lg">
               <ShoppingBag size={18} />
-              <span>{addingToCart ? "Adding..." : "Add to Bag"}</span>
+              <span>{addingToCart ? "Adding..." : inStock ? "Add to Bag" : "Out of Stock"}</span>
             </button>
           </div>
           <div className="pt-10 space-y-6">

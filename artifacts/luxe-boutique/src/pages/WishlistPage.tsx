@@ -5,6 +5,7 @@ import { X, ShoppingBag } from "lucide-react";
 import AccountSidebar from "@/components/AccountSidebar";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCurrency } from "@/contexts/CurrencyContext";
+import { useCart } from "@/contexts/CartContext";
 
 const FALLBACK_IMAGE = "https://images.unsplash.com/photo-1529139574466-a303027c1d8b?q=80&w=800&auto=format&fit=crop";
 
@@ -14,7 +15,9 @@ export default function WishlistPage() {
   const isCustomer = user?.role === "USER";
   const [wishlist, setWishlist] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [addingToCart, setAddingToCart] = useState<string | null>(null);
   const { formatPrice } = useCurrency();
+  const { refreshCart } = useCart();
 
   useEffect(() => {
     if (!authLoading && !user) navigate("/login");
@@ -25,6 +28,24 @@ export default function WishlistPage() {
   const removeItem = async (productId: string) => {
     await fetch(`/api/wishlist/${productId}`, { method: "DELETE" });
     setWishlist(prev => prev.filter((item: any) => item.productId !== productId));
+  };
+
+  const addToCart = async (productId: string) => {
+    if (!user) { navigate("/login"); return; }
+    setAddingToCart(productId);
+    try {
+      const res = await fetch("/api/cart", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ productId, quantity: 1 }),
+      });
+      if (res.ok) {
+        await refreshCart();
+        navigate("/cart");
+      }
+    } finally {
+      setAddingToCart(null);
+    }
   };
 
   if (authLoading || loading || (user && !isCustomer)) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-slate-900"></div></div>;
@@ -54,8 +75,13 @@ export default function WishlistPage() {
                       </div>
                     </Link>
                     <div className="px-4 pb-4">
-                      <button className="w-full py-3 bg-slate-900 text-white text-[10px] font-bold uppercase tracking-widest rounded-xl flex items-center justify-center gap-2 hover:bg-emerald-600 transition-all">
-                        <ShoppingBag size={14} />Add to Bag
+                      <button
+                        onClick={() => addToCart(item.productId)}
+                        disabled={addingToCart === item.productId}
+                        className="w-full py-3 bg-slate-900 text-white text-[10px] font-bold uppercase tracking-widest rounded-xl flex items-center justify-center gap-2 hover:bg-emerald-600 transition-all disabled:opacity-50"
+                      >
+                        <ShoppingBag size={14} />
+                        {addingToCart === item.productId ? "Adding…" : "Add to Bag"}
                       </button>
                     </div>
                   </motion.div>

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { products, productVariants, categories, reviews, users } from "@workspace/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, ilike, or, sql } from "drizzle-orm";
 import { getSession } from "../lib/auth";
 
 const router = Router();
@@ -9,18 +9,39 @@ const router = Router();
 // ── GET all products ──────────────────────────────────────────────────────────
 router.get("/", async (req, res) => {
   try {
-    const { categoryId } = req.query;
-    const rows = await db
+    const { categoryId, search, new: newOnly } = req.query;
+
+    let query = db
       .select({ product: products, category: categories })
       .from(products)
       .leftJoin(categories, eq(products.categoryId, categories.id))
-      .orderBy(desc(products.createdAt));
+      .orderBy(desc(products.createdAt))
+      .$dynamic();
 
-    const filtered = categoryId
-      ? rows.filter(r => r.product.categoryId === categoryId)
-      : rows;
+    if (search && typeof search === "string" && search.trim()) {
+      const term = `%${search.trim()}%`;
+      query = query.where(
+        or(
+          ilike(products.name, term),
+          ilike(products.description, term)
+        )
+      );
+    }
 
-    const result = filtered.map(r => ({ ...r.product, category: r.category }));
+    const rows = await query;
+
+    let result = rows.map(r => ({ ...r.product, category: r.category }));
+
+    if (categoryId && typeof categoryId === "string") {
+      result = result.filter(p => p.categoryId === categoryId);
+    }
+
+    if (newOnly === "true") {
+      const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const fresh = result.filter(p => new Date(p.createdAt) >= cutoff);
+      result = fresh.length > 0 ? fresh : result.slice(0, 12);
+    }
+
     res.json(result);
   } catch { res.status(500).json({ error: "Failed to fetch products" }); }
 });
