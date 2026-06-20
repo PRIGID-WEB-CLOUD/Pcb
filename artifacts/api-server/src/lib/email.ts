@@ -256,6 +256,105 @@ export async function sendTeamInvite(
   return { dev: false };
 }
 
+export async function sendOrderConfirmationEmail(
+  to: string,
+  opts: {
+    orderId: string;
+    customerName?: string | null;
+    items: { name: string; quantity: number; price: number }[];
+    total: number;
+    shippingAddress: string;
+  },
+): Promise<void> {
+  const built = await buildTransport();
+  const displayName = opts.customerName ?? to.split("@")[0];
+  const itemRows = opts.items
+    .map(
+      (i) =>
+        `<tr>
+          <td style="padding:8px 0;font-size:13px;color:#2d3748;border-bottom:1px solid #f1f3f9;">${i.name}</td>
+          <td style="padding:8px 0;font-size:13px;color:#7c839b;text-align:center;border-bottom:1px solid #f1f3f9;">×${i.quantity}</td>
+          <td style="padding:8px 0;font-size:13px;color:#0a0f0d;text-align:right;border-bottom:1px solid #f1f3f9;font-weight:600;">$${(i.price * i.quantity).toFixed(2)}</td>
+        </tr>`,
+    )
+    .join("");
+
+  const html = `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"/></head>
+<body style="margin:0;padding:0;background:#f8f9ff;font-family:Manrope,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="padding:48px 0;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+        <tr>
+          <td style="background:#080e0b;padding:32px 40px;text-align:center;">
+            <span style="color:#fff;font-size:13px;font-weight:700;letter-spacing:0.2em;text-transform:uppercase;">✦ Luxe Boutique</span>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:40px 40px 32px;">
+            <p style="font-size:13px;color:#7c839b;margin:0 0 6px;">Hello, ${displayName}!</p>
+            <h1 style="font-size:24px;color:#0a0f0d;margin:0 0 8px;font-weight:600;">Your order is confirmed</h1>
+            <p style="font-size:14px;color:#7c839b;margin:0 0 8px;line-height:1.6;">
+              Order <strong style="color:#0a0f0d;">#${opts.orderId}</strong> — thank you for your purchase.
+              We're preparing your items with the utmost care.
+            </p>
+            <p style="font-size:12px;color:#7c839b;margin:0 0 28px;">You'll receive a shipping notification once your order is on its way.</p>
+
+            <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
+              <tr>
+                <th style="text-align:left;font-size:11px;color:#b0b8cc;text-transform:uppercase;letter-spacing:0.1em;padding-bottom:8px;">Item</th>
+                <th style="text-align:center;font-size:11px;color:#b0b8cc;text-transform:uppercase;letter-spacing:0.1em;padding-bottom:8px;">Qty</th>
+                <th style="text-align:right;font-size:11px;color:#b0b8cc;text-transform:uppercase;letter-spacing:0.1em;padding-bottom:8px;">Price</th>
+              </tr>
+              ${itemRows}
+              <tr>
+                <td colspan="2" style="padding:12px 0 0;font-size:14px;font-weight:700;color:#0a0f0d;">Total</td>
+                <td style="padding:12px 0 0;font-size:14px;font-weight:700;color:#006c49;text-align:right;">$${opts.total.toFixed(2)}</td>
+              </tr>
+            </table>
+
+            ${
+              opts.shippingAddress
+                ? `<div style="background:#f8f9ff;border-radius:10px;padding:16px 20px;margin-bottom:24px;">
+              <p style="font-size:11px;color:#b0b8cc;text-transform:uppercase;letter-spacing:0.1em;margin:0 0 6px;">Shipping to</p>
+              <p style="font-size:13px;color:#2d3748;margin:0;white-space:pre-line;">${opts.shippingAddress}</p>
+            </div>`
+                : ""
+            }
+          </td>
+        </tr>
+        <tr>
+          <td style="background:#f8f9ff;padding:20px 40px;border-top:1px solid #f1f3f9;text-align:center;">
+            <p style="font-size:11px;color:#b0b8cc;margin:0;">
+              Questions? Reply to this email or visit our <a href="#" style="color:#006c49;">Help Centre</a>.<br/>
+              © ${new Date().getFullYear()} Luxe Boutique · All rights reserved.
+            </p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+  if (!built) {
+    console.log(`\n${"─".repeat(50)}`);
+    console.log(`  ORDER CONFIRMATION (dev — SMTP not configured)`);
+    console.log(`  To:    ${to}`);
+    console.log(`  Order: #${opts.orderId}  Total: $${opts.total.toFixed(2)}`);
+    console.log(`${"─".repeat(50)}\n`);
+    return;
+  }
+
+  await built.transport.sendMail({
+    from: built.from,
+    to,
+    subject: `Order #${opts.orderId} confirmed — Luxe Boutique`,
+    html,
+  });
+}
+
 function buildCampaignHtml(body: string): string {
   return `<!DOCTYPE html>
 <html>

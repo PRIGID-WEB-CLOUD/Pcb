@@ -2,8 +2,9 @@ import { Router } from "express";
 import { db } from "@workspace/db";
 import {
   whatsappTemplates, whatsappJourneys, whatsappOptinSettings,
+  whatsappContacts, whatsappJourneyRuns,
 } from "@workspace/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import { getSession } from "../lib/auth";
 import { getCredMap, missingCreds } from "../lib/social/credentials";
 import * as WA from "../lib/social/whatsapp";
@@ -210,21 +211,90 @@ router.get("/webhook", (req, res) => {
   }
 });
 
-router.post("/webhook", (req, res) => {
+router.post("/webhook", async (req, res) => {
   const body = req.body;
-  if (body?.object === "whatsapp_business_account") {
+  if (body?.object !== "whatsapp_business_account") {
+    res.status(404).send("Not found");
+    return;
+  }
+
+  res.status(200).send("EVENT_RECEIVED");
+
+  try {
+    const [optinSettings] = await db.select().from(whatsappOptinSettings).limit(1);
+    if (!optinSettings) return;
+
+    const optinKw = optinSettings.optinKeyword.toUpperCase();
+    const optoutKw = optinSettings.optoutKeyword.toUpperCase();
+
     const entries: any[] = body.entry ?? [];
     for (const entry of entries) {
       for (const change of entry.changes ?? []) {
         const msgs: any[] = change.value?.messages ?? [];
         for (const msg of msgs) {
-          console.log(`[WhatsApp Webhook] Message from ${msg.from}: ${msg.text?.body ?? "(non-text)"}`);
+          const phone: string = msg.from;
+          const text: string = (msg.text?.body ?? "").trim().toUpperCase();
+
+          console.log(`[WhatsApp Webhook] Message from ${phone}: ${text || "(non-text)"}`);
+
+          if (!phone || !text) continue;
+
+          if (text === optoutKw) {
+            // Opt-out: mark opted out and stop all active runs for this phone
+            await db
+              .insert(whatsappContacts)
+              .values({ phone, optedIn: false, optedOutAt: new Date() })
+              .onConflictDoUpdate({
+                target: whatsappContacts.phone,
+                set: { optedIn: false, optedOutAt: new Date(), updatedAt: new Date() },
+              });
+            await db
+              .update(whatsappJourneyRuns)
+              .set({ status: "stopped" })
+              .where(and(eq(whatsappJourneyRuns.customerPhone, phone), inArray(whatsappJourneyRuns.status, ["active"])));
+            console.log(`[WhatsApp Webhook] ${phone} opted OUT`);
+
+          } else if (text === optinKw) {
+            if (optinSettings.doubleOptin) {
+              await db
+                .insert(whatsappContacts)
+                .values({ phone, optedIn: false, pendingDoubleOptin: true })
+                .onConflictDoUpdate({
+                  target: whatsappContacts.phone,
+                  set: { pendingDoubleOptin: true, updatedAt: new Date() },
+                });
+              console.log(`[WhatsApp Webhook] ${phone} pending double opt-in`);
+            } else {
+              await db
+                .insert(whatsappContacts)
+                .values({ phone, optedIn: true, optedInAt: new Date() })
+                .onConflictDoUpdate({
+                  target: whatsappContacts.phone,
+                  set: { optedIn: true, optedInAt: new Date(), pendingDoubleOptin: false, updatedAt: new Date() },
+                });
+              console.log(`[WhatsApp Webhook] ${phone} opted IN`);
+            }
+
+          } else if (optinSettings.doubleOptin && (text === "YES" || text === "CONFIRM" || text === "1")) {
+            // Confirm pending double opt-in
+            const [contact] = await db
+              .select()
+              .from(whatsappContacts)
+              .where(and(eq(whatsappContacts.phone, phone), eq(whatsappContacts.pendingDoubleOptin, true)))
+              .limit(1);
+            if (contact) {
+              await db
+                .update(whatsappContacts)
+                .set({ optedIn: true, optedInAt: new Date(), pendingDoubleOptin: false, updatedAt: new Date() })
+                .where(eq(whatsappContacts.phone, phone));
+              console.log(`[WhatsApp Webhook] ${phone} double opt-in confirmed`);
+            }
+          }
         }
       }
     }
-    res.status(200).send("EVENT_RECEIVED");
-  } else {
-    res.status(404).send("Not found");
+  } catch (err) {
+    console.error("[WhatsApp Webhook] Processing error:", err);
   }
 });
 

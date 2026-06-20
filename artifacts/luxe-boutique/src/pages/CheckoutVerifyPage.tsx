@@ -25,8 +25,7 @@ export default function CheckoutVerifyPage() {
 
         const isSuccess =
           (provider === "flutterwave" && verifyData.status === "successful") ||
-          (verifyData.status && verifyData.data?.status === "success") ||
-          reference.startsWith("demo_");
+          (verifyData.status && verifyData.data?.status === "success");
 
         if (!isSuccess) { setStatus("failed"); return; }
 

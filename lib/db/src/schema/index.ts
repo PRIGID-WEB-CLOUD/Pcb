@@ -42,6 +42,7 @@ export const products = pgTable("products", {
   seoTitle: text("seo_title"),
   seoDescription: text("seo_description"),
   trackQuantity: boolean("track_quantity").notNull().default(true),
+  stock: integer("stock").notNull().default(100),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -295,6 +296,8 @@ export const twitterAutoRules = pgTable("twitter_auto_rules", {
   action: text("action").notNull(),
   template: text("template").notNull().default("new_arrival"),
   active: boolean("active").notNull().default(true),
+  lastFiredAt: timestamp("last_fired_at"),
+  firedCount: integer("fired_count").notNull().default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -304,6 +307,9 @@ export const twitterTweetQueue = pgTable("twitter_tweet_queue", {
   scheduledFor: text("scheduled_for").notNull(),
   status: text("status").notNull().default("Queued"),
   imageStyle: text("image_style").notNull().default("Single Product High-Res"),
+  postedTweetId: text("posted_tweet_id"),
+  lastError: text("last_error"),
+  retryCount: integer("retry_count").notNull().default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -419,6 +425,64 @@ export const coupons = pgTable("coupons", {
   expiresAt:    timestamp("expires_at"),
   createdAt:    timestamp("created_at").defaultNow().notNull(),
   updatedAt:    timestamp("updated_at").defaultNow().notNull(),
+});
+
+// ─── Job Runs ─────────────────────────────────────────────────────────────────
+
+export const jobRuns = pgTable("job_runs", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  jobName: text("job_name").notNull(),
+  status: text("status").notNull().default("running"),
+  startedAt: timestamp("started_at").defaultNow().notNull(),
+  finishedAt: timestamp("finished_at"),
+  error: text("error"),
+});
+
+// ─── WhatsApp Contacts (opt-in/out) ───────────────────────────────────────────
+
+export const whatsappContacts = pgTable("whatsapp_contacts", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  phone: text("phone").notNull().unique(),
+  optedIn: boolean("opted_in").notNull().default(false),
+  optedInAt: timestamp("opted_in_at"),
+  optedOutAt: timestamp("opted_out_at"),
+  pendingDoubleOptin: boolean("pending_double_optin").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// ─── WhatsApp Journey Engine ──────────────────────────────────────────────────
+
+export const whatsappJourneySteps = pgTable("whatsapp_journey_steps", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  journeyId: text("journey_id").notNull(),
+  stepOrder: integer("step_order").notNull(),
+  delayMinutes: integer("delay_minutes").notNull().default(0),
+  templateName: text("template_name").notNull(),
+});
+
+export const whatsappJourneyRuns = pgTable("whatsapp_journey_runs", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  journeyId: text("journey_id").notNull(),
+  customerPhone: text("customer_phone").notNull(),
+  userId: text("user_id"),
+  currentStep: integer("current_step").notNull().default(0),
+  triggeredAt: timestamp("triggered_at").defaultNow().notNull(),
+  nextStepDueAt: timestamp("next_step_due_at"),
+  status: text("status").notNull().default("active"),
+});
+
+// ─── Facebook Ad Metrics ──────────────────────────────────────────────────────
+
+export const facebookAdMetrics = pgTable("facebook_ad_metrics", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  date: text("date").notNull().unique(),
+  impressions: integer("impressions").notNull().default(0),
+  clicks: integer("clicks").notNull().default(0),
+  spend: real("spend").notNull().default(0),
+  reach: integer("reach").notNull().default(0),
+  ctr: real("ctr").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 // ─── Zod / Type exports ───────────────────────────────────────────────────────

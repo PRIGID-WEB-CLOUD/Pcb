@@ -22,6 +22,7 @@ import teamRouter from "./team";
 import apiKeysRouter from "./apikeys";
 import couponsRouter from "./coupons";
 import providersRouter from "./providers";
+import adminRouter from "./admin";
 
 const router: IRouter = Router();
 
@@ -48,5 +49,6 @@ router.use("/team", teamRouter);
 router.use("/apikeys", apiKeysRouter);
 router.use("/coupons", couponsRouter);
 router.use("/providers", providersRouter);
+router.use("/admin", adminRouter);
 
 export default router;
