@@ -102,7 +102,9 @@ router.post("/auth/admin/request-otp", (req, res) => {
 });
 
 router.post("/auth/admin/verify-otp", (req, res) => {
-  const { email, otp } = req.body as { email?: string; otp?: string };
+  const body = req.body as { email?: string; otp?: string; code?: string };
+  const { email } = body;
+  const otp = body.otp ?? body.code;
   if (!email || !otp) return res.status(400).json({ error: "email and otp are required." });
   const stored = otpStore.get(email);
   if (!stored || stored.code !== otp) return res.status(401).json({ error: "Invalid or expired code." });
@@ -149,6 +151,12 @@ router.post("/auth/reset-password", (req, res) => {
   if (idx === -1) return res.status(404).json({ error: "User not found." });
   users[idx]!.passwordHash = simpleHash(password);
   res.json({ ok: true, message: "Password reset successfully." });
+});
+
+// ── Google OAuth stub ──────────────────────────────────────────────────────────
+
+router.get("/auth/google", (_req, res) => {
+  res.redirect("/?auth_error=google_not_configured");
 });
 
 // ── Admin-only: export requireAdmin for protected routes ──────────────────────

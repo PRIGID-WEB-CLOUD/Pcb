@@ -22,11 +22,17 @@ function sessionId(req: { cookies?: Record<string, string>; headers: Record<stri
   return (req.cookies?.["luxe_session"] ?? req.headers["x-session-id"] ?? "anon") as string;
 }
 
+// ── Cart helpers ──────────────────────────────────────────────────────────────
+
+function cartResponse(items: CartItem[]) {
+  return { items };
+}
+
 // ── Cart ──────────────────────────────────────────────────────────────────────
 
 router.get("/cart", (req, res) => {
   const sid = sessionId(req);
-  res.json(carts.get(sid) ?? []);
+  res.json(cartResponse(carts.get(sid) ?? []));
 });
 
 router.post("/cart", (req, res) => {
@@ -38,34 +44,40 @@ router.post("/cart", (req, res) => {
   if (idx >= 0) {
     existing[idx].quantity += quantity;
     carts.set(sid, existing);
-    return res.json(existing[idx]);
+    return res.json(cartResponse(existing));
   }
   const item: CartItem = { id: randomUUID(), sessionId: sid, productId, quantity, product: product ?? { id: productId, name: "Product", price: 0, imageUrl: null } };
-  carts.set(sid, [...existing, item]);
-  res.status(201).json(item);
+  const updated = [...existing, item];
+  carts.set(sid, updated);
+  res.status(201).json(cartResponse(updated));
 });
 
-router.put("/cart/:productId", (req, res) => {
+function updateCartItem(req: any, res: any) {
   const sid = sessionId(req);
   const { productId } = req.params;
   const { quantity } = req.body as { quantity: number };
   const items = carts.get(sid) ?? [];
-  const idx = items.findIndex((i) => i.productId === productId);
+  const idx = items.findIndex((i: CartItem) => i.productId === productId);
   if (idx === -1) return res.status(404).json({ error: "Item not in cart" });
   if (quantity <= 0) {
-    carts.set(sid, items.filter((i) => i.productId !== productId));
-    return res.json({ ok: true });
+    const filtered = items.filter((i: CartItem) => i.productId !== productId);
+    carts.set(sid, filtered);
+    return res.json(cartResponse(filtered));
   }
   items[idx].quantity = quantity;
   carts.set(sid, items);
-  res.json(items[idx]);
-});
+  res.json(cartResponse(items));
+}
+
+router.put("/cart/:productId", updateCartItem);
+router.patch("/cart/:productId", updateCartItem);
 
 router.delete("/cart/:productId", (req, res) => {
   const sid = sessionId(req);
   const { productId } = req.params;
-  carts.set(sid, (carts.get(sid) ?? []).filter((i) => i.productId !== productId));
-  res.json({ ok: true });
+  const filtered = (carts.get(sid) ?? []).filter((i) => i.productId !== productId);
+  carts.set(sid, filtered);
+  res.json(cartResponse(filtered));
 });
 
 // ── Wishlist ──────────────────────────────────────────────────────────────────
