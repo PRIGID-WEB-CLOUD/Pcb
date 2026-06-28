@@ -1,1 +1,1 @@
-- [Luxe Boutique API setup](luxe-boutique-api.md) — Express API on port 3001, Vite proxy at /api, all social channel + store routes in artifacts/api-server/src/routes/.
+- [Post-merge timeout](post-merge-timeout.md) — default 20s too short for monorepo with Expo; set to 90s.
