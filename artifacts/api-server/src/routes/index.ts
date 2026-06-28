@@ -10,12 +10,14 @@ import facebookRouter from "./facebook";
 import twitterRouter from "./twitter";
 import whatsappRouter from "./whatsapp";
 import pushTokensRouter from "./push-tokens";
+import adminStatsRouter from "./admin-stats";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
 router.use(authRouter);
 router.use(storeRouter);
+router.use(adminStatsRouter);
 router.use(newsletterRouter);
 router.use(ecommerceRouter);
 router.use(settingsRouter);

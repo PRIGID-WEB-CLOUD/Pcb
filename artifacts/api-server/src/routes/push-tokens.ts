@@ -1,12 +1,12 @@
 import { Router } from "express";
 import { eq } from "drizzle-orm";
 import { db, userPushTokensTable } from "@workspace/db";
-import { getSessionUser } from "./auth";
+import { getSessionUser } from "../middleware/requireAdmin";
 
 const router = Router();
 
 router.post("/push-tokens/register", async (req, res) => {
-  const user = getSessionUser(req);
+  const user = await getSessionUser(req);
   if (!user) return res.status(401).json({ error: "Authentication required." });
 
   const { token, platform } = req.body as { token?: string; platform?: string };
@@ -24,7 +24,7 @@ router.post("/push-tokens/register", async (req, res) => {
 });
 
 router.delete("/push-tokens/unregister", async (req, res) => {
-  const user = getSessionUser(req);
+  const user = await getSessionUser(req);
   if (!user) return res.status(401).json({ error: "Authentication required." });
 
   await db.delete(userPushTokensTable).where(eq(userPushTokensTable.userId, user.id));
@@ -32,8 +32,10 @@ router.delete("/push-tokens/unregister", async (req, res) => {
 });
 
 router.get("/push-tokens", async (req, res) => {
-  const user = getSessionUser(req);
-  if (!user || user.role !== "ADMIN") return res.status(403).json({ error: "Admin access required." });
+  const user = await getSessionUser(req);
+  if (!user || (user.role !== "ADMIN" && user.role !== "SUPER_ADMIN")) {
+    return res.status(403).json({ error: "Admin access required." });
+  }
 
   const all = await db.select().from(userPushTokensTable);
   res.json(all);
