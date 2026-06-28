@@ -3,6 +3,7 @@ import { randomUUID } from "crypto";
 import { requireAdmin } from "../middleware/requireAdmin";
 
 const router = Router();
+router.use(requireAdmin);
 
 // ── In-memory store ──────────────────────────────────────────────────────────
 

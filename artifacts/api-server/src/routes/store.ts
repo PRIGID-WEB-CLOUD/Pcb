@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { randomUUID } from "crypto";
+import { requireAdmin } from "../middleware/requireAdmin";
 
 const router = Router();
 
@@ -82,7 +83,7 @@ router.get("/products", (_req, res) => {
   res.json(products.map(enrichProduct));
 });
 
-router.post("/products", (req, res) => {
+router.post("/products", requireAdmin, (req, res) => {
   const body = req.body as Partial<Product>;
   const cat = catById(body.categoryId ?? "");
   const p: Product = {
@@ -111,7 +112,7 @@ router.get("/products/:id", (req, res) => {
   res.json(enrichProduct(p));
 });
 
-router.put("/products/:id", (req, res) => {
+router.put("/products/:id", requireAdmin, (req, res) => {
   const idx = products.findIndex((x) => x.id === req.params.id);
   if (idx === -1) return res.status(404).json({ error: "Product not found" });
   const updated = { ...products[idx], ...req.body };
@@ -120,7 +121,7 @@ router.put("/products/:id", (req, res) => {
   res.json(enrichProduct(products[idx]));
 });
 
-router.delete("/products/:id", (req, res) => {
+router.delete("/products/:id", requireAdmin, (req, res) => {
   products = products.filter((x) => x.id !== req.params.id);
   productVariants.delete(req.params.id);
   res.json({ ok: true });
@@ -134,7 +135,7 @@ router.get("/products/:id/variants", (req, res) => {
   res.json(productVariants.get(id) ?? []);
 });
 
-router.post("/products/:id/variants", (req, res) => {
+router.post("/products/:id/variants", requireAdmin, (req, res) => {
   const { id } = req.params;
   if (!products.find((p) => p.id === id)) return res.status(404).json({ error: "Product not found" });
   const variant: Variant = {
@@ -150,7 +151,7 @@ router.post("/products/:id/variants", (req, res) => {
   res.status(201).json(variant);
 });
 
-router.put("/products/:id/variants/:variantId", (req, res) => {
+router.put("/products/:id/variants/:variantId", requireAdmin, (req, res) => {
   const { id, variantId } = req.params;
   const variants = productVariants.get(id);
   if (!variants) return res.status(404).json({ error: "Product not found" });
@@ -161,7 +162,7 @@ router.put("/products/:id/variants/:variantId", (req, res) => {
   res.json(variants[idx]);
 });
 
-router.delete("/products/:id/variants/:variantId", (req, res) => {
+router.delete("/products/:id/variants/:variantId", requireAdmin, (req, res) => {
   const { id, variantId } = req.params;
   const variants = productVariants.get(id) ?? [];
   productVariants.set(id, variants.filter((v) => v.id !== variantId));
@@ -170,15 +171,15 @@ router.delete("/products/:id/variants/:variantId", (req, res) => {
 
 // ── Orders ────────────────────────────────────────────────────────────────────
 
-router.get("/orders", (_req, res) => { res.json(orders); });
+router.get("/orders", requireAdmin, (_req, res) => { res.json(orders); });
 
-router.get("/orders/:id", (req, res) => {
+router.get("/orders/:id", requireAdmin, (req, res) => {
   const o = orders.find((x) => x.id === req.params.id);
   if (!o) return res.status(404).json({ error: "Order not found" });
   res.json(o);
 });
 
-router.put("/orders/:id", (req, res) => {
+router.put("/orders/:id", requireAdmin, (req, res) => {
   const idx = orders.findIndex((x) => x.id === req.params.id);
   if (idx === -1) return res.status(404).json({ error: "Order not found" });
   orders[idx] = { ...orders[idx], ...req.body };
@@ -189,7 +190,7 @@ router.put("/orders/:id", (req, res) => {
 
 router.get("/categories", (_req, res) => { res.json(categories); });
 
-router.post("/categories", (req, res) => {
+router.post("/categories", requireAdmin, (req, res) => {
   const { name, description } = req.body as { name: string; description: string };
   const slug = name.toLowerCase().replace(/\s+/g, "-");
   const cat: Category = { id: randomUUID(), name, slug, description, productCount: 0 };
@@ -197,14 +198,14 @@ router.post("/categories", (req, res) => {
   res.status(201).json(cat);
 });
 
-router.put("/categories/:id", (req, res) => {
+router.put("/categories/:id", requireAdmin, (req, res) => {
   const idx = categories.findIndex((x) => x.id === req.params.id);
   if (idx === -1) return res.status(404).json({ error: "Category not found" });
   categories[idx] = { ...categories[idx], ...req.body };
   res.json(categories[idx]);
 });
 
-router.delete("/categories/:id", (req, res) => {
+router.delete("/categories/:id", requireAdmin, (req, res) => {
   categories = categories.filter((x) => x.id !== req.params.id);
   res.json({ ok: true });
 });
@@ -213,7 +214,7 @@ router.delete("/categories/:id", (req, res) => {
 
 router.get("/posts", (_req, res) => { res.json(blogPosts); });
 
-router.post("/posts", (req, res) => {
+router.post("/posts", requireAdmin, (req, res) => {
   const { title, content, status, authorName } = req.body as Partial<BlogPost>;
   const slug = (title ?? "post").toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
   const post: BlogPost = { id: randomUUID(), title: title ?? "", slug, content: content ?? "", status: status ?? "DRAFT", authorName: authorName ?? "Admin", publishedAt: status === "PUBLISHED" ? new Date().toISOString() : null, createdAt: new Date().toISOString() };
@@ -227,7 +228,7 @@ router.get("/posts/:id", (req, res) => {
   res.json(p);
 });
 
-router.put("/posts/:id", (req, res) => {
+router.put("/posts/:id", requireAdmin, (req, res) => {
   const idx = blogPosts.findIndex((x) => x.id === req.params.id);
   if (idx === -1) return res.status(404).json({ error: "Post not found" });
   const updated = { ...blogPosts[idx], ...req.body };
@@ -236,21 +237,21 @@ router.put("/posts/:id", (req, res) => {
   res.json(updated);
 });
 
-router.delete("/posts/:id", (req, res) => {
+router.delete("/posts/:id", requireAdmin, (req, res) => {
   blogPosts = blogPosts.filter((x) => x.id !== req.params.id);
   res.json({ ok: true });
 });
 
 // ── Media ─────────────────────────────────────────────────────────────────────
 
-router.get("/media", (_req, res) => { res.json(mediaItems); });
+router.get("/media", requireAdmin, (_req, res) => { res.json(mediaItems); });
 
-router.delete("/media/:id", (req, res) => {
+router.delete("/media/:id", requireAdmin, (req, res) => {
   mediaItems = mediaItems.filter((x) => x.id !== req.params.id);
   res.json({ ok: true });
 });
 
-router.post("/media/upload", (_req, res) => {
+router.post("/media/upload", requireAdmin, (_req, res) => {
   const item: MediaItem = { id: randomUUID(), filename: "upload.jpg", url: "", mimeType: "image/jpeg", size: 0, createdAt: new Date().toISOString() };
   mediaItems = [item, ...mediaItems];
   res.status(201).json(item);
@@ -258,35 +259,35 @@ router.post("/media/upload", (_req, res) => {
 
 // ── Users / Customers ─────────────────────────────────────────────────────────
 
-router.get("/users", (_req, res) => { res.json(customers); });
+router.get("/users", requireAdmin, (_req, res) => { res.json(customers); });
 
 // ── Coupons ───────────────────────────────────────────────────────────────────
 
-router.get("/coupons", (_req, res) => { res.json(coupons); });
+router.get("/coupons", requireAdmin, (_req, res) => { res.json(coupons); });
 
-router.post("/coupons", (req, res) => {
+router.post("/coupons", requireAdmin, (req, res) => {
   const coupon: Coupon = { id: randomUUID(), code: "", type: "percent", value: 10, usageCount: 0, active: true, expiresAt: null, ...req.body };
   coupons = [coupon, ...coupons];
   res.status(201).json(coupon);
 });
 
-router.put("/coupons/:id", (req, res) => {
+router.put("/coupons/:id", requireAdmin, (req, res) => {
   const idx = coupons.findIndex((x) => x.id === req.params.id);
   if (idx === -1) return res.status(404).json({ error: "Coupon not found" });
   coupons[idx] = { ...coupons[idx], ...req.body };
   res.json(coupons[idx]);
 });
 
-router.delete("/coupons/:id", (req, res) => {
+router.delete("/coupons/:id", requireAdmin, (req, res) => {
   coupons = coupons.filter((x) => x.id !== req.params.id);
   res.json({ ok: true });
 });
 
 // ── Team ──────────────────────────────────────────────────────────────────────
 
-router.get("/team", (_req, res) => { res.json(teamMembers); });
+router.get("/team", requireAdmin, (_req, res) => { res.json(teamMembers); });
 
-router.post("/team/invite", (req, res) => {
+router.post("/team/invite", requireAdmin, (req, res) => {
   const { email, role } = req.body as { email: string; role: string };
   const member: TeamMember = { id: randomUUID(), name: "", email, role: role ?? "EDITOR", status: "Invited", invitedAt: new Date().toISOString() };
   teamMembers = [...teamMembers, member];

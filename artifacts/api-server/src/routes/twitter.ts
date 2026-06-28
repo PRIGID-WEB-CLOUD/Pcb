@@ -1,8 +1,10 @@
 import { Router } from "express";
 import { randomUUID, createHmac } from "crypto";
 import { addEvent, credentials } from "./channels";
+import { requireAdmin } from "../middleware/requireAdmin";
 
 const router = Router();
+router.use(requireAdmin);
 
 // ── In-memory store ──────────────────────────────────────────────────────────
 

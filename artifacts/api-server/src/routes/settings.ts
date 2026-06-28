@@ -1,12 +1,14 @@
 import { Router } from "express";
 import { randomUUID } from "crypto";
+import { requireAdmin } from "../middleware/requireAdmin";
 
 const router = Router();
+router.use(requireAdmin);
 
 // ── In-memory store ──────────────────────────────────────────────────────────
 
 interface SettingsRecord { [key: string]: string }
-interface ApiKey { id: string; name: string; key: string; createdAt: string; lastUsed: string | null; }
+interface ApiKey { id: string; name: string; keyPrefix: string; rawKey: string; createdAt: string; lastUsed: string | null; revokedAt: string | null; usageCount: number; }
 interface Provider { id: string; name: string; label: string; description: string; mode: string; enabled: boolean; connected: boolean; apiKey: string | null; }
 
 let settings: SettingsRecord = {
@@ -27,8 +29,14 @@ let settings: SettingsRecord = {
   flutterwave_secret_key:      "",
 };
 
+function makeKey() {
+  const raw = `pk_live_${randomUUID().replace(/-/g, "")}`;
+  return { rawKey: raw, keyPrefix: raw.slice(0, 12) };
+}
+
+const _seed = makeKey();
 let apiKeys: ApiKey[] = [
-  { id: randomUUID(), name: "Production Key", key: `pk_live_${randomUUID().replace(/-/g, "")}`, createdAt: new Date(Date.now() - 86400000 * 30).toISOString(), lastUsed: new Date(Date.now() - 3600000).toISOString() },
+  { id: randomUUID(), name: "Production Key", keyPrefix: _seed.keyPrefix, rawKey: _seed.rawKey, createdAt: new Date(Date.now() - 86400000 * 30).toISOString(), lastUsed: new Date(Date.now() - 3600000).toISOString(), revokedAt: null, usageCount: 148 },
 ];
 
 let providers: Provider[] = [
@@ -68,20 +76,28 @@ router.post("/settings/test/cloudinary", (_req, res) => {
 
 // ── API Keys ──────────────────────────────────────────────────────────────────
 
+function safeKey(k: ApiKey) {
+  const { rawKey: _, ...rest } = k;
+  return rest;
+}
+
 router.get("/apikeys", (_req, res) => {
-  res.json(apiKeys.map((k) => ({ ...k, key: `${k.key.slice(0, 12)}…` })));
+  res.json(apiKeys.map(safeKey));
 });
 
 router.post("/apikeys", (req, res) => {
   const { name } = req.body as { name?: string };
   if (!name) return res.status(400).json({ error: "name is required." });
-  const key: ApiKey = { id: randomUUID(), name, key: `pk_live_${randomUUID().replace(/-/g, "")}`, createdAt: new Date().toISOString(), lastUsed: null };
+  const { rawKey, keyPrefix } = makeKey();
+  const key: ApiKey = { id: randomUUID(), name, keyPrefix, rawKey, createdAt: new Date().toISOString(), lastUsed: null, revokedAt: null, usageCount: 0 };
   apiKeys = [key, ...apiKeys];
-  res.status(201).json(key);
+  res.status(201).json({ ...safeKey(key), rawKey });
 });
 
 router.delete("/apikeys/:id", (req, res) => {
-  apiKeys = apiKeys.filter((k) => k.id !== req.params.id);
+  const idx = apiKeys.findIndex((k) => k.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: "API key not found." });
+  apiKeys[idx] = { ...apiKeys[idx], revokedAt: new Date().toISOString() };
   res.json({ ok: true });
 });
 
