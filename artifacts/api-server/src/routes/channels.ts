@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { randomUUID } from "crypto";
+import { requireAdmin } from "../middleware/requireAdmin";
 
 const router = Router();
 
@@ -121,15 +122,22 @@ router.put("/channels/webhooks/:webhookId", (req, res) => {
   res.json(webhooks.find((w) => w.webhookId === webhookId));
 });
 
-router.get("/channels/credentials/:channel", (req, res) => {
+router.get("/channels/credentials/:channel", requireAdmin, (req, res) => {
   const { channel } = req.params;
   res.json(credentials[channel] ?? {});
 });
 
-router.put("/channels/credentials/:channel", (req, res) => {
+router.put("/channels/credentials/:channel", requireAdmin, (req, res) => {
   const { channel } = req.params;
   credentials[channel] = { ...(credentials[channel] ?? {}), ...req.body };
   addEvent(channel, "API credentials updated", "Credentials saved securely.", "info");
+  res.json({ ok: true });
+});
+
+router.delete("/channels/credentials/:channel", requireAdmin, (req, res) => {
+  const { channel } = req.params;
+  credentials[channel] = {};
+  addEvent(channel, "API credentials cleared", "All credentials removed.", "warning");
   res.json({ ok: true });
 });
 

@@ -221,4 +221,27 @@ router.post("/twitter/posts/publish", async (req, res) => {
   }
 });
 
+// ── Verify credentials ────────────────────────────────────────────────────────
+
+router.get("/twitter/verify", async (_req, res) => {
+  const creds = getTwCreds();
+  const bearerToken = creds["bearer_token"];
+  if (!bearerToken) {
+    return res.status(400).json({ ok: false, error: "Missing Twitter Bearer Token — add credentials in channel settings." });
+  }
+  try {
+    const r = await fetch(
+      "https://api.twitter.com/2/users/me?user.fields=name,username,profile_image_url",
+      { headers: { Authorization: `Bearer ${bearerToken}` } },
+    );
+    if (r.ok) {
+      const data = await r.json() as Record<string, unknown>;
+      return res.json({ ok: true, user: (data["data"] as Record<string, unknown>) });
+    }
+    return res.json({ ok: false, error: `Twitter API returned HTTP ${r.status}` });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: String(err) });
+  }
+});
+
 export default router;
