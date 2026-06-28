@@ -1,0 +1,164 @@
+import { Switch, Route, Router as WouterRouter } from "wouter";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { Toaster } from "@/components/ui/toaster";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { CurrencyProvider } from "@/contexts/CurrencyContext";
+import { AuthProvider } from "@/contexts/AuthContext";
+import { CartProvider } from "@/contexts/CartContext";
+import Header from "@/components/Header";
+import Footer from "@/components/Footer";
+import CookieBanner from "@/components/CookieBanner";
+import AdminGuard from "@/components/AdminGuard";
+import CustomerGuard from "@/components/CustomerGuard";
+import HomePage from "@/pages/HomePage";
+import ProductsPage from "@/pages/ProductsPage";
+import ProductDetailPage from "@/pages/ProductDetailPage";
+import CartPage from "@/pages/CartPage";
+import LoginPage from "@/pages/LoginPage";
+import RegisterPage from "@/pages/RegisterPage";
+import BlogPage from "@/pages/BlogPage";
+import BlogPostPage from "@/pages/BlogPostPage";
+import AdminBlogPage from "@/pages/admin/AdminBlogPage";
+import AdminBlogEditorPage from "@/pages/admin/AdminBlogEditorPage";
+import CheckoutPage from "@/pages/CheckoutPage";
+import CheckoutVerifyPage from "@/pages/CheckoutVerifyPage";
+import SearchPage from "@/pages/SearchPage";
+import ContactPage from "@/pages/ContactPage";
+import SustainabilityPage from "@/pages/SustainabilityPage";
+import PrivacyPage from "@/pages/PrivacyPage";
+import TermsPage from "@/pages/TermsPage";
+import ShippingReturnsPage from "@/pages/ShippingReturnsPage";
+import AccountPage from "@/pages/AccountPage";
+import OrdersPage from "@/pages/OrdersPage";
+import WishlistPage from "@/pages/WishlistPage";
+import AccountSettingsPage from "@/pages/AccountSettingsPage";
+import AccountAddressesPage from "@/pages/AccountAddressesPage";
+import ForgotPasswordPage from "@/pages/ForgotPasswordPage";
+import AdminDashboardPage from "@/pages/admin/AdminDashboardPage";
+import AdminCatalogPage from "@/pages/admin/AdminCatalogPage";
+import AdminOrdersPage from "@/pages/admin/AdminOrdersPage";
+import AdminProductEditorPage from "@/pages/admin/AdminProductEditorPage";
+import AdminAnalyticsPage from "@/pages/admin/AdminAnalyticsPage";
+import AdminCustomersPage from "@/pages/admin/AdminCustomersPage";
+import AdminCategoriesPage from "@/pages/admin/AdminCategoriesPage";
+import AdminChannelHubPage from "@/pages/admin/AdminChannelHubPage";
+import AdminFacebookPage from "@/pages/admin/AdminFacebookPage";
+import AdminInstagramPage from "@/pages/admin/AdminInstagramPage";
+import AdminMetaCommercePage from "@/pages/admin/AdminMetaCommercePage";
+import AdminMetaAdsPage from "@/pages/admin/AdminMetaAdsPage";
+import AdminTwitterPage from "@/pages/admin/AdminTwitterPage";
+import AdminWhatsAppPage from "@/pages/admin/AdminWhatsAppPage";
+import AdminSocialAnalyticsPage from "@/pages/admin/AdminSocialAnalyticsPage";
+import AdminMediaPage from "@/pages/admin/AdminMediaPage";
+import AdminNewsletterPage from "@/pages/admin/AdminNewsletterPage";
+import AdminSettingsPage from "@/pages/admin/AdminSettingsPage";
+import AdminTeamPage from "@/pages/admin/AdminTeamPage";
+import AdminLoginPage from "@/pages/admin/AdminLoginPage";
+import AdminAcceptInvitePage from "@/pages/admin/AdminAcceptInvitePage";
+import AdminCouponsPage from "@/pages/admin/AdminCouponsPage";
+import AdminProvidersPage from "@/pages/admin/AdminProvidersPage";
+import ResetPasswordPage from "@/pages/ResetPasswordPage";
+import NotFound from "@/pages/NotFound";
+
+const queryClient = new QueryClient();
+
+function StoreLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <>
+      <Header />
+      <main className="flex-grow">{children}</main>
+      <Footer />
+    </>
+  );
+}
+
+function AuthLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <>
+      <Header />
+      <main className="flex-grow pt-24">{children}</main>
+    </>
+  );
+}
+
+function Router() {
+  return (
+    <Switch>
+      <Route path="/" component={() => <StoreLayout><HomePage /></StoreLayout>} />
+      <Route path="/products" component={() => <StoreLayout><ProductsPage /></StoreLayout>} />
+      <Route path="/products/:id" component={() => <StoreLayout><div className="pt-24"><ProductDetailPage /></div></StoreLayout>} />
+      <Route path="/cart" component={() => <StoreLayout><div className="pt-24"><CartPage /></div></StoreLayout>} />
+      <Route path="/checkout/verify" component={() => <StoreLayout><div className="pt-24"><CheckoutVerifyPage /></div></StoreLayout>} />
+      <Route path="/checkout" component={() => <StoreLayout><div className="pt-24"><CheckoutPage /></div></StoreLayout>} />
+      <Route path="/blog" component={() => <StoreLayout><BlogPage /></StoreLayout>} />
+      <Route path="/blog/:slug" component={() => <StoreLayout><div className="pt-0"><BlogPostPage /></div></StoreLayout>} />
+      <Route path="/search" component={() => <StoreLayout><div className="pt-24"><SearchPage /></div></StoreLayout>} />
+      <Route path="/contact" component={() => <StoreLayout><ContactPage /></StoreLayout>} />
+      <Route path="/sustainability" component={() => <StoreLayout><SustainabilityPage /></StoreLayout>} />
+      <Route path="/privacy" component={() => <StoreLayout><PrivacyPage /></StoreLayout>} />
+      <Route path="/terms" component={() => <StoreLayout><TermsPage /></StoreLayout>} />
+      <Route path="/shipping-returns" component={() => <StoreLayout><ShippingReturnsPage /></StoreLayout>} />
+      <Route path="/account" component={() => <StoreLayout><CustomerGuard><AccountPage /></CustomerGuard></StoreLayout>} />
+      <Route path="/account/orders" component={() => <StoreLayout><CustomerGuard><OrdersPage /></CustomerGuard></StoreLayout>} />
+      <Route path="/account/wishlist" component={() => <StoreLayout><CustomerGuard><WishlistPage /></CustomerGuard></StoreLayout>} />
+      <Route path="/account/settings" component={() => <StoreLayout><CustomerGuard><AccountSettingsPage /></CustomerGuard></StoreLayout>} />
+      <Route path="/account/addresses" component={() => <StoreLayout><CustomerGuard><AccountAddressesPage /></CustomerGuard></StoreLayout>} />
+      <Route path="/login" component={() => <AuthLayout><LoginPage /></AuthLayout>} />
+      <Route path="/forgot-password" component={() => <AuthLayout><ForgotPasswordPage /></AuthLayout>} />
+      <Route path="/reset-password" component={() => <AuthLayout><ResetPasswordPage /></AuthLayout>} />
+      <Route path="/register" component={() => <AuthLayout><RegisterPage /></AuthLayout>} />
+      <Route path="/admin/login" component={() => <AdminLoginPage />} />
+      <Route path="/admin/accept-invite" component={() => <AdminAcceptInvitePage />} />
+      <Route path="/admin" component={() => <AdminGuard><AdminDashboardPage /></AdminGuard>} />
+      <Route path="/admin/catalog" component={() => <AdminGuard><AdminCatalogPage /></AdminGuard>} />
+      <Route path="/admin/categories" component={() => <AdminGuard><AdminCategoriesPage /></AdminGuard>} />
+      <Route path="/admin/orders" component={() => <AdminGuard><AdminOrdersPage /></AdminGuard>} />
+      <Route path="/admin/products/new" component={() => <AdminGuard><AdminProductEditorPage /></AdminGuard>} />
+      <Route path="/admin/products/edit" component={() => <AdminGuard><AdminProductEditorPage /></AdminGuard>} />
+      <Route path="/admin/customers" component={() => <AdminGuard><AdminCustomersPage /></AdminGuard>} />
+      <Route path="/admin/analytics" component={() => <AdminGuard><AdminAnalyticsPage /></AdminGuard>} />
+      <Route path="/admin/channels" component={() => <AdminGuard><AdminChannelHubPage /></AdminGuard>} />
+      <Route path="/admin/channels/facebook" component={() => <AdminGuard><AdminFacebookPage /></AdminGuard>} />
+      <Route path="/admin/channels/instagram" component={() => <AdminGuard><AdminInstagramPage /></AdminGuard>} />
+      <Route path="/admin/channels/meta-commerce" component={() => <AdminGuard><AdminMetaCommercePage /></AdminGuard>} />
+      <Route path="/admin/channels/meta-ads" component={() => <AdminGuard><AdminMetaAdsPage /></AdminGuard>} />
+      <Route path="/admin/channels/whatsapp" component={() => <AdminGuard><AdminWhatsAppPage /></AdminGuard>} />
+      <Route path="/admin/channels/twitter" component={() => <AdminGuard><AdminTwitterPage /></AdminGuard>} />
+      <Route path="/admin/channels/analytics" component={() => <AdminGuard><AdminSocialAnalyticsPage /></AdminGuard>} />
+      <Route path="/admin/blog" component={() => <AdminGuard><AdminBlogPage /></AdminGuard>} />
+      <Route path="/admin/blog/new" component={() => <AdminGuard><AdminBlogEditorPage /></AdminGuard>} />
+      <Route path="/admin/blog/edit" component={() => <AdminGuard><AdminBlogEditorPage /></AdminGuard>} />
+      <Route path="/admin/media" component={() => <AdminGuard><AdminMediaPage /></AdminGuard>} />
+      <Route path="/admin/newsletter" component={() => <AdminGuard><AdminNewsletterPage /></AdminGuard>} />
+      <Route path="/admin/settings" component={() => <AdminGuard><AdminSettingsPage /></AdminGuard>} />
+      <Route path="/admin/team" component={() => <AdminGuard><AdminTeamPage /></AdminGuard>} />
+      <Route path="/admin/coupons" component={() => <AdminGuard><AdminCouponsPage /></AdminGuard>} />
+      <Route path="/admin/providers" component={() => <AdminGuard><AdminProvidersPage /></AdminGuard>} />
+      <Route component={NotFound} />
+    </Switch>
+  );
+}
+
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <AuthProvider>
+          <CartProvider>
+          <CurrencyProvider>
+            <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+              <div className="min-h-screen flex flex-col bg-white font-sans antialiased text-slate-900 selection:bg-slate-900 selection:text-white">
+                <Router />
+                <CookieBanner />
+              </div>
+            </WouterRouter>
+            <Toaster />
+          </CurrencyProvider>
+          </CartProvider>
+        </AuthProvider>
+      </TooltipProvider>
+    </QueryClientProvider>
+  );
+}
+
+export default App;
