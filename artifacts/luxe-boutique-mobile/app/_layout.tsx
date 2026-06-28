@@ -16,6 +16,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { CartProvider } from "@/contexts/CartContext";
+import { usePushNotifications } from "@/hooks/usePushNotifications";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -37,6 +38,11 @@ function RootLayoutNav() {
       <Stack.Screen name="checkout" options={{ headerShown: false }} />
     </Stack>
   );
+}
+
+function PushNotificationInitializer() {
+  usePushNotifications();
+  return null;
 }
 
 export default function RootLayout() {
@@ -63,6 +69,7 @@ export default function RootLayout() {
             <KeyboardProvider>
               <AuthProvider>
                 <CartProvider>
+                  <PushNotificationInitializer />
                   <RootLayoutNav />
                 </CartProvider>
               </AuthProvider>

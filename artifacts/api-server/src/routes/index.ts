@@ -9,6 +9,7 @@ import channelsRouter from "./channels";
 import facebookRouter from "./facebook";
 import twitterRouter from "./twitter";
 import whatsappRouter from "./whatsapp";
+import pushTokensRouter from "./push-tokens";
 
 const router: IRouter = Router();
 
@@ -22,5 +23,6 @@ router.use(channelsRouter);
 router.use(facebookRouter);
 router.use(twitterRouter);
 router.use(whatsappRouter);
+router.use(pushTokensRouter);
 
 export default router;

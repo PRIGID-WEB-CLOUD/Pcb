@@ -17,7 +17,35 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.replit.luxeboutiquemobile"
     },
-    "android": {},
+    "android": {
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "luxe-boutique-mobile",
+              "host": "product",
+              "pathPattern": ".*"
+            },
+            {
+              "scheme": "luxe-boutique-mobile",
+              "host": "orders"
+            },
+            {
+              "scheme": "luxe-boutique-mobile",
+              "host": "search"
+            },
+            {
+              "scheme": "luxe-boutique-mobile",
+              "host": "blog",
+              "pathPattern": ".*"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
+    },
     "web": {
       "favicon": "./assets/images/icon.png"
     },
@@ -29,7 +57,15 @@
         }
       ],
       "expo-font",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#8B6F47",
+          "defaultChannel": "default"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
