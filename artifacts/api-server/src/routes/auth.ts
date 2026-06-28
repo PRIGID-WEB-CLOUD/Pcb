@@ -101,7 +101,8 @@ router.post("/auth/admin/request-otp", (req, res) => {
   if (!admin) return res.status(404).json({ error: "No admin account found for this email. Bootstrap an admin first." });
   const code = String(Math.floor(100000 + Math.random() * 900000));
   otpStore.set(email, { code, email, expiresAt: Date.now() + 10 * 60 * 1000 });
-  res.json({ ok: true, devCode: code });
+  const isDev = process.env["NODE_ENV"] !== "production";
+  res.json({ ok: true, ...(isDev ? { devCode: code } : {}) });
 });
 
 router.post("/auth/admin/verify-otp", (req, res) => {
