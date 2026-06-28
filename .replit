@@ -28,6 +28,10 @@ args = "artifacts/api-server: api"
 task = "workflow.run"
 args = "artifacts/luxe-boutique-mobile: expo"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "artifacts/luxe-boutique-admin: admin"
+
 [[workflows.workflow]]
 name = "artifacts/luxe-boutique: web"
 author = "agent"
@@ -63,6 +67,18 @@ outputType = "webview"
 task = "shell.exec"
 args = "PORT=3002 pnpm --filter @workspace/luxe-boutique-mobile run dev"
 waitForPort = 3002
+
+[[workflows.workflow]]
+name = "artifacts/luxe-boutique-admin: admin"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "PORT=3003 pnpm --filter @workspace/luxe-boutique-admin run dev"
+waitForPort = 3003
+
+[workflows.workflow.metadata]
+outputType = "console"
 
 [agent]
 stack = "BEST_EFFORT_FALLBACK"

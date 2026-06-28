@@ -8,7 +8,6 @@ import { CartProvider } from "@/contexts/CartContext";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import CookieBanner from "@/components/CookieBanner";
-import AdminGuard from "@/components/AdminGuard";
 import CustomerGuard from "@/components/CustomerGuard";
 import HomePage from "@/pages/HomePage";
 import ProductsPage from "@/pages/ProductsPage";
@@ -18,8 +17,6 @@ import LoginPage from "@/pages/LoginPage";
 import RegisterPage from "@/pages/RegisterPage";
 import BlogPage from "@/pages/BlogPage";
 import BlogPostPage from "@/pages/BlogPostPage";
-import AdminBlogPage from "@/pages/admin/AdminBlogPage";
-import AdminBlogEditorPage from "@/pages/admin/AdminBlogEditorPage";
 import CheckoutPage from "@/pages/CheckoutPage";
 import CheckoutVerifyPage from "@/pages/CheckoutVerifyPage";
 import SearchPage from "@/pages/SearchPage";
@@ -34,29 +31,6 @@ import WishlistPage from "@/pages/WishlistPage";
 import AccountSettingsPage from "@/pages/AccountSettingsPage";
 import AccountAddressesPage from "@/pages/AccountAddressesPage";
 import ForgotPasswordPage from "@/pages/ForgotPasswordPage";
-import AdminDashboardPage from "@/pages/admin/AdminDashboardPage";
-import AdminCatalogPage from "@/pages/admin/AdminCatalogPage";
-import AdminOrdersPage from "@/pages/admin/AdminOrdersPage";
-import AdminProductEditorPage from "@/pages/admin/AdminProductEditorPage";
-import AdminAnalyticsPage from "@/pages/admin/AdminAnalyticsPage";
-import AdminCustomersPage from "@/pages/admin/AdminCustomersPage";
-import AdminCategoriesPage from "@/pages/admin/AdminCategoriesPage";
-import AdminChannelHubPage from "@/pages/admin/AdminChannelHubPage";
-import AdminFacebookPage from "@/pages/admin/AdminFacebookPage";
-import AdminInstagramPage from "@/pages/admin/AdminInstagramPage";
-import AdminMetaCommercePage from "@/pages/admin/AdminMetaCommercePage";
-import AdminMetaAdsPage from "@/pages/admin/AdminMetaAdsPage";
-import AdminTwitterPage from "@/pages/admin/AdminTwitterPage";
-import AdminWhatsAppPage from "@/pages/admin/AdminWhatsAppPage";
-import AdminSocialAnalyticsPage from "@/pages/admin/AdminSocialAnalyticsPage";
-import AdminMediaPage from "@/pages/admin/AdminMediaPage";
-import AdminNewsletterPage from "@/pages/admin/AdminNewsletterPage";
-import AdminSettingsPage from "@/pages/admin/AdminSettingsPage";
-import AdminTeamPage from "@/pages/admin/AdminTeamPage";
-import AdminLoginPage from "@/pages/admin/AdminLoginPage";
-import AdminAcceptInvitePage from "@/pages/admin/AdminAcceptInvitePage";
-import AdminCouponsPage from "@/pages/admin/AdminCouponsPage";
-import AdminProvidersPage from "@/pages/admin/AdminProvidersPage";
 import ResetPasswordPage from "@/pages/ResetPasswordPage";
 import NotFound from "@/pages/NotFound";
 
@@ -107,33 +81,6 @@ function Router() {
       <Route path="/forgot-password" component={() => <AuthLayout><ForgotPasswordPage /></AuthLayout>} />
       <Route path="/reset-password" component={() => <AuthLayout><ResetPasswordPage /></AuthLayout>} />
       <Route path="/register" component={() => <AuthLayout><RegisterPage /></AuthLayout>} />
-      <Route path="/admin/login" component={() => <AdminLoginPage />} />
-      <Route path="/admin/accept-invite" component={() => <AdminAcceptInvitePage />} />
-      <Route path="/admin" component={() => <AdminGuard><AdminDashboardPage /></AdminGuard>} />
-      <Route path="/admin/catalog" component={() => <AdminGuard><AdminCatalogPage /></AdminGuard>} />
-      <Route path="/admin/categories" component={() => <AdminGuard><AdminCategoriesPage /></AdminGuard>} />
-      <Route path="/admin/orders" component={() => <AdminGuard><AdminOrdersPage /></AdminGuard>} />
-      <Route path="/admin/products/new" component={() => <AdminGuard><AdminProductEditorPage /></AdminGuard>} />
-      <Route path="/admin/products/edit" component={() => <AdminGuard><AdminProductEditorPage /></AdminGuard>} />
-      <Route path="/admin/customers" component={() => <AdminGuard><AdminCustomersPage /></AdminGuard>} />
-      <Route path="/admin/analytics" component={() => <AdminGuard><AdminAnalyticsPage /></AdminGuard>} />
-      <Route path="/admin/channels" component={() => <AdminGuard><AdminChannelHubPage /></AdminGuard>} />
-      <Route path="/admin/channels/facebook" component={() => <AdminGuard><AdminFacebookPage /></AdminGuard>} />
-      <Route path="/admin/channels/instagram" component={() => <AdminGuard><AdminInstagramPage /></AdminGuard>} />
-      <Route path="/admin/channels/meta-commerce" component={() => <AdminGuard><AdminMetaCommercePage /></AdminGuard>} />
-      <Route path="/admin/channels/meta-ads" component={() => <AdminGuard><AdminMetaAdsPage /></AdminGuard>} />
-      <Route path="/admin/channels/whatsapp" component={() => <AdminGuard><AdminWhatsAppPage /></AdminGuard>} />
-      <Route path="/admin/channels/twitter" component={() => <AdminGuard><AdminTwitterPage /></AdminGuard>} />
-      <Route path="/admin/channels/analytics" component={() => <AdminGuard><AdminSocialAnalyticsPage /></AdminGuard>} />
-      <Route path="/admin/blog" component={() => <AdminGuard><AdminBlogPage /></AdminGuard>} />
-      <Route path="/admin/blog/new" component={() => <AdminGuard><AdminBlogEditorPage /></AdminGuard>} />
-      <Route path="/admin/blog/edit" component={() => <AdminGuard><AdminBlogEditorPage /></AdminGuard>} />
-      <Route path="/admin/media" component={() => <AdminGuard><AdminMediaPage /></AdminGuard>} />
-      <Route path="/admin/newsletter" component={() => <AdminGuard><AdminNewsletterPage /></AdminGuard>} />
-      <Route path="/admin/settings" component={() => <AdminGuard><AdminSettingsPage /></AdminGuard>} />
-      <Route path="/admin/team" component={() => <AdminGuard><AdminTeamPage /></AdminGuard>} />
-      <Route path="/admin/coupons" component={() => <AdminGuard><AdminCouponsPage /></AdminGuard>} />
-      <Route path="/admin/providers" component={() => <AdminGuard><AdminProvidersPage /></AdminGuard>} />
       <Route component={NotFound} />
     </Switch>
   );
