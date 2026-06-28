@@ -20,6 +20,10 @@ author = "agent"
 task = "workflow.run"
 args = "artifacts/luxe-boutique: web"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "artifacts/api-server: api"
+
 [[workflows.workflow]]
 name = "artifacts/luxe-boutique: web"
 author = "agent"
@@ -31,6 +35,18 @@ outputType = "webview"
 task = "shell.exec"
 args = "PORT=22805 BASE_PATH=/ pnpm --filter @workspace/luxe-boutique run dev"
 waitForPort = 22805
+
+[[workflows.workflow]]
+name = "artifacts/api-server: api"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "PORT=3001 pnpm --filter @workspace/api-server run dev"
+waitForPort = 3001
+
+[workflows.workflow.metadata]
+outputType = "console"
 
 [agent]
 stack = "PNPM_WORKSPACE"
