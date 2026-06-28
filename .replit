@@ -65,7 +65,7 @@ args = "PORT=3002 pnpm --filter @workspace/luxe-boutique-mobile run dev"
 waitForPort = 3002
 
 [agent]
-stack = "PNPM_WORKSPACE"
+stack = "BEST_EFFORT_FALLBACK"
 expertMode = true
 
 [postMerge]
