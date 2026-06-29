@@ -11,11 +11,13 @@ import twitterRouter from "./twitter";
 import whatsappRouter from "./whatsapp";
 import pushTokensRouter from "./push-tokens";
 import adminStatsRouter from "./admin-stats";
+import eventsRouter from "./events";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
 router.use(authRouter);
+router.use(eventsRouter);
 router.use(storeRouter);
 router.use(adminStatsRouter);
 router.use(newsletterRouter);

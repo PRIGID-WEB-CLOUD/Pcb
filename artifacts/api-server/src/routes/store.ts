@@ -5,6 +5,7 @@ import { eq, desc, sql } from "drizzle-orm";
 import { requireAdmin } from "../middleware/requireAdmin";
 import { validate } from "../middleware/validate";
 import { z } from "zod";
+import { eventBus } from "../lib/eventBus";
 
 const router = Router();
 
@@ -149,12 +150,38 @@ router.get("/orders/:id", requireAdmin, async (req, res) => {
   res.json(rows[0]);
 });
 
+// Public checkout endpoint — no auth required (called by storefront)
+router.post("/orders", async (req, res) => {
+  const { customerName, customerEmail, total, items } = req.body as {
+    customerName?: string; customerEmail?: string; total?: number; items?: unknown[];
+  };
+  if (!customerEmail || !total) return res.status(400).json({ error: "customerEmail and total are required" });
+  const [order] = await db.insert(ordersTable).values({
+    id: randomUUID(),
+    customerName: customerName ?? "Guest",
+    customerEmail,
+    total: Math.round(total),
+    status: "PENDING",
+    items: items ?? [],
+  }).returning();
+  eventBus.publish({ type: "new_order", payload: {
+    id: order.id,
+    customerName: order.customerName ?? "Guest",
+    customerEmail: order.customerEmail,
+    total: order.total,
+    status: order.status,
+    createdAt: order.createdAt.toISOString(),
+  }});
+  res.status(201).json(order);
+});
+
 router.put("/orders/:id", requireAdmin, async (req, res) => {
   const allowed = ["status"];
   const updates: Record<string, unknown> = {};
   for (const k of allowed) if (k in req.body) updates[k] = req.body[k];
   const rows = await db.update(ordersTable).set(updates).where(eq(ordersTable.id, req.params.id)).returning();
   if (!rows[0]) return res.status(404).json({ error: "Order not found" });
+  eventBus.publish({ type: "order_updated", payload: { id: rows[0].id, status: rows[0].status } });
   res.json(rows[0]);
 });
 

@@ -34,7 +34,8 @@ const channelNavItems = [
   { icon: "share",        label: "X / Twitter",    href: "/channels/twitter"        },
 ];
 
-type Order = { id: string; status: string; total: number; createdAt: string };
+type Order = { id: string; customerName?: string | null; customerEmail: string; status: string; total: number; createdAt: string };
+type Toast = { id: string; order: Order };
 
 function getInitials(name: string | null | undefined, email: string) {
   if (name && name.trim()) {
@@ -64,6 +65,70 @@ const statusIcon: Record<string, { icon: string; cls: string }> = {
   CANCELLED:  { icon: "cancel",          cls: "text-red-500 bg-red-50"       },
 };
 
+function OrderToast({ toast, onDismiss }: { toast: Toast; onDismiss: (id: string) => void }) {
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    // Slide in
+    const t1 = setTimeout(() => setVisible(true), 20);
+    // Auto-dismiss after 6s
+    const t2 = setTimeout(() => {
+      setVisible(false);
+      setTimeout(() => onDismiss(toast.id), 400);
+    }, 6000);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, [toast.id, onDismiss]);
+
+  return (
+    <div
+      className={`w-80 bg-white rounded-xl shadow-[0_8px_40px_rgba(15,23,42,0.18)] border border-slate-100 overflow-hidden transition-all duration-400 ${
+        visible ? "translate-x-0 opacity-100" : "translate-x-full opacity-0"
+      }`}
+      style={{ transition: "transform 0.35s cubic-bezier(0.34,1.56,0.64,1), opacity 0.35s ease" }}
+    >
+      {/* Progress bar */}
+      <div className="h-0.5 bg-[#006c49] animate-[shrink_6s_linear_forwards]" style={{ transformOrigin: "left" }} />
+
+      <div className="flex items-start gap-3 px-4 py-4">
+        {/* Icon */}
+        <div className="w-10 h-10 rounded-xl bg-[#006c49]/10 flex items-center justify-center shrink-0">
+          <span className="material-symbols-outlined text-[#006c49] text-xl">shopping_bag</span>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-2 mb-0.5">
+            <p className="font-[Manrope] font-bold text-[13px] text-[#0b1c30]">New Order!</p>
+            <span className="text-[10px] text-[#7c839b] font-[Manrope] shrink-0">just now</span>
+          </div>
+          <p className="text-[12px] text-[#45464d] font-[Manrope] truncate">
+            {toast.order.customerName || toast.order.customerEmail}
+          </p>
+          <p className="text-[12px] font-[Manrope] font-bold text-[#006c49] mt-1">
+            ${(toast.order.total / 100).toFixed(2)} · PENDING
+          </p>
+        </div>
+
+        {/* Dismiss */}
+        <button
+          onClick={() => { setVisible(false); setTimeout(() => onDismiss(toast.id), 400); }}
+          className="shrink-0 w-6 h-6 flex items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+        >
+          <span className="material-symbols-outlined text-sm">close</span>
+        </button>
+      </div>
+
+      <div className="px-4 pb-3">
+        <Link href="/orders" onClick={() => onDismiss(toast.id)}>
+          <button className="w-full py-2 text-[10px] font-[Manrope] font-bold uppercase tracking-widest text-white bg-[#006c49] hover:bg-black transition-colors rounded-lg">
+            View Order
+          </button>
+        </Link>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminLayout({ children, sidebar = "main" }: AdminLayoutProps) {
   const [location]  = useLocation();
   const { user, logout } = useAuth();
@@ -73,6 +138,8 @@ export default function AdminLayout({ children, sidebar = "main" }: AdminLayoutP
   const [showUser,  setShowUser]  = useState(false);
   const [orders,    setOrders]    = useState<Order[]>([]);
   const [seenIds,   setSeenIds]   = useState<Set<string>>(new Set());
+  const [toasts,    setToasts]    = useState<Toast[]>([]);
+  const [sseStatus, setSseStatus] = useState<"connecting" | "live" | "offline">("connecting");
 
   const notifRef = useRef<HTMLDivElement>(null);
   const userRef  = useRef<HTMLDivElement>(null);
@@ -82,6 +149,7 @@ export default function AdminLayout({ children, sidebar = "main" }: AdminLayoutP
   const contentL = collapsed ? "ml-[68px]" : "ml-64";
   const topbarL  = collapsed ? "left-[68px]" : "left-64";
 
+  // ── Initial fetch ──────────────────────────────────────────────────────────
   const fetchOrders = useCallback(async () => {
     try {
       const res = await fetch("/api/orders");
@@ -91,7 +159,58 @@ export default function AdminLayout({ children, sidebar = "main" }: AdminLayoutP
 
   useEffect(() => { fetchOrders(); }, [fetchOrders]);
 
-  // Close dropdowns on outside click
+  // ── SSE real-time connection ──────────────────────────────────────────────
+  useEffect(() => {
+    let es: EventSource | null = null;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let retryDelay = 2000;
+
+    function connect() {
+      setSseStatus("connecting");
+      es = new EventSource("/api/admin/events", { withCredentials: true });
+
+      es.addEventListener("connected", () => {
+        setSseStatus("live");
+        retryDelay = 2000;
+      });
+
+      es.addEventListener("new_order", (e) => {
+        const order: Order = JSON.parse(e.data);
+        setOrders((prev) => {
+          const exists = prev.some((o) => o.id === order.id);
+          return exists ? prev : [order, ...prev];
+        });
+        setToasts((prev) => [...prev, { id: `toast-${order.id}`, order }]);
+      });
+
+      es.addEventListener("order_updated", (e) => {
+        const { id, status } = JSON.parse(e.data) as { id: string; status: string };
+        setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status } : o)));
+      });
+
+      es.addEventListener("heartbeat", () => {
+        setSseStatus("live");
+      });
+
+      es.onerror = () => {
+        setSseStatus("offline");
+        es?.close();
+        retryTimer = setTimeout(() => {
+          retryDelay = Math.min(retryDelay * 1.5, 30_000);
+          connect();
+        }, retryDelay);
+      };
+    }
+
+    connect();
+
+    return () => {
+      es?.close();
+      if (retryTimer) clearTimeout(retryTimer);
+    };
+  }, []);
+
+  // ── Close dropdowns on outside click ────────────────────────────────────
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (notifRef.current && !notifRef.current.contains(e.target as Node)) setShowNotif(false);
@@ -101,11 +220,13 @@ export default function AdminLayout({ children, sidebar = "main" }: AdminLayoutP
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
-  const recentOrders  = [...orders]
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    .slice(0, 8);
+  const dismissToast = useCallback((id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
+
+  const recentOrders     = [...orders].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 8);
   const actionableOrders = orders.filter((o) => o.status === "PENDING" || o.status === "PROCESSING");
-  const unreadCount = actionableOrders.filter((o) => !seenIds.has(o.id)).length;
+  const unreadCount      = actionableOrders.filter((o) => !seenIds.has(o.id)).length;
 
   const openNotif = () => {
     setShowNotif((v) => !v);
@@ -138,7 +259,18 @@ export default function AdminLayout({ children, sidebar = "main" }: AdminLayoutP
         .admin-topbar  { transition: left  0.22s cubic-bezier(0.4,0,0.2,1); }
         .admin-main    { transition: margin-left 0.22s cubic-bezier(0.4,0,0.2,1); }
         .sidebar-label { transition: opacity 0.15s ease, max-width 0.22s cubic-bezier(0.4,0,0.2,1), margin 0.22s; overflow: hidden; white-space: nowrap; }
+        @keyframes shrink { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+        @keyframes pulse-dot { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
       `}</style>
+
+      {/* ── Toast stack (bottom-right) ── */}
+      <div className="fixed bottom-6 right-6 z-[9999] flex flex-col gap-3 items-end pointer-events-none">
+        {toasts.map((t) => (
+          <div key={t.id} className="pointer-events-auto">
+            <OrderToast toast={t} onDismiss={dismissToast} />
+          </div>
+        ))}
+      </div>
 
       {/* ── Sidebar ── */}
       <aside className={`admin-sidebar fixed left-0 top-0 h-screen ${sidebarW} bg-slate-50 border-r border-slate-200 flex flex-col z-40 overflow-hidden`}>
@@ -245,6 +377,19 @@ export default function AdminLayout({ children, sidebar = "main" }: AdminLayoutP
         </div>
 
         <div className="flex items-center gap-2 ml-auto">
+
+          {/* ── Live indicator ── */}
+          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-[Manrope] font-bold uppercase tracking-widest
+            ${sseStatus === 'live' ? 'text-[#006c49] bg-[#006c49]/8' : sseStatus === 'connecting' ? 'text-amber-600 bg-amber-50' : 'text-red-500 bg-red-50'}">
+            <span
+              className={`w-1.5 h-1.5 rounded-full ${sseStatus === "live" ? "bg-[#006c49]" : sseStatus === "connecting" ? "bg-amber-500" : "bg-red-500"}`}
+              style={{ animation: sseStatus === "live" ? "pulse-dot 2s ease-in-out infinite" : sseStatus === "connecting" ? "pulse-dot 0.8s ease-in-out infinite" : "none" }}
+            />
+            <span className={sseStatus === "live" ? "text-[#006c49]" : sseStatus === "connecting" ? "text-amber-600" : "text-red-500"}>
+              {sseStatus === "live" ? "Live" : sseStatus === "connecting" ? "Connecting…" : "Offline"}
+            </span>
+          </div>
+
           {/* Store link */}
           <Link href="/" className="w-9 h-9 flex items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 hover:text-[#006c49] transition-colors" title="Back to Store">
             <span className="material-symbols-outlined text-xl">storefront</span>
@@ -276,9 +421,15 @@ export default function AdminLayout({ children, sidebar = "main" }: AdminLayoutP
                       </p>
                     )}
                   </div>
-                  <Link href="/orders" onClick={() => setShowNotif(false)}>
-                    <span className="text-[10px] font-[Manrope] font-bold uppercase tracking-widest text-[#006c49] hover:underline cursor-pointer">View All</span>
-                  </Link>
+                  <div className="flex items-center gap-3">
+                    <div className={`flex items-center gap-1 text-[9px] font-[Manrope] font-bold uppercase tracking-widest ${sseStatus === "live" ? "text-[#006c49]" : "text-amber-500"}`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${sseStatus === "live" ? "bg-[#006c49]" : "bg-amber-500"}`} />
+                      {sseStatus}
+                    </div>
+                    <Link href="/orders" onClick={() => setShowNotif(false)}>
+                      <span className="text-[10px] font-[Manrope] font-bold uppercase tracking-widest text-[#006c49] hover:underline cursor-pointer">View All</span>
+                    </Link>
+                  </div>
                 </div>
 
                 <div className="max-h-80 overflow-y-auto divide-y divide-slate-50">
@@ -351,7 +502,6 @@ export default function AdminLayout({ children, sidebar = "main" }: AdminLayoutP
 
             {showUser && (
               <div className="absolute right-0 top-12 w-72 bg-white rounded-xl shadow-[0_8px_40px_rgba(15,23,42,0.15)] border border-slate-100 z-50 overflow-hidden">
-                {/* Profile header */}
                 <div className="px-5 py-5 flex items-center gap-4 border-b border-slate-100">
                   <div className="w-12 h-12 rounded-full bg-black text-white flex items-center justify-center font-bold text-base shrink-0 select-none">
                     {user ? getInitials(user.name, user.email) : "?"}
@@ -370,7 +520,6 @@ export default function AdminLayout({ children, sidebar = "main" }: AdminLayoutP
                   </div>
                 </div>
 
-                {/* Menu items */}
                 <div className="py-2">
                   <Link href="/" onClick={() => setShowUser(false)}>
                     <div className="flex items-center gap-3 px-5 py-2.5 hover:bg-slate-50 cursor-pointer transition-colors">
