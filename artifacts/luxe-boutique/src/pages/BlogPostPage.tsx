@@ -180,7 +180,7 @@ export default function BlogPostPage() {
 
           <div className="flex items-center gap-4 pb-10 border-b border-slate-100">
             <div className="w-10 h-10 bg-slate-900 rounded-full flex items-center justify-center text-white font-bold text-sm">
-              {post.author.charAt(0).toUpperCase()}
+              {post.author?.charAt(0).toUpperCase() ?? "?"}
             </div>
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-900">{post.author}</p>
