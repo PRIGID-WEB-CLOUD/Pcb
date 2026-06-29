@@ -12,6 +12,7 @@ import whatsappRouter from "./whatsapp";
 import pushTokensRouter from "./push-tokens";
 import adminStatsRouter from "./admin-stats";
 import eventsRouter from "./events";
+import eproloRouter from "./eprolo";
 
 const router: IRouter = Router();
 
@@ -28,5 +29,6 @@ router.use(facebookRouter);
 router.use(twitterRouter);
 router.use(whatsappRouter);
 router.use(pushTokensRouter);
+router.use(eproloRouter);
 
 export default router;

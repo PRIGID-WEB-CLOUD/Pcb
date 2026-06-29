@@ -1,6 +1,8 @@
 import { Router } from "express";
 import { randomUUID } from "crypto";
 import { requireAdmin } from "../middleware/requireAdmin";
+import { eprolo } from "../services/eprolo";
+import { setEproloConfig } from "./eprolo";
 
 const router = Router();
 router.use(requireAdmin);
@@ -9,7 +11,13 @@ router.use(requireAdmin);
 
 interface SettingsRecord { [key: string]: string }
 interface ApiKey { id: string; name: string; keyPrefix: string; rawKey: string; createdAt: string; lastUsed: string | null; revokedAt: string | null; usageCount: number; }
-interface Provider { id: string; name: string; label: string; description: string; mode: string; enabled: boolean; connected: boolean; apiKey: string | null; }
+interface Provider {
+  id: string; name: string; label: string; description: string;
+  mode: string; enabled: boolean; connected: boolean;
+  apiKey: string | null; apiSecret: string | null;
+  webhookUrl: string | null; lastSyncAt: string | null; lastError: string | null;
+  updatedAt: string; logoUrl: string | null; storeId: string | null;
+}
 
 let settings: SettingsRecord = {
   store_name:                  "LUXE BOUTIQUE",
@@ -39,10 +47,12 @@ let apiKeys: ApiKey[] = [
   { id: randomUUID(), name: "Production Key", keyPrefix: _seed.keyPrefix, rawKey: _seed.rawKey, createdAt: new Date(Date.now() - 86400000 * 30).toISOString(), lastUsed: new Date(Date.now() - 3600000).toISOString(), revokedAt: null, usageCount: 148 },
 ];
 
+const now = new Date().toISOString();
 let providers: Provider[] = [
-  { id: randomUUID(), name: "paystack",    label: "Paystack",    description: "Accept card payments via Paystack (NGN, GHS, ZAR, USD).",  mode: "live", enabled: false, connected: false, apiKey: null },
-  { id: randomUUID(), name: "flutterwave", label: "Flutterwave", description: "Multi-currency payments via Flutterwave across Africa.",     mode: "live", enabled: false, connected: false, apiKey: null },
-  { id: randomUUID(), name: "stripe",      label: "Stripe",      description: "Global card payments via Stripe (all major currencies).",   mode: "live", enabled: false, connected: false, apiKey: null },
+  { id: randomUUID(), name: "eprolo",      label: "Eprolo",      description: "Dropshipping & fulfillment — browse the Eprolo catalog, import products, and auto-forward orders.",  mode: "live", enabled: false, connected: false, apiKey: null, apiSecret: null, webhookUrl: null, lastSyncAt: null, lastError: null, updatedAt: now, logoUrl: null, storeId: null },
+  { id: randomUUID(), name: "paystack",    label: "Paystack",    description: "Accept card payments via Paystack (NGN, GHS, ZAR, USD).",       mode: "live", enabled: false, connected: false, apiKey: null, apiSecret: null, webhookUrl: null, lastSyncAt: null, lastError: null, updatedAt: now, logoUrl: null, storeId: null },
+  { id: randomUUID(), name: "flutterwave", label: "Flutterwave", description: "Multi-currency payments via Flutterwave across Africa.",          mode: "live", enabled: false, connected: false, apiKey: null, apiSecret: null, webhookUrl: null, lastSyncAt: null, lastError: null, updatedAt: now, logoUrl: null, storeId: null },
+  { id: randomUUID(), name: "stripe",      label: "Stripe",      description: "Global card payments via Stripe (all major currencies).",        mode: "live", enabled: false, connected: false, apiKey: null, apiSecret: null, webhookUrl: null, lastSyncAt: null, lastError: null, updatedAt: now, logoUrl: null, storeId: null },
 ];
 
 // ── Settings ──────────────────────────────────────────────────────────────────
@@ -108,17 +118,32 @@ router.delete("/apikeys/:id/permanent", (req, res) => {
 
 // ── Providers ─────────────────────────────────────────────────────────────────
 
+function safeProvider(p: Provider) {
+  return { ...p, apiKey: p.apiKey ? `${p.apiKey.slice(0, 6)}…` : null, apiSecret: p.apiSecret ? "●●●●●●●●" : null };
+}
+
 router.get("/providers", (_req, res) => {
-  res.json(providers.map((p) => ({ ...p, apiKey: p.apiKey ? `${p.apiKey.slice(0, 8)}…` : null })));
+  res.json(providers.map(safeProvider));
 });
 
 router.put("/providers/:name", (req, res) => {
   const { name } = req.params;
   const idx = providers.findIndex((p) => p.name === name);
   if (idx === -1) return res.status(404).json({ error: "Provider not found" });
-  if (req.body.apiKey) providers[idx].apiKey = req.body.apiKey;
-  providers[idx] = { ...providers[idx], ...req.body, apiKey: req.body.apiKey ?? providers[idx].apiKey };
-  res.json({ ...providers[idx], apiKey: providers[idx].apiKey ? `${providers[idx].apiKey!.slice(0, 8)}…` : null });
+  const raw = req.body as Partial<Provider>;
+  if (raw.apiKey)    providers[idx].apiKey    = raw.apiKey;
+  if (raw.apiSecret) providers[idx].apiSecret = raw.apiSecret;
+  if (raw.storeId !== undefined) providers[idx].storeId = raw.storeId;
+  if (raw.enabled  !== undefined) providers[idx].enabled = raw.enabled;
+  providers[idx].updatedAt = new Date().toISOString();
+
+  // Keep eprolo service in sync
+  if (name === "eprolo") {
+    const { apiKey, apiSecret } = providers[idx];
+    setEproloConfig(apiKey && apiSecret ? { apiKey, apiSecret } : null);
+  }
+
+  res.json(safeProvider(providers[idx]));
 });
 
 router.post("/providers/:name/connect", async (req, res) => {
@@ -127,36 +152,34 @@ router.post("/providers/:name/connect", async (req, res) => {
   if (idx === -1) return res.status(404).json({ error: "Provider not found" });
 
   const provider = providers[idx];
-  const apiKey = provider.apiKey;
 
-  if (!apiKey) {
+  if (!provider.apiKey) {
     return res.status(400).json({ connected: false, error: "No API key saved — add your key first." });
+  }
+
+  if (name === "eprolo") {
+    if (!provider.apiSecret) return res.status(400).json({ connected: false, error: "Eprolo requires both API Key and API Secret." });
+    const result = await eprolo.testConnection({ apiKey: provider.apiKey, apiSecret: provider.apiSecret });
+    providers[idx].connected = result.ok;
+    providers[idx].lastError  = result.ok ? null : result.message;
+    if (result.ok) setEproloConfig({ apiKey: provider.apiKey, apiSecret: provider.apiSecret });
+    return res.json({ connected: result.ok, message: result.message });
   }
 
   if (name === "paystack") {
     try {
-      const r = await fetch("https://api.paystack.co/bank", { headers: { Authorization: `Bearer ${apiKey}` } });
-      if (r.ok) {
-        providers[idx].connected = true;
-        return res.json({ connected: true });
-      }
+      const r = await fetch("https://api.paystack.co/bank", { headers: { Authorization: `Bearer ${provider.apiKey}` } });
+      if (r.ok) { providers[idx].connected = true; return res.json({ connected: true }); }
       return res.json({ connected: false, error: "Invalid Paystack secret key." });
-    } catch {
-      return res.json({ connected: false, error: "Could not reach Paystack API." });
-    }
+    } catch { return res.json({ connected: false, error: "Could not reach Paystack API." }); }
   }
 
   if (name === "flutterwave") {
     try {
-      const r = await fetch("https://api.flutterwave.com/v3/banks/NG", { headers: { Authorization: `Bearer ${apiKey}` } });
-      if (r.ok) {
-        providers[idx].connected = true;
-        return res.json({ connected: true });
-      }
+      const r = await fetch("https://api.flutterwave.com/v3/banks/NG", { headers: { Authorization: `Bearer ${provider.apiKey}` } });
+      if (r.ok) { providers[idx].connected = true; return res.json({ connected: true }); }
       return res.json({ connected: false, error: "Invalid Flutterwave secret key." });
-    } catch {
-      return res.json({ connected: false, error: "Could not reach Flutterwave API." });
-    }
+    } catch { return res.json({ connected: false, error: "Could not reach Flutterwave API." }); }
   }
 
   providers[idx].connected = true;

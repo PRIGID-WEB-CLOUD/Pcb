@@ -19,6 +19,20 @@ type Provider = {
   updatedAt: string;
 };
 
+type EproloProduct = {
+  id?: string;
+  productid?: string;
+  title?: string;
+  name?: string;
+  cost?: number;
+  price?: number;
+  body_html?: string;
+  description?: string;
+  imagelist?: { src: string }[];
+  product_type?: string;
+  vendor?: string;
+};
+
 const PROVIDER_ICONS: Record<string, string> = {
   printful: "🖨️",
   eprolo:   "📦",
@@ -39,6 +53,14 @@ export default function AdminProvidersPage() {
   const [testing, setTesting]   = useState<string | null>(null);
   const [testResult, setTestResult] = useState<Record<string, { ok: boolean; msg: string }>>({});
 
+  // Eprolo catalog browser state
+  const [browseOpen, setBrowseOpen] = useState(false);
+  const [browsePage, setBrowsePage] = useState(1);
+  const [importing, setImporting] = useState<string | null>(null);
+  const [importResults, setImportResults] = useState<Record<string, { ok: boolean; msg: string }>>({});
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<string | null>(null);
+
   const { data: providers = [], isLoading } = useQuery<Provider[]>({
     queryKey: ["admin-providers"],
     queryFn: async () => {
@@ -46,6 +68,18 @@ export default function AdminProvidersPage() {
       if (!res.ok) throw new Error("Failed to load providers");
       return res.json();
     },
+  });
+
+  const { data: eproloProducts, isLoading: productsLoading, refetch: refetchProducts } = useQuery<EproloProduct[]>({
+    queryKey: ["eprolo-products", browsePage],
+    queryFn: async () => {
+      const res = await fetch(`/api/eprolo/products?page_num=${browsePage}&page_size=12`);
+      if (!res.ok) { const e = await res.json(); throw new Error(e.error || "Failed"); }
+      const d = await res.json();
+      return d.products ?? [];
+    },
+    enabled: browseOpen,
+    retry: false,
   });
 
   const saveMutation = useMutation({
@@ -74,7 +108,7 @@ export default function AdminProvidersPage() {
       const data = await res.json();
       setTestResult(prev => ({
         ...prev,
-        [p.name]: { ok: data.connected, msg: data.connected ? "Connected successfully!" : (data.error || "Connection failed") },
+        [p.name]: { ok: data.connected, msg: data.connected ? (data.message || "Connected successfully!") : (data.error || data.message || "Connection failed") },
       }));
       queryClient.invalidateQueries({ queryKey: ["admin-providers"] });
     } catch {
@@ -105,13 +139,46 @@ export default function AdminProvidersPage() {
 
   const openConfig = (p: Provider) => {
     setActiveProvider(p);
-    setFormKey(p.apiKey ?? "");
-    setFormSecret(p.apiSecret ?? "");
+    setFormKey("");
+    setFormSecret("");
     setFormStore(p.storeId ?? "");
+  };
+
+  const handleSyncInventory = async () => {
+    setSyncing(true);
+    setSyncResult(null);
+    try {
+      const res = await fetch("/api/eprolo/sync", { method: "POST" });
+      const d = await res.json();
+      setSyncResult(d.message ?? (d.ok ? "Synced!" : (d.error ?? "Sync failed")));
+    } catch {
+      setSyncResult("Sync request failed");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const handleImport = async (product: EproloProduct) => {
+    const key = product.id ?? product.productid ?? "?";
+    setImporting(key);
+    try {
+      const res = await fetch("/api/eprolo/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ product }),
+      });
+      const d = await res.json();
+      setImportResults(prev => ({ ...prev, [key]: { ok: d.ok ?? false, msg: d.message ?? (d.error ?? "Failed") } }));
+    } catch {
+      setImportResults(prev => ({ ...prev, [key]: { ok: false, msg: "Request failed" } }));
+    } finally {
+      setImporting(null);
+    }
   };
 
   const connected = providers.filter(p => p.connected).length;
   const enabled   = providers.filter(p => p.enabled).length;
+  const eproloProvider = providers.find(p => p.name === "eprolo");
 
   return (
     <AdminLayout sidebar="main">
@@ -151,8 +218,9 @@ export default function AdminProvidersPage() {
             {providers.map(p => {
               const result = testResult[p.name];
               const isConnecting = testing === p.name;
+              const isEprolo = p.name === "eprolo";
               return (
-                <div key={p.name} className="bg-white rounded-xl shadow-[0px_4px_20px_rgba(15,23,42,0.05)] overflow-hidden">
+                <div key={p.name} className={`bg-white rounded-xl shadow-[0px_4px_20px_rgba(15,23,42,0.05)] overflow-hidden ${isEprolo ? "lg:col-span-2" : ""}`}>
                   <div className="p-6">
                     <div className="flex items-start justify-between gap-4 mb-4">
                       <div className="flex items-center gap-4">
@@ -176,6 +244,12 @@ export default function AdminProvidersPage() {
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-[Manrope] font-bold uppercase tracking-widest text-blue-600 bg-blue-50">
                                 <span className="material-symbols-outlined text-[12px]">power</span>
                                 Enabled
+                              </span>
+                            )}
+                            {isEprolo && p.connected && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-[Manrope] font-bold uppercase tracking-widest text-purple-600 bg-purple-50">
+                                <span className="material-symbols-outlined text-[12px]">inventory_2</span>
+                                Dropshipping
                               </span>
                             )}
                           </div>
@@ -203,6 +277,14 @@ export default function AdminProvidersPage() {
                       </div>
                     )}
 
+                    {/* Sync result */}
+                    {isEprolo && syncResult && (
+                      <div className="mb-4 p-3 rounded-lg bg-[#eff4ff] text-[#1a3bb3] text-xs font-[Manrope] font-bold flex items-center gap-2">
+                        <span className="material-symbols-outlined text-sm">sync</span>
+                        {syncResult}
+                      </div>
+                    )}
+
                     {/* Error from last attempt */}
                     {p.lastError && !result && (
                       <div className="mb-4 p-3 rounded-lg bg-[#ffdad6] text-[#ba1a1a] text-xs font-[Manrope]">
@@ -215,6 +297,21 @@ export default function AdminProvidersPage() {
                       <p className="text-[11px] font-[Manrope] text-[#7c839b] mb-4">
                         Last synced: {fmtDate(p.lastSyncAt)}
                       </p>
+                    )}
+
+                    {/* Credential indicator */}
+                    {isEprolo && (p.apiKey || p.apiSecret) && (
+                      <div className="flex items-center gap-3 mb-4 p-3 bg-[#f8f9ff] rounded-lg">
+                        <div className="flex items-center gap-1.5 text-[11px] font-[Manrope] text-[#45464d]">
+                          <span className="material-symbols-outlined text-[14px] text-[#006c49]">key</span>
+                          API Key: <code className="font-mono">{p.apiKey ?? "—"}</code>
+                        </div>
+                        <div className="w-px h-4 bg-[#e5eeff]" />
+                        <div className="flex items-center gap-1.5 text-[11px] font-[Manrope] text-[#45464d]">
+                          <span className="material-symbols-outlined text-[14px] text-[#006c49]">lock</span>
+                          Secret: {p.apiSecret ?? "—"}
+                        </div>
+                      </div>
                     )}
 
                     {/* Actions */}
@@ -231,6 +328,20 @@ export default function AdminProvidersPage() {
                             <span className={`material-symbols-outlined text-sm ${isConnecting ? "animate-spin" : ""}`}>{isConnecting ? "autorenew" : "sync"}</span>
                             {isConnecting ? "Testing…" : "Re-test"}
                           </button>
+                          {isEprolo && (
+                            <>
+                              <button onClick={handleSyncInventory} disabled={syncing}
+                                className="px-4 py-2 border border-purple-200 text-purple-700 font-[Manrope] font-bold text-xs tracking-widest uppercase hover:bg-purple-50 transition-all rounded-lg flex items-center gap-1.5 disabled:opacity-50">
+                                <span className={`material-symbols-outlined text-sm ${syncing ? "animate-spin" : ""}`}>{syncing ? "autorenew" : "inventory_2"}</span>
+                                {syncing ? "Syncing…" : "Sync Stock"}
+                              </button>
+                              <button onClick={() => { setBrowseOpen(true); setBrowsePage(1); refetchProducts(); }}
+                                className="px-4 py-2 bg-black text-white font-[Manrope] font-bold text-xs tracking-widest uppercase hover:bg-purple-700 transition-all rounded-lg flex items-center gap-1.5">
+                                <span className="material-symbols-outlined text-sm">shopping_bag</span>
+                                Browse Catalog
+                              </button>
+                            </>
+                          )}
                           <button onClick={() => handleDisconnect(p)}
                             className="px-4 py-2 border border-[#ba1a1a]/30 text-[#ba1a1a] font-[Manrope] font-bold text-xs tracking-widest uppercase hover:bg-[#ffdad6] transition-all rounded-lg flex items-center gap-1.5">
                             <span className="material-symbols-outlined text-sm">link_off</span>
@@ -245,6 +356,17 @@ export default function AdminProvidersPage() {
                         </button>
                       )}
                     </div>
+
+                    {/* Eprolo webhook hint */}
+                    {isEprolo && p.connected && (
+                      <div className="mt-4 p-3 bg-[#f8f9ff] rounded-lg border border-[#e5eeff]">
+                        <p className="text-[10px] font-[Manrope] font-bold uppercase tracking-widest text-[#7c839b] mb-1">Webhook URL</p>
+                        <code className="text-[11px] font-mono text-[#45464d] break-all select-all">
+                          {window.location.origin.replace(":3003", ":3001")}/api/webhooks/eprolo
+                        </code>
+                        <p className="text-[10px] font-[Manrope] text-[#7c839b] mt-1">Register this in your Eprolo dashboard to receive tracking updates automatically.</p>
+                      </div>
+                    )}
                   </div>
                 </div>
               );
@@ -265,6 +387,13 @@ export default function AdminProvidersPage() {
                   <span className="material-symbols-outlined text-[#45464d]">close</span>
                 </button>
               </div>
+
+              {activeProvider.name === "eprolo" && (
+                <div className="mb-5 p-3 bg-[#eff4ff] rounded-lg text-[11px] font-[Manrope] text-[#1a3bb3] leading-relaxed">
+                  <strong>Where to find your keys:</strong> Log in to your Eprolo account → Settings → API Management. Copy your <strong>API Key</strong> and <strong>API Secret</strong> and paste them below.
+                </div>
+              )}
+
               <div className="space-y-4">
                 <div>
                   <label className="text-[10px] font-[Manrope] font-bold uppercase tracking-widest text-[#45464d] block mb-1.5">
@@ -273,34 +402,36 @@ export default function AdminProvidersPage() {
                   <input
                     type="password"
                     className="w-full bg-[#f8f9ff] border border-[#c6c6cd] rounded-lg px-4 py-2.5 font-[Manrope] text-sm outline-none focus:border-black transition-colors"
-                    placeholder="Enter API key…"
+                    placeholder={activeProvider.apiKey ? "Leave blank to keep current" : "Enter API key…"}
                     value={formKey}
                     onChange={e => setFormKey(e.target.value)}
                   />
                 </div>
                 <div>
                   <label className="text-[10px] font-[Manrope] font-bold uppercase tracking-widest text-[#45464d] block mb-1.5">
-                    API Secret
+                    API Secret {activeProvider.name === "eprolo" && <span className="text-[#ba1a1a]">*</span>}
                   </label>
                   <input
                     type="password"
                     className="w-full bg-[#f8f9ff] border border-[#c6c6cd] rounded-lg px-4 py-2.5 font-[Manrope] text-sm outline-none focus:border-black transition-colors"
-                    placeholder="Enter API secret…"
+                    placeholder={activeProvider.apiSecret ? "Leave blank to keep current" : "Enter API secret…"}
                     value={formSecret}
                     onChange={e => setFormSecret(e.target.value)}
                   />
                 </div>
-                <div>
-                  <label className="text-[10px] font-[Manrope] font-bold uppercase tracking-widest text-[#45464d] block mb-1.5">
-                    Store ID
-                  </label>
-                  <input
-                    className="w-full bg-[#f8f9ff] border border-[#c6c6cd] rounded-lg px-4 py-2.5 font-[Manrope] text-sm outline-none focus:border-black transition-colors"
-                    placeholder="e.g. 12345678"
-                    value={formStore}
-                    onChange={e => setFormStore(e.target.value)}
-                  />
-                </div>
+                {activeProvider.name !== "eprolo" && (
+                  <div>
+                    <label className="text-[10px] font-[Manrope] font-bold uppercase tracking-widest text-[#45464d] block mb-1.5">
+                      Store ID
+                    </label>
+                    <input
+                      className="w-full bg-[#f8f9ff] border border-[#c6c6cd] rounded-lg px-4 py-2.5 font-[Manrope] text-sm outline-none focus:border-black transition-colors"
+                      placeholder="e.g. 12345678"
+                      value={formStore}
+                      onChange={e => setFormStore(e.target.value)}
+                    />
+                  </div>
+                )}
                 <div className="pt-2 flex gap-3">
                   <button onClick={() => setActiveProvider(null)}
                     className="flex-1 px-6 py-3 border border-[#c6c6cd] font-[Manrope] font-bold text-xs tracking-widest uppercase hover:bg-[#f8f9ff] transition-all rounded-lg">
@@ -315,6 +446,93 @@ export default function AdminProvidersPage() {
             </div>
           </div>
         )}
+
+        {/* Eprolo Catalog Browser */}
+        {browseOpen && (
+          <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col">
+              {/* Header */}
+              <div className="flex items-center justify-between p-6 border-b border-[#e5eeff]">
+                <div>
+                  <h3 className="text-[22px] font-serif font-bold text-black">Eprolo Catalog</h3>
+                  <p className="text-xs font-[Manrope] text-[#7c839b] mt-0.5">Browse products and import them directly into your store.</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-[Manrope] text-[#7c839b]">Page {browsePage}</span>
+                  <button onClick={() => setBrowsePage(p => Math.max(1, p - 1))} disabled={browsePage <= 1}
+                    className="w-8 h-8 rounded-lg border border-[#c6c6cd] flex items-center justify-center hover:bg-[#f8f9ff] disabled:opacity-40 transition-colors">
+                    <span className="material-symbols-outlined text-sm">chevron_left</span>
+                  </button>
+                  <button onClick={() => setBrowsePage(p => p + 1)}
+                    className="w-8 h-8 rounded-lg border border-[#c6c6cd] flex items-center justify-center hover:bg-[#f8f9ff] transition-colors">
+                    <span className="material-symbols-outlined text-sm">chevron_right</span>
+                  </button>
+                  <button onClick={() => setBrowseOpen(false)}
+                    className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-[#f8f9ff] transition-colors ml-2">
+                    <span className="material-symbols-outlined text-[#45464d]">close</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Product grid */}
+              <div className="flex-1 overflow-y-auto p-6">
+                {productsLoading ? (
+                  <div className="flex items-center justify-center py-20">
+                    <div className="w-8 h-8 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                  </div>
+                ) : !eproloProducts || eproloProducts.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-20 text-center">
+                    <span className="material-symbols-outlined text-5xl text-[#c6c6cd] mb-3">inventory_2</span>
+                    <p className="font-[Manrope] text-[#45464d] font-bold">No products found</p>
+                    <p className="font-[Manrope] text-[#7c839b] text-sm mt-1">Make sure your API key and secret are correct and you're connected.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                    {eproloProducts.map((product) => {
+                      const productKey = String(product.id ?? product.productid ?? Math.random());
+                      const imgSrc = product.imagelist?.[0]?.src;
+                      const importResult = importResults[productKey];
+                      const isImporting = importing === productKey;
+                      return (
+                        <div key={productKey} className="bg-[#f8f9ff] rounded-xl overflow-hidden hover:shadow-md transition-shadow">
+                          <div className="aspect-square bg-[#e5eeff] overflow-hidden">
+                            {imgSrc ? (
+                              <img src={imgSrc} alt={product.title ?? product.name ?? ""} className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center text-4xl">📦</div>
+                            )}
+                          </div>
+                          <div className="p-3">
+                            <p className="text-xs font-[Manrope] font-bold text-black line-clamp-2 mb-1">
+                              {product.title ?? product.name ?? "Unnamed Product"}
+                            </p>
+                            {(product.cost ?? product.price) && (
+                              <p className="text-[11px] font-[Manrope] text-[#006c49] font-bold mb-2">
+                                ${Number(product.cost ?? product.price).toFixed(2)}
+                              </p>
+                            )}
+                            {importResult ? (
+                              <div className={`text-[10px] font-[Manrope] font-bold px-2 py-1 rounded-md ${importResult.ok ? "bg-[#e6f7f1] text-[#006c49]" : "bg-[#ffdad6] text-[#ba1a1a]"}`}>
+                                {importResult.ok ? "✓ Imported" : importResult.msg}
+                              </div>
+                            ) : (
+                              <button onClick={() => handleImport(product)} disabled={isImporting}
+                                className="w-full px-3 py-1.5 bg-black text-white text-[10px] font-[Manrope] font-bold uppercase tracking-widest rounded-lg hover:bg-[#006c49] transition-colors disabled:opacity-50 flex items-center justify-center gap-1">
+                                <span className={`material-symbols-outlined text-[12px] ${isImporting ? "animate-spin" : ""}`}>{isImporting ? "autorenew" : "add"}</span>
+                                {isImporting ? "Importing…" : "Import"}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
       </div>
     </AdminLayout>
   );
