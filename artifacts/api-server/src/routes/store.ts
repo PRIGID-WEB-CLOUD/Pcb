@@ -1,7 +1,9 @@
 import { Router } from "express";
 import { randomUUID } from "crypto";
 import { db, productsTable, categoriesTable, ordersTable } from "@workspace/db";
-import { eq, desc, sql } from "drizzle-orm";
+import { eq, desc, sql, like } from "drizzle-orm";
+import { eprolo } from "../services/eprolo";
+import { getEproloConfig } from "./eprolo";
 import { requireAdmin } from "../middleware/requireAdmin";
 import { validate } from "../middleware/validate";
 import { z } from "zod";
@@ -102,6 +104,18 @@ router.delete("/products/:id", requireAdmin, async (req, res) => {
   res.json({ ok: true });
 });
 
+// ── Manual sync (stamp updatedAt to mark as manually synced) ──────────────────
+router.post("/products/:id/sync", requireAdmin, async (req, res) => {
+  const rows = await db.select().from(productsTable).where(eq(productsTable.id, req.params.id)).limit(1);
+  if (!rows[0]) return res.status(404).json({ error: "Product not found" });
+  const updates = req.body as Partial<typeof productsTable.$inferInsert>;
+  const allowed = ["name", "price", "stock", "status", "imageUrl", "description", "tags"];
+  const patch: Record<string, unknown> = {};
+  for (const k of allowed) if (k in updates) patch[k] = (updates as Record<string, unknown>)[k];
+  const [updated] = await db.update(productsTable).set(patch).where(eq(productsTable.id, req.params.id)).returning();
+  res.json({ ok: true, product: updated, syncedAt: new Date().toISOString() });
+});
+
 // ── Product Variants (in-memory) ──────────────────────────────────────────────
 
 router.get("/products/:id/variants", async (req, res) => {
@@ -150,10 +164,58 @@ router.get("/orders/:id", requireAdmin, async (req, res) => {
   res.json(rows[0]);
 });
 
+// ── Eprolo auto-fulfillment helper ───────────────────────────────────────────
+async function tryAutoForwardToEprolo(order: typeof ordersTable.$inferSelect, shippingAddress: Record<string, string>) {
+  const cfg = getEproloConfig();
+  if (!cfg) return;
+
+  const items = Array.isArray(order.items) ? order.items as Array<{ productId?: string; id?: string; quantity?: number }> : [];
+  const productIds = items.map(i => i.productId ?? i.id).filter(Boolean) as string[];
+  if (!productIds.length) return;
+
+  const eproloProducts = await db.select()
+    .from(productsTable)
+    .where(like(productsTable.tags, "%eprolo%"));
+
+  const eproloProductIds = new Set(eproloProducts.map(p => p.id));
+  const eproloItems = items.filter(i => eproloProductIds.has(i.productId ?? i.id ?? ""));
+
+  if (!eproloItems.length) return;
+
+  try {
+    const fulfillmentItems = eproloItems.map(i => ({
+      variantId: i.productId ?? i.id ?? "",
+      quantity: i.quantity ?? 1,
+    }));
+
+    const addr = shippingAddress;
+    const eproloOrderId = await eprolo.createOrder(cfg, {
+      orderId: order.id,
+      customer: {
+        name:         addr.name        || order.customerName || "Valued Customer",
+        phone:        addr.phone       || "0000000000",
+        address:      addr.address     || addr.line1 || "N/A",
+        city:         addr.city        || "New York",
+        province:     addr.state       || "New York",
+        provinceCode: addr.stateCode   || addr.state || "NY",
+        postCode:     addr.postalCode  || "10001",
+        country:      addr.country     || "United States",
+        countryCode:  addr.countryCode || "US",
+      },
+      items: fulfillmentItems,
+    });
+
+    console.log(`[Eprolo] Auto-forwarded order ${order.id} → Eprolo order ${eproloOrderId}`);
+  } catch (err) {
+    console.error(`[Eprolo] Auto-forward failed for order ${order.id}:`, err instanceof Error ? err.message : err);
+  }
+}
+
 // Public checkout endpoint — no auth required (called by storefront)
 router.post("/orders", async (req, res) => {
-  const { customerName, customerEmail, total, items } = req.body as {
-    customerName?: string; customerEmail?: string; total?: number; items?: unknown[];
+  const { customerName, customerEmail, total, items, shippingAddress } = req.body as {
+    customerName?: string; customerEmail?: string; total?: number;
+    items?: unknown[]; shippingAddress?: Record<string, string>;
   };
   if (!customerEmail || !total) return res.status(400).json({ error: "customerEmail and total are required" });
   const [order] = await db.insert(ordersTable).values({
@@ -172,6 +234,10 @@ router.post("/orders", async (req, res) => {
     status: order.status,
     createdAt: order.createdAt.toISOString(),
   }});
+
+  // Fire-and-forget Eprolo fulfillment for dropship items
+  tryAutoForwardToEprolo(order, shippingAddress ?? {}).catch(() => {});
+
   res.status(201).json(order);
 });
 

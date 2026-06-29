@@ -1,17 +1,24 @@
 import { Link } from "wouter";
-import { motion } from "motion/react";
+import { motion, AnimatePresence } from "motion/react";
 import ProductCard from "@/components/ProductCard";
 import NewsletterForm from "@/components/NewsletterForm";
 import { useEffect, useState } from "react";
-import { ArrowRight, Play } from "lucide-react";
+import { ArrowRight, Play, X } from "lucide-react";
 
 export default function HomePage() {
   const [products, setProducts] = useState<any[]>([]);
   const [posts, setPosts] = useState<any[]>([]);
+  const [filmOpen, setFilmOpen] = useState(false);
 
   useEffect(() => {
     fetch("/api/products").then(r => r.json()).then(d => { if (Array.isArray(d)) setProducts(d.slice(0, 12)); }).catch(() => {});
     fetch("/api/posts").then(r => r.json()).then(d => { if (Array.isArray(d)) setPosts(d.slice(0, 2)); }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setFilmOpen(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
   }, []);
 
   return (
@@ -31,7 +38,7 @@ export default function HomePage() {
                 <Link href="/products" className="bg-white text-slate-900 px-10 py-5 text-[10px] font-bold uppercase tracking-widest hover:bg-slate-900 hover:text-white transition-all duration-500">
                   Explore Collection
                 </Link>
-                <button className="flex items-center gap-3 text-white group">
+                <button onClick={() => setFilmOpen(true)} className="flex items-center gap-3 text-white group">
                   <div className="w-12 h-12 rounded-full border border-white/30 flex items-center justify-center group-hover:bg-white group-hover:text-slate-900 transition-all duration-500">
                     <Play size={14} fill="currentColor" />
                   </div>
@@ -116,6 +123,42 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+
+      <AnimatePresence>
+        {filmOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+            className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center"
+            onClick={() => setFilmOpen(false)}
+          >
+            <button
+              onClick={() => setFilmOpen(false)}
+              className="absolute top-6 right-6 z-10 w-12 h-12 rounded-full border border-white/20 flex items-center justify-center text-white hover:bg-white/10 transition-colors"
+            >
+              <X size={20} />
+            </button>
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              transition={{ duration: 0.4, ease: "easeOut" }}
+              className="w-full max-w-5xl aspect-video mx-6 relative"
+              onClick={e => e.stopPropagation()}
+            >
+              <iframe
+                src={`${import.meta.env.BASE_URL}luxe-film/`.replace(/\/+/g, "/")}
+                className="w-full h-full border-0"
+                allow="autoplay"
+                title="LUXE BOUTIQUE Film"
+              />
+            </motion.div>
+            <p className="absolute bottom-6 text-white/30 text-[10px] font-bold uppercase tracking-widest">Press ESC to close</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <section className="py-32 overflow-hidden bg-slate-50 border-y border-slate-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 md:grid-cols-2 gap-24 items-center">

@@ -3,7 +3,7 @@ import { randomUUID } from "crypto";
 import { requireAdmin } from "../middleware/requireAdmin";
 import { eprolo, type EproloConfig } from "../services/eprolo";
 import { db, productsTable, categoriesTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, like, and } from "drizzle-orm";
 
 const router = Router();
 
@@ -97,15 +97,57 @@ router.post("/eprolo/import", requireAdmin, async (req, res) => {
       price,
       imageUrl:    primaryImage,
       categoryId:  category.id,
-      status:      "ACTIVE",
+      status:      "DRAFT",
       trackQuantity: true,
       stock:       100,
       tags:        "eprolo,dropship",
     }).returning();
 
-    res.status(201).json({ ok: true, product: newProduct, message: `"${newProduct.name}" added to your catalog.` });
+    res.status(201).json({ ok: true, product: newProduct, message: `"${newProduct.name}" added to staging for review before publishing.` });
   } catch (err: unknown) {
     res.status(500).json({ error: err instanceof Error ? err.message : "Import failed" });
+  }
+});
+
+// ── Check if Eprolo is configured (public — used to conditionally show UI) ────
+router.get("/eprolo/configured", requireAdmin, (_req, res) => {
+  const cfg = _config;
+  res.json({ configured: !!(cfg?.apiKey && cfg?.apiSecret) });
+});
+
+// ── Staged (DRAFT) Eprolo products awaiting review ───────────────────────────
+router.get("/eprolo/staged", requireAdmin, async (_req, res) => {
+  try {
+    const rows = await db.select().from(productsTable)
+      .where(and(eq(productsTable.status, "DRAFT"), like(productsTable.tags, "%eprolo%")));
+    res.json(rows);
+  } catch (err: unknown) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Failed" });
+  }
+});
+
+// ── Publish a staged product (DRAFT → ACTIVE) ─────────────────────────────────
+router.post("/eprolo/staged/:id/publish", requireAdmin, async (req, res) => {
+  try {
+    const rows = await db.update(productsTable)
+      .set({ status: "ACTIVE" })
+      .where(and(eq(productsTable.id, req.params.id), like(productsTable.tags, "%eprolo%")))
+      .returning();
+    if (!rows[0]) return res.status(404).json({ error: "Staged product not found" });
+    res.json({ ok: true, product: rows[0] });
+  } catch (err: unknown) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Publish failed" });
+  }
+});
+
+// ── Reject (delete) a staged product ─────────────────────────────────────────
+router.delete("/eprolo/staged/:id", requireAdmin, async (req, res) => {
+  try {
+    await db.delete(productsTable)
+      .where(and(eq(productsTable.id, req.params.id), like(productsTable.tags, "%eprolo%")));
+    res.json({ ok: true });
+  } catch (err: unknown) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Reject failed" });
   }
 });
 
