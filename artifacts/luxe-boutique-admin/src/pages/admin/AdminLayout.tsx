@@ -516,7 +516,7 @@ export default function AdminLayout({ children, sidebar = "main" }: AdminLayoutP
                 </div>
 
                 <div className="py-2">
-                  <Link href="/" onClick={() => setShowUser(false)}>
+                  <Link href="/dashboard" onClick={() => setShowUser(false)}>
                     <div className="flex items-center gap-3 px-5 py-2.5 hover:bg-slate-50 cursor-pointer transition-colors">
                       <span className="material-symbols-outlined text-slate-400 text-base">dashboard</span>
                       <span className="font-[Manrope] text-sm text-[#0b1c30]">Dashboard</span>
