@@ -1,6 +1,8 @@
 import { Router } from "express";
 import { randomUUID } from "crypto";
 import { requireAdmin } from "../middleware/requireAdmin";
+import { db, channelCredentialsTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
 
 const router = Router();
 router.use(requireAdmin);
@@ -54,11 +56,36 @@ let webhooks: Webhook[] = [
   { id: randomUUID(), webhookId: "customer_signup",  label: "Customer Sign-up", url: "/webhooks/customer-signup",  active: true  },
 ];
 
-const credentials: Record<string, Record<string, string>> = {
-  facebook: {}, instagram: {}, twitter: {}, whatsapp: {}, ads: {},
+// ── DB-backed credentials (in-memory for sync reads, persisted to DB on write) ─
+
+export const credentials: Record<string, Record<string, string>> = {
+  facebook: {}, instagram: {}, twitter: {}, whatsapp: {}, ads: {}, commerce: {},
 };
 
-function addEvent(channel: string, event: string, detail: string, type: EventLog["type"] = "info") {
+async function loadCredentialsFromDb() {
+  try {
+    const rows = await db.select().from(channelCredentialsTable);
+    for (const row of rows) {
+      credentials[row.channel] = row.data;
+    }
+  } catch {
+    // Non-fatal: use empty defaults if DB not ready
+  }
+}
+
+async function persistCredentials(channel: string): Promise<void> {
+  await db.insert(channelCredentialsTable)
+    .values({ channel, data: credentials[channel] ?? {}, updatedAt: new Date() })
+    .onConflictDoUpdate({
+      target: channelCredentialsTable.channel,
+      set: { data: credentials[channel] ?? {}, updatedAt: new Date() },
+    });
+}
+
+// Load credentials from DB on startup
+loadCredentialsFromDb();
+
+export function addEvent(channel: string, event: string, detail: string, type: EventLog["type"] = "info") {
   events.unshift({ id: randomUUID(), channel, event, detail, type, createdAt: new Date().toISOString() });
   if (events.length > 200) events = events.slice(0, 200);
 }
@@ -128,19 +155,20 @@ router.get("/channels/credentials/:channel", requireAdmin, (req, res) => {
   res.json(credentials[channel] ?? {});
 });
 
-router.put("/channels/credentials/:channel", requireAdmin, (req, res) => {
+router.put("/channels/credentials/:channel", requireAdmin, async (req, res) => {
   const { channel } = req.params;
   credentials[channel] = { ...(credentials[channel] ?? {}), ...req.body };
-  addEvent(channel, "API credentials updated", "Credentials saved securely.", "info");
+  await persistCredentials(channel);
+  addEvent(channel, "API credentials updated", "Credentials saved to database.", "info");
   res.json({ ok: true });
 });
 
-router.delete("/channels/credentials/:channel", requireAdmin, (req, res) => {
+router.delete("/channels/credentials/:channel", requireAdmin, async (req, res) => {
   const { channel } = req.params;
   credentials[channel] = {};
+  await persistCredentials(channel);
   addEvent(channel, "API credentials cleared", "All credentials removed.", "warning");
   res.json({ ok: true });
 });
 
-export { addEvent, credentials };
 export default router;

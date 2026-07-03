@@ -87,3 +87,13 @@ export const userPushTokensTable = pgTable("user_push_tokens", {
 export const insertUserPushTokenSchema = createInsertSchema(userPushTokensTable).omit({ updatedAt: true });
 export type InsertUserPushToken = z.infer<typeof insertUserPushTokenSchema>;
 export type UserPushToken = typeof userPushTokensTable.$inferSelect;
+
+// ── Channel Credentials ───────────────────────────────────────────────────────
+
+export const channelCredentialsTable = pgTable("channel_credentials", {
+  channel:   text("channel").primaryKey(),
+  data:      jsonb("data").notNull().$type<Record<string, string>>().default({}),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export type ChannelCredential = typeof channelCredentialsTable.$inferSelect;
