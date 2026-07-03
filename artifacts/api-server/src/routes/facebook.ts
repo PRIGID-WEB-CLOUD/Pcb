@@ -2,6 +2,8 @@ import { Router } from "express";
 import { randomUUID } from "crypto";
 import { addEvent, credentials } from "./channels";
 import { requireAdmin } from "../middleware/requireAdmin";
+import { db, productsTable, categoriesTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
 
 const router = Router();
 router.use(requireAdmin);
@@ -140,14 +142,85 @@ router.get("/facebook/catalog/products", async (_req, res) => {
   }
 });
 
-router.post("/facebook/catalog/sync", async (_req, res) => {
-  const creds = getFbCreds();
-  const catalogId = creds["catalog_id"];
-  if (!catalogId) {
-    return res.status(400).json({ error: "Missing Commerce Catalog ID — add it in credentials." });
+router.post("/facebook/catalog/sync", async (req, res) => {
+  const commerceCreds = credentials["commerce"] ?? {};
+  const fbCreds = getFbCreds();
+  const catalogId = commerceCreds["catalog_id"] || fbCreds["catalog_id"];
+  const token = commerceCreds["page_access_token"] || fbCreds["page_access_token"];
+  const storeDomain = (req.body as { storeDomain?: string }).storeDomain ?? process.env["REPLIT_DEV_DOMAIN"] ?? "luxeboutique.com";
+
+  if (!catalogId || !token) {
+    return res.status(400).json({ error: "Missing Commerce credentials — add Catalog ID and Page Access Token in channel settings." });
   }
-  addEvent("commerce", "Catalog sync requested", "Live catalog sync requires Meta Commerce Manager setup.", "info");
-  res.json({ ok: true, synced: 0, message: "Catalog sync queued. Connect Meta Commerce Manager to run live sync." });
+
+  // Fetch active products with their categories from the DB
+  const rows = await db
+    .select({
+      id:          productsTable.id,
+      name:        productsTable.name,
+      description: productsTable.description,
+      price:       productsTable.price,
+      stock:       productsTable.stock,
+      imageUrl:    productsTable.imageUrl,
+      status:      productsTable.status,
+      categoryName: categoriesTable.name,
+    })
+    .from(productsTable)
+    .leftJoin(categoriesTable, eq(productsTable.categoryId, categoriesTable.id))
+    .where(eq(productsTable.status, "ACTIVE"));
+
+  if (rows.length === 0) {
+    return res.status(400).json({ error: "No active products found to sync." });
+  }
+
+  // Build Facebook Catalog Batch API payload
+  const requests = rows.map((p) => ({
+    method: "UPDATE",
+    retailer_id: p.id,
+    data: {
+      title:        p.name,
+      description:  p.description || p.name,
+      availability: (p.stock ?? 0) > 0 ? "in stock" : "out of stock",
+      condition:    "new",
+      price:        `${p.price} GBP`,
+      link:         `https://${storeDomain}/products/${p.id}`,
+      image_link:   p.imageUrl ?? `https://${storeDomain}/placeholder.jpg`,
+      brand:        "LUXE BOUTIQUE",
+      google_product_category: p.categoryName ?? "Apparel & Accessories",
+    },
+  }));
+
+  // Push in batches of 50 (Facebook API limit per request)
+  const BATCH = 50;
+  let totalSynced = 0;
+  const errors: string[] = [];
+
+  for (let i = 0; i < requests.length; i += BATCH) {
+    const chunk = requests.slice(i, i + BATCH);
+    try {
+      const r = await fetch(`https://graph.facebook.com/v21.0/${catalogId}/items_batch`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ access_token: token, item_type: "PRODUCT_ITEM", requests: chunk }),
+      });
+      const data = await r.json() as Record<string, unknown>;
+      if (!r.ok || data["error"]) {
+        errors.push((data["error"] as Record<string, string>)?.message ?? `HTTP ${r.status}`);
+      } else {
+        totalSynced += chunk.length;
+      }
+    } catch (err) {
+      errors.push(String(err));
+    }
+  }
+
+  if (errors.length > 0) {
+    addEvent("commerce", `Catalog sync failed (${errors.length} error${errors.length > 1 ? "s" : ""})`, errors[0]!, "error");
+    return res.status(400).json({ ok: false, synced: totalSynced, errors });
+  }
+
+  addEvent("commerce", `Catalog synced — ${totalSynced} product${totalSynced !== 1 ? "s" : ""} pushed`, `Live data pushed to Facebook Catalog ${catalogId}.`, "sync");
+  res.json({ ok: true, synced: totalSynced, catalogId, message: `Successfully synced ${totalSynced} product${totalSynced !== 1 ? "s" : ""} to your Facebook catalog.` });
 });
 
 // ── Pixel Events ───────────────────────────────────────────────────────────────

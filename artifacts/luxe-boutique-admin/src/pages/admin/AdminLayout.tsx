@@ -277,7 +277,7 @@ export default function AdminLayout({ children, sidebar = "main" }: AdminLayoutP
 
         <div className="flex items-center border-b border-slate-100 h-16 px-3 shrink-0">
           {!collapsed && (
-            <Link href="/" className="flex items-center gap-3 cursor-pointer no-underline flex-1 min-w-0 pl-2">
+            <Link href="/dashboard" className="flex items-center gap-3 cursor-pointer no-underline flex-1 min-w-0 pl-2">
               <div className="w-8 h-8 bg-black rounded-sm flex items-center justify-center shrink-0">
                 <span className="material-symbols-outlined text-white text-sm">dashboard</span>
               </div>
@@ -288,7 +288,7 @@ export default function AdminLayout({ children, sidebar = "main" }: AdminLayoutP
             </Link>
           )}
           {collapsed && (
-            <Link href="/" className="flex items-center justify-center w-full cursor-pointer no-underline">
+            <Link href="/dashboard" className="flex items-center justify-center w-full cursor-pointer no-underline">
               <div className="w-8 h-8 bg-black rounded-sm flex items-center justify-center">
                 <span className="material-symbols-outlined text-white text-sm">dashboard</span>
               </div>
@@ -389,11 +389,6 @@ export default function AdminLayout({ children, sidebar = "main" }: AdminLayoutP
               {sseStatus === "live" ? "Live" : sseStatus === "connecting" ? "Connecting…" : "Offline"}
             </span>
           </div>
-
-          {/* Store link */}
-          <Link href="/" className="w-9 h-9 flex items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 hover:text-[#006c49] transition-colors" title="Back to Store">
-            <span className="material-symbols-outlined text-xl">storefront</span>
-          </Link>
 
           {/* ── Notifications ── */}
           <div ref={notifRef} className="relative">
@@ -531,12 +526,6 @@ export default function AdminLayout({ children, sidebar = "main" }: AdminLayoutP
                     <div className="flex items-center gap-3 px-5 py-2.5 hover:bg-slate-50 cursor-pointer transition-colors">
                       <span className="material-symbols-outlined text-slate-400 text-base">settings</span>
                       <span className="font-[Manrope] text-sm text-[#0b1c30]">Settings</span>
-                    </div>
-                  </Link>
-                  <Link href="/" onClick={() => setShowUser(false)}>
-                    <div className="flex items-center gap-3 px-5 py-2.5 hover:bg-slate-50 cursor-pointer transition-colors">
-                      <span className="material-symbols-outlined text-slate-400 text-base">storefront</span>
-                      <span className="font-[Manrope] text-sm text-[#0b1c30]">View Store</span>
                     </div>
                   </Link>
                 </div>

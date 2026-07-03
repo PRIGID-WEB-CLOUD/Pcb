@@ -402,8 +402,7 @@ export default function AdminLoginPage() {
             </div>
 
             <p className="text-center text-[12px] text-[#7c839b]">
-              Not an administrator?{" "}
-              <a href="/" className="text-[#006c49] font-bold hover:underline">Return to store</a>
+              Contact your administrator if you need access.
             </p>
           </div>
         </div>
