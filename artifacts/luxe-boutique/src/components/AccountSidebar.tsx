@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { User, Package, MapPin, Heart, Settings, LogOut, ShieldCheck } from "lucide-react";
+import { User, Package, MapPin, Heart, Settings, LogOut } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
 const navItems = [
@@ -40,16 +40,6 @@ export default function AccountSidebar() {
             <LogOut size={18} /><span>Logout</span>
           </button>
         </div>
-        {user?.role === "ADMIN" && (
-          <div className="mt-6 p-4 bg-slate-900 rounded-2xl text-white">
-            <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] mb-4 text-white/50 flex items-center gap-2">
-              <ShieldCheck size={12} />Admin Access
-            </h3>
-            <Link href="/admin" className="group flex items-center justify-between text-sm">
-              Store Dashboard<span className="opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all">→</span>
-            </Link>
-          </div>
-        )}
       </div>
     </aside>
   );

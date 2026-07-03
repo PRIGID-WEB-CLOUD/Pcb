@@ -33,7 +33,6 @@ import AccountAddressesPage from "@/pages/AccountAddressesPage";
 import ForgotPasswordPage from "@/pages/ForgotPasswordPage";
 import ResetPasswordPage from "@/pages/ResetPasswordPage";
 import NotFound from "@/pages/NotFound";
-import AdminPage from "@/pages/AdminPage";
 
 const queryClient = new QueryClient();
 
@@ -82,7 +81,6 @@ function Router() {
       <Route path="/forgot-password" component={() => <AuthLayout><ForgotPasswordPage /></AuthLayout>} />
       <Route path="/reset-password" component={() => <AuthLayout><ResetPasswordPage /></AuthLayout>} />
       <Route path="/register" component={() => <AuthLayout><RegisterPage /></AuthLayout>} />
-      <Route path="/admin" component={() => <StoreLayout><AdminPage /></StoreLayout>} />
       <Route component={NotFound} />
     </Switch>
   );
