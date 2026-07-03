@@ -36,6 +36,7 @@ const channelNavItems = [
 
 type Order = { id: string; customerName?: string | null; customerEmail: string; status: string; total: number; createdAt: string };
 type Toast = { id: string; order: Order };
+type LowStockProduct = { id: string; name: string; stock: number };
 
 function getInitials(name: string | null | undefined, email: string) {
   if (name && name.trim()) {
@@ -134,12 +135,16 @@ export default function AdminLayout({ children, sidebar = "main" }: AdminLayoutP
   const { user, logout } = useAuth();
   const [collapsed, setCollapsed] = useState(true);
 
-  const [showNotif, setShowNotif] = useState(false);
-  const [showUser,  setShowUser]  = useState(false);
-  const [orders,    setOrders]    = useState<Order[]>([]);
-  const [seenIds,   setSeenIds]   = useState<Set<string>>(new Set());
-  const [toasts,    setToasts]    = useState<Toast[]>([]);
-  const [sseStatus, setSseStatus] = useState<"connecting" | "live" | "offline">("connecting");
+  const [showNotif,      setShowNotif]      = useState(false);
+  const [showUser,       setShowUser]       = useState(false);
+  const [orders,         setOrders]         = useState<Order[]>([]);
+  const [seenIds,        setSeenIds]        = useState<Set<string>>(new Set());
+  const [toasts,         setToasts]         = useState<Toast[]>([]);
+  const [sseStatus,      setSseStatus]      = useState<"connecting" | "live" | "offline">("connecting");
+  const [lowStockAlerts, setLowStockAlerts] = useState<LowStockProduct[]>([]);
+  const [lowStockThresh, setLowStockThresh] = useState(5);
+  const [lowStockSeen,   setLowStockSeen]   = useState(false);
+  const [checkingStock,  setCheckingStock]  = useState(false);
 
   const notifRef = useRef<HTMLDivElement>(null);
   const userRef  = useRef<HTMLDivElement>(null);
@@ -157,7 +162,33 @@ export default function AdminLayout({ children, sidebar = "main" }: AdminLayoutP
     } catch { /* silently ignore */ }
   }, []);
 
-  useEffect(() => { fetchOrders(); }, [fetchOrders]);
+  const fetchLowStock = useCallback(async () => {
+    try {
+      const res = await fetch("/api/admin/low-stock");
+      if (res.ok) {
+        const { products, threshold } = await res.json() as { products: LowStockProduct[]; threshold: number };
+        setLowStockAlerts(products);
+        setLowStockThresh(threshold);
+        if (products.length > 0) setLowStockSeen(false);
+      }
+    } catch { /* silently ignore */ }
+  }, []);
+
+  useEffect(() => { fetchOrders(); fetchLowStock(); }, [fetchOrders, fetchLowStock]);
+
+  const checkNow = useCallback(async () => {
+    setCheckingStock(true);
+    try {
+      const res = await fetch("/api/admin/low-stock/check", { method: "POST" });
+      if (res.ok) {
+        const { products, threshold } = await res.json() as { products: LowStockProduct[]; threshold: number };
+        setLowStockAlerts(products);
+        setLowStockThresh(threshold);
+        if (products.length > 0) setLowStockSeen(false);
+      }
+    } catch { /* silently ignore */ }
+    finally { setCheckingStock(false); }
+  }, []);
 
   // ── SSE real-time connection ──────────────────────────────────────────────
   useEffect(() => {
@@ -186,6 +217,13 @@ export default function AdminLayout({ children, sidebar = "main" }: AdminLayoutP
       es.addEventListener("order_updated", (e) => {
         const { id, status } = JSON.parse(e.data) as { id: string; status: string };
         setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status } : o)));
+      });
+
+      es.addEventListener("low_stock", (e) => {
+        const { products, threshold } = JSON.parse(e.data) as { products: LowStockProduct[]; threshold: number };
+        setLowStockAlerts(products);
+        setLowStockThresh(threshold);
+        setLowStockSeen(false);
       });
 
       es.addEventListener("heartbeat", () => {
@@ -226,13 +264,16 @@ export default function AdminLayout({ children, sidebar = "main" }: AdminLayoutP
 
   const recentOrders     = [...orders].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 8);
   const actionableOrders = orders.filter((o) => o.status === "PENDING" || o.status === "PROCESSING");
-  const unreadCount      = actionableOrders.filter((o) => !seenIds.has(o.id)).length;
+  const unreadOrderCount = actionableOrders.filter((o) => !seenIds.has(o.id)).length;
+  const unreadLowStock   = lowStockAlerts.length > 0 && !lowStockSeen ? 1 : 0;
+  const unreadCount      = unreadOrderCount + unreadLowStock;
 
   const openNotif = () => {
     setShowNotif((v) => !v);
     setShowUser(false);
     if (!showNotif) {
       setSeenIds(new Set(actionableOrders.map((o) => o.id)));
+      setLowStockSeen(true);
     }
   };
 
@@ -410,9 +451,12 @@ export default function AdminLayout({ children, sidebar = "main" }: AdminLayoutP
                 <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
                   <div>
                     <h3 className="font-serif font-semibold text-[15px]">Notifications</h3>
-                    {actionableOrders.length > 0 && (
+                    {(actionableOrders.length > 0 || lowStockAlerts.length > 0) && (
                       <p className="text-[10px] font-[Manrope] font-bold text-amber-600 mt-0.5">
-                        {actionableOrders.length} order{actionableOrders.length !== 1 ? "s" : ""} need attention
+                        {[
+                          actionableOrders.length > 0 && `${actionableOrders.length} order${actionableOrders.length !== 1 ? "s" : ""} need attention`,
+                          lowStockAlerts.length > 0 && `${lowStockAlerts.length} low stock`,
+                        ].filter(Boolean).join(" · ")}
                       </p>
                     )}
                   </div>
@@ -427,43 +471,90 @@ export default function AdminLayout({ children, sidebar = "main" }: AdminLayoutP
                   </div>
                 </div>
 
-                <div className="max-h-80 overflow-y-auto divide-y divide-slate-50">
-                  {recentOrders.length === 0 ? (
-                    <div className="py-12 text-center text-[#7c839b] font-[Manrope]">
-                      <span className="material-symbols-outlined text-3xl text-slate-200 block mb-2">notifications_none</span>
-                      No orders yet
-                    </div>
-                  ) : (
-                    recentOrders.map((o) => {
-                      const s = statusIcon[o.status] ?? { icon: "receipt", cls: "text-slate-500 bg-slate-100" };
-                      const isActionable = o.status === "PENDING" || o.status === "PROCESSING";
-                      return (
-                        <Link key={o.id} href="/orders" onClick={() => setShowNotif(false)}>
-                          <div className={`flex items-start gap-3 px-5 py-3.5 hover:bg-slate-50 cursor-pointer transition-colors ${isActionable ? "bg-amber-50/40" : ""}`}>
-                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${s.cls}`}>
-                              <span className="material-symbols-outlined text-sm">{s.icon}</span>
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center justify-between gap-2">
-                                <p className="font-[Manrope] font-bold text-xs text-[#0b1c30]">
-                                  Order #{o.id.slice(0, 8).toUpperCase()}
-                                </p>
-                                {isActionable && (
-                                  <span className="text-[9px] font-bold uppercase tracking-widest text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded-full shrink-0">
-                                    Action needed
-                                  </span>
-                                )}
+                <div className="max-h-[26rem] overflow-y-auto">
+                  {/* ── Low Stock Alerts ── */}
+                  {lowStockAlerts.length > 0 && (
+                    <div className="border-b border-slate-100">
+                      <div className="px-5 pt-3 pb-1.5 flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <span className="material-symbols-outlined text-red-500 text-sm">warning</span>
+                          <span className="text-[10px] font-[Manrope] font-bold uppercase tracking-widest text-red-500">
+                            Low Stock — threshold ≤ {lowStockThresh}
+                          </span>
+                        </div>
+                        <button
+                          onClick={checkNow}
+                          disabled={checkingStock}
+                          className="text-[9px] font-[Manrope] font-bold uppercase tracking-widest text-[#7c839b] hover:text-[#006c49] transition-colors flex items-center gap-0.5"
+                        >
+                          <span className="material-symbols-outlined text-[11px]">{checkingStock ? "hourglass_empty" : "refresh"}</span>
+                          Check now
+                        </button>
+                      </div>
+                      <div className="divide-y divide-slate-50">
+                        {lowStockAlerts.map((p) => (
+                          <Link key={p.id} href="/catalog" onClick={() => setShowNotif(false)}>
+                            <div className="flex items-center gap-3 px-5 py-3 hover:bg-red-50/40 cursor-pointer transition-colors bg-red-50/20">
+                              <div className="w-8 h-8 rounded-lg bg-red-100 flex items-center justify-center shrink-0">
+                                <span className="material-symbols-outlined text-red-500 text-sm">inventory_2</span>
                               </div>
-                              <p className="text-[11px] text-[#7c839b] font-[Manrope] mt-0.5">
-                                {o.status.charAt(0) + o.status.slice(1).toLowerCase()} · ${o.total.toFixed(2)}
-                              </p>
+                              <div className="flex-1 min-w-0">
+                                <p className="font-[Manrope] font-bold text-xs text-[#0b1c30] truncate">{p.name}</p>
+                                <p className="text-[11px] text-red-500 font-[Manrope] font-bold mt-0.5">
+                                  {p.stock === 0 ? "Out of stock" : `${p.stock} left`}
+                                </p>
+                              </div>
+                              <span className={`text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-full shrink-0 ${p.stock === 0 ? "bg-red-100 text-red-600" : "bg-orange-100 text-orange-600"}`}>
+                                {p.stock === 0 ? "Critical" : "Low"}
+                              </span>
                             </div>
-                            <span className="text-[10px] text-[#7c839b] font-[Manrope] shrink-0 mt-0.5">{timeAgo(o.createdAt)}</span>
-                          </div>
-                        </Link>
-                      );
-                    })
+                          </Link>
+                        ))}
+                      </div>
+                    </div>
                   )}
+
+                  {/* ── Orders ── */}
+                  <div className="divide-y divide-slate-50">
+                    {recentOrders.length === 0 && lowStockAlerts.length === 0 ? (
+                      <div className="py-12 text-center text-[#7c839b] font-[Manrope]">
+                        <span className="material-symbols-outlined text-3xl text-slate-200 block mb-2">notifications_none</span>
+                        All clear — nothing needs attention
+                      </div>
+                    ) : recentOrders.length === 0 ? (
+                      <div className="py-6 text-center text-[#7c839b] font-[Manrope] text-[11px]">No orders yet</div>
+                    ) : (
+                      recentOrders.map((o) => {
+                        const s = statusIcon[o.status] ?? { icon: "receipt", cls: "text-slate-500 bg-slate-100" };
+                        const isActionable = o.status === "PENDING" || o.status === "PROCESSING";
+                        return (
+                          <Link key={o.id} href="/orders" onClick={() => setShowNotif(false)}>
+                            <div className={`flex items-start gap-3 px-5 py-3.5 hover:bg-slate-50 cursor-pointer transition-colors ${isActionable ? "bg-amber-50/40" : ""}`}>
+                              <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${s.cls}`}>
+                                <span className="material-symbols-outlined text-sm">{s.icon}</span>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between gap-2">
+                                  <p className="font-[Manrope] font-bold text-xs text-[#0b1c30]">
+                                    Order #{o.id.slice(0, 8).toUpperCase()}
+                                  </p>
+                                  {isActionable && (
+                                    <span className="text-[9px] font-bold uppercase tracking-widest text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded-full shrink-0">
+                                      Action needed
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-[11px] text-[#7c839b] font-[Manrope] mt-0.5">
+                                  {o.status.charAt(0) + o.status.slice(1).toLowerCase()} · ${o.total.toFixed(2)}
+                                </p>
+                              </div>
+                              <span className="text-[10px] text-[#7c839b] font-[Manrope] shrink-0 mt-0.5">{timeAgo(o.createdAt)}</span>
+                            </div>
+                          </Link>
+                        );
+                      })
+                    )}
+                  </div>
                 </div>
 
                 <div className="px-5 py-3 border-t border-slate-100 bg-slate-50/60">

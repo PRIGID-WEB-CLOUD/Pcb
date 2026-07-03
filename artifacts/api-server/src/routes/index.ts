@@ -13,6 +13,7 @@ import pushTokensRouter from "./push-tokens";
 import adminStatsRouter from "./admin-stats";
 import eventsRouter from "./events";
 import eproloRouter from "./eprolo";
+import lowStockRouter from "./low-stock";
 
 const router: IRouter = Router();
 
@@ -30,5 +31,6 @@ router.use(twitterRouter);
 router.use(whatsappRouter);
 router.use(pushTokensRouter);
 router.use(eproloRouter);
+router.use(lowStockRouter);
 
 export default router;
