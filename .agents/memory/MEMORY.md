@@ -1,3 +1,4 @@
 - [Post-merge timeout](post-merge-timeout.md) — default 20s too short for monorepo with Expo; set to 90s.
 - [Expo port mapping](expo-port-mapping.md) — Expo maps local 3002 to external 3001, so keep the API on a separate local port such as 8000.
 - [Admin unauthenticated check](admin-unauthenticated-check.md) — `/api/auth/me` returns 401 on the admin login screen until an admin session exists; this is expected.
+- [Admin preview port](admin-preview-port.md) — the separate admin Vite app needs an explicit 5000-to-5000 mapping for its public preview URL.
