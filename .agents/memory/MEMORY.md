@@ -1,1 +1,2 @@
 - [Post-merge timeout](post-merge-timeout.md) — default 20s too short for monorepo with Expo; set to 90s.
+- [Expo port mapping](expo-port-mapping.md) — Expo maps local 3002 to external 3001, so keep the API on a separate local port such as 8000.

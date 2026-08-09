@@ -53,8 +53,8 @@ outputType = "console"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "PORT=3001 pnpm --filter @workspace/api-server run dev"
-waitForPort = 3001
+args = "PORT=8000 pnpm --filter @workspace/api-server run dev"
+waitForPort = 8000
 
 [[workflows.workflow]]
 name = "artifacts/luxe-boutique-mobile: expo"
