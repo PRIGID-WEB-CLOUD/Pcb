@@ -20,7 +20,9 @@ export default function AdminLoginPage() {
   const [, navigate] = useLocation();
 
   useEffect(() => {
-    if (!authLoading && user?.role === "ADMIN") navigate("/");
+    if (!authLoading && (user?.role === "ADMIN" || user?.role === "SUPER_ADMIN")) {
+      navigate("/");
+    }
   }, [user, authLoading, navigate]);
 
   useEffect(() => {
@@ -193,7 +195,7 @@ export default function AdminLoginPage() {
             {[
               { icon: "mail",     title: "Enter your admin email",  body: "We send a secure one-time code to your registered admin address." },
               { icon: "pin",      title: "Enter the 6-digit OTP",   body: "No password needed — the code expires in 10 minutes." },
-              { icon: "verified", title: "Role is verified",         body: "Only ADMIN accounts can access this portal." },
+              { icon: "verified", title: "Role is verified",         body: "Only authorized admin accounts can access this portal." },
             ].map((s) => (
               <div key={s.icon} className="flex gap-4 items-start">
                 <div className="w-8 h-8 rounded-full border border-[#006c49]/40 flex items-center justify-center shrink-0">

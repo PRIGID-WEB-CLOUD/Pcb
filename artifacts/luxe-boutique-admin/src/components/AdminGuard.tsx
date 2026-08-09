@@ -5,12 +5,13 @@ import { useAuth } from "@/contexts/AuthContext";
 export default function AdminGuard({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const [, setLocation] = useLocation();
+  const isAdmin = user?.role === "ADMIN" || user?.role === "SUPER_ADMIN";
 
   useEffect(() => {
-    if (!loading && (!user || user.role !== "ADMIN")) {
+    if (!loading && !isAdmin) {
       setLocation("/login");
     }
-  }, [user, loading, setLocation]);
+  }, [isAdmin, loading, setLocation]);
 
   if (loading) {
     return (
@@ -23,7 +24,7 @@ export default function AdminGuard({ children }: { children: React.ReactNode }) 
     );
   }
 
-  if (!user || user.role !== "ADMIN") return null;
+  if (!isAdmin) return null;
 
   return <>{children}</>;
 }
