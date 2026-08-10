@@ -3,3 +3,4 @@
 - [Admin unauthenticated check](admin-unauthenticated-check.md) — `/api/auth/me` returns 401 on the admin login screen until an admin session exists; this is expected.
 - [Admin preview port](admin-preview-port.md) — the separate admin Vite app needs an explicit 5000-to-5000 mapping for its public preview URL.
 - [Admin role guard](admin-role-guard.md) — frontend admin access must allow both ADMIN and SUPER_ADMIN, matching the backend middleware.
+- [Coupon API contract](coupon-api-contract.md) — admin coupons use discountType/discountValue/usedCount fields; normalize legacy payloads at the client boundary.

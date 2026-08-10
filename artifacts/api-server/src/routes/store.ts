@@ -16,7 +16,20 @@ const router = Router();
 interface Variant    { id: string; size: string; color: string; stock: number; price: number | null; sku: string; }
 interface MediaItem  { id: string; filename: string; url: string; mimeType: string; size: number; createdAt: string; }
 interface Customer   { id: string; name: string; email: string; totalOrders: number; totalSpent: number; createdAt: string; }
-interface Coupon     { id: string; code: string; type: "percent" | "fixed"; value: number; usageCount: number; active: boolean; expiresAt: string | null; }
+interface Coupon {
+  id: string;
+  code: string;
+  description: string;
+  discountType: "PERCENTAGE" | "FIXED";
+  discountValue: number;
+  minOrderAmount: number;
+  maxUses: number | null;
+  usedCount: number;
+  active: boolean;
+  expiresAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
 interface TeamMember { id: string; name: string; email: string; role: string; status: string; invitedAt: string; }
 interface BlogPost   { id: string; title: string; slug: string; content: string; status: string; authorName: string; publishedAt: string | null; createdAt: string; }
 
@@ -33,9 +46,9 @@ let customers: Customer[] = [
   { id: "c4", name: "James Harlow",   email: "james@example.com",    totalOrders: 1, totalSpent: 580,   createdAt: new Date(Date.now() - 86400000 * 5).toISOString()  },
 ];
 let coupons: Coupon[] = [
-  { id: randomUUID(), code: "LUXE20",    type: "percent", value: 20, usageCount: 34,  active: true,  expiresAt: null },
-  { id: randomUUID(), code: "WELCOME10", type: "percent", value: 10, usageCount: 127, active: true,  expiresAt: null },
-  { id: randomUUID(), code: "FLAT50",    type: "fixed",   value: 50, usageCount: 12,  active: false, expiresAt: "2025-12-31T23:59:59Z" },
+  { id: randomUUID(), code: "LUXE20",    description: "A signature offer for returning clients.", discountType: "PERCENTAGE", discountValue: 20, minOrderAmount: 0, maxUses: null, usedCount: 34,  active: true,  expiresAt: null, createdAt: new Date(Date.now() - 86400000 * 45).toISOString(), updatedAt: new Date(Date.now() - 86400000 * 2).toISOString() },
+  { id: randomUUID(), code: "WELCOME10", description: "Welcome offer for new clients.", discountType: "PERCENTAGE", discountValue: 10, minOrderAmount: 0, maxUses: null, usedCount: 127, active: true,  expiresAt: null, createdAt: new Date(Date.now() - 86400000 * 30).toISOString(), updatedAt: new Date(Date.now() - 86400000 * 3).toISOString() },
+  { id: randomUUID(), code: "FLAT50",    description: "A fixed amount seasonal offer.", discountType: "FIXED", discountValue: 50, minOrderAmount: 250, maxUses: 50, usedCount: 12, active: false, expiresAt: "2025-12-31T23:59:59Z", createdAt: new Date(Date.now() - 86400000 * 90).toISOString(), updatedAt: new Date(Date.now() - 86400000 * 10).toISOString() },
 ];
 let teamMembers: TeamMember[] = [
   { id: randomUUID(), name: "LUXE Admin", email: "admin@luxeboutique.com", role: "SUPER_ADMIN", status: "Active", invitedAt: new Date(Date.now() - 86400000 * 90).toISOString() },
@@ -340,7 +353,22 @@ router.get("/users", requireAdmin, (_req, res) => { res.json(customers); });
 router.get("/coupons", requireAdmin, (_req, res) => { res.json(coupons); });
 
 router.post("/coupons", requireAdmin, (req, res) => {
-  const coupon: Coupon = { id: randomUUID(), code: "", type: "percent", value: 10, usageCount: 0, active: true, expiresAt: null, ...req.body };
+  const now = new Date().toISOString();
+  const coupon: Coupon = {
+    id: randomUUID(),
+    code: "",
+    description: "",
+    discountType: "PERCENTAGE",
+    discountValue: 10,
+    minOrderAmount: 0,
+    maxUses: null,
+    usedCount: 0,
+    active: true,
+    expiresAt: null,
+    ...req.body,
+    createdAt: now,
+    updatedAt: now,
+  };
   coupons = [coupon, ...coupons];
   res.status(201).json(coupon);
 });
@@ -348,7 +376,7 @@ router.post("/coupons", requireAdmin, (req, res) => {
 router.put("/coupons/:id", requireAdmin, (req, res) => {
   const idx = coupons.findIndex((x) => x.id === req.params.id);
   if (idx === -1) return res.status(404).json({ error: "Coupon not found" });
-  coupons[idx] = { ...coupons[idx], ...req.body };
+  coupons[idx] = { ...coupons[idx], ...req.body, updatedAt: new Date().toISOString() };
   res.json(coupons[idx]);
 });
 

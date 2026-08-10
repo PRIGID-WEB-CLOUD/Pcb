@@ -31,8 +31,33 @@ const EMPTY_FORM = {
   expiresAt: "",
 };
 
-function fmt(n: number) {
-  return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+function fmt(n: number | null | undefined) {
+  const value = Number(n);
+  return (Number.isFinite(value) ? value : 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function normalizeCoupon(raw: Partial<Coupon> & Record<string, unknown>): Coupon {
+  const legacyType = raw.type === "fixed" ? "FIXED" : "PERCENTAGE";
+  const legacyValue = raw.value;
+  const legacyUsageCount = raw.usageCount;
+  const now = new Date().toISOString();
+
+  return {
+    id: String(raw.id ?? ""),
+    code: String(raw.code ?? ""),
+    description: String(raw.description ?? ""),
+    discountType: raw.discountType === "FIXED" || raw.discountType === "PERCENTAGE"
+      ? raw.discountType
+      : legacyType,
+    discountValue: Number(raw.discountValue ?? legacyValue ?? 0),
+    minOrderAmount: Number(raw.minOrderAmount ?? 0),
+    maxUses: raw.maxUses == null || raw.maxUses === "" ? null : Number(raw.maxUses),
+    usedCount: Number(raw.usedCount ?? legacyUsageCount ?? 0),
+    active: raw.active !== false,
+    expiresAt: typeof raw.expiresAt === "string" ? raw.expiresAt : null,
+    createdAt: String(raw.createdAt ?? now),
+    updatedAt: String(raw.updatedAt ?? now),
+  };
 }
 
 function Badge({ active }: { active: boolean }) {
@@ -79,7 +104,9 @@ export default function AdminCouponsPage() {
     try {
       const r = await fetch(`${API}/coupons`, { credentials: "include" });
       if (!r.ok) throw new Error("Failed to load");
-      setCoupons(await r.json());
+      const payload = await r.json();
+      if (!Array.isArray(payload)) throw new Error("Invalid coupon response");
+      setCoupons(payload.map((coupon) => normalizeCoupon(coupon)));
     } catch {
       setLoadError("Failed to load coupons. Please try again.");
     } finally {
