@@ -20,10 +20,6 @@ const STATUS_LABEL: Record<string, { label: string; cls: string }> = {
   ARCHIVED: { label: "Archived",   cls: "text-[#ba1a1a] bg-[#ffdad6]"   },
 };
 
-function slugify(s: string) {
-  return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
-}
-
 function VariantRow({
   v, onSave, onDelete,
 }: { v: Variant; onSave: (v: Variant) => void; onDelete: (id: string) => void }) {
@@ -302,11 +298,21 @@ export default function AdminProductEditorPage() {
   };
 
   const seoTitle = form.seoTitle || (form.name ? `${form.name} | Luxe Boutique` : "Product | Luxe Boutique");
-  const seoSlug = slugify(form.name || "product");
   const seoDesc = form.seoDescription || form.description.slice(0, 120);
   const allImages = form.imageUrl
     ? [form.imageUrl, ...images.filter(i => i !== form.imageUrl)]
     : images;
+  const storefrontOrigin = (() => {
+    const configured = (import.meta.env.VITE_STOREFRONT_ORIGIN as string | undefined)?.replace(/\/$/, "");
+    if (configured) return configured;
+    if (typeof window === "undefined") return "https://luxeboutique.com";
+
+    const { protocol, hostname } = window.location;
+    if (hostname === "localhost" || hostname === "127.0.0.1") return `${protocol}//${hostname}:22805`;
+    if (hostname.endsWith(".replit.dev") || hostname.endsWith(".repl.co")) return `${protocol}//${hostname}:9000`;
+    return "https://luxeboutique.com";
+  })();
+  const liveProductUrl = productId ? `${storefrontOrigin}/products/${encodeURIComponent(productId)}` : null;
 
   const stCfg = STATUS_LABEL[form.status] ?? STATUS_LABEL.ACTIVE;
   const lastSavedStr = lastSaved
@@ -696,16 +702,46 @@ export default function AdminProductEditorPage() {
                 </div>
               </section>
 
-              {/* SEO Preview */}
+              {/* Live storefront preview */}
               <section className="bg-white p-6 rounded-lg shadow-[0px_4px_20px_rgba(15,23,42,0.05)]">
                 <h3 className="text-[11px] font-[Manrope] font-bold tracking-widest uppercase text-[#45464d] mb-6">
-                  Search Engine Preview
+                  Live Storefront Preview
                 </h3>
-                <div className="p-4 bg-white border border-[#c6c6cd] rounded-lg">
-                  <p className="text-[#1a0dab] text-base hover:underline cursor-pointer font-medium truncate">{seoTitle}</p>
-                  <p className="text-[#006621] text-xs mb-1">https://luxeboutique.com/products/{seoSlug}</p>
-                  <p className="text-[#45464d] text-xs line-clamp-2">{seoDesc || "No description yet…"}</p>
-                </div>
+                {liveProductUrl ? (
+                  <>
+                    <div className="overflow-hidden rounded-lg border border-[#c6c6cd] bg-[#f8f9ff]">
+                      <div className="flex items-center justify-between gap-3 border-b border-[#c6c6cd] bg-white px-4 py-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-xs font-[Manrope] font-bold text-[#0b1c30]">{seoTitle}</p>
+                          <p className="truncate text-[10px] font-[Manrope] text-[#006621]">{liveProductUrl}</p>
+                        </div>
+                        <a
+                          href={liveProductUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="shrink-0 text-[10px] font-[Manrope] font-bold uppercase tracking-widest text-black hover:text-[#006c49]"
+                        >
+                          Open live page
+                        </a>
+                      </div>
+                      <iframe
+                        src={liveProductUrl}
+                        title={`Live storefront preview for ${form.name || "product"}`}
+                        loading="lazy"
+                        className="block h-[620px] w-full border-0 bg-white"
+                      />
+                    </div>
+                    <p className="mt-3 text-[10px] font-[Manrope] text-[#7c839b]">
+                      This is the actual storefront product page, loaded from the saved product record.
+                    </p>
+                  </>
+                ) : (
+                  <div className="rounded-lg border border-dashed border-[#c6c6cd] bg-[#f8f9ff] px-6 py-12 text-center">
+                    <span className="material-symbols-outlined mb-3 text-3xl text-[#7c839b]">visibility</span>
+                    <p className="font-[Manrope] text-sm font-bold text-[#0b1c30]">Save the product to preview the live storefront page.</p>
+                    <p className="mt-1 font-[Manrope] text-xs text-[#7c839b]">{seoDesc || "Your product description will appear on the live page."}</p>
+                  </div>
+                )}
 
                 <button type="button" onClick={() => setShowSeoEdit(v => !v)}
                   className="mt-4 text-[11px] font-[Manrope] font-bold uppercase tracking-widest text-black border-b border-black pb-0.5 hover:text-[#006c49] hover:border-[#006c49] transition-colors">
