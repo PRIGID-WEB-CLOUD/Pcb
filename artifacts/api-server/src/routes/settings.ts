@@ -60,20 +60,20 @@ let providers: Provider[] = [
 router.get("/settings", (_req, res) => {
   const smtpConfigured = !!(settings["smtp_host"] && settings["smtp_user"] && settings["smtp_pass"]);
   const cloudinaryConfigured = !!(settings["cloudinary_cloud_name"] && settings["cloudinary_api_key"] && settings["cloudinary_api_secret"]);
-  res.json({ settings, status: { smtpConfigured, cloudinaryConfigured } });
+  return res.json({ settings, status: { smtpConfigured, cloudinaryConfigured } });
 });
 
 router.put("/settings", (req, res) => {
   settings = { ...settings, ...req.body };
   const smtpConfigured = !!(settings["smtp_host"] && settings["smtp_user"] && settings["smtp_pass"]);
   const cloudinaryConfigured = !!(settings["cloudinary_cloud_name"] && settings["cloudinary_api_key"] && settings["cloudinary_api_secret"]);
-  res.json({ settings, status: { smtpConfigured, cloudinaryConfigured } });
+  return res.json({ settings, status: { smtpConfigured, cloudinaryConfigured } });
 });
 
 router.post("/settings/test/email", (_req, res) => {
   const smtpConfigured = !!(settings["smtp_host"] && settings["smtp_user"] && settings["smtp_pass"]);
   if (!smtpConfigured) return res.status(400).json({ error: "SMTP is not configured. Add SMTP credentials first." });
-  res.json({ ok: true, message: "Test email sent (simulation — wire a real SMTP server to deliver)." });
+  return res.json({ ok: true, message: "Test email sent (simulation — wire a real SMTP server to deliver)." });
 });
 
 router.post("/settings/test/cloudinary", (_req, res) => {
@@ -81,7 +81,7 @@ router.post("/settings/test/cloudinary", (_req, res) => {
   const apiKey = settings["cloudinary_api_key"];
   const apiSecret = settings["cloudinary_api_secret"];
   if (!cloudName || !apiKey || !apiSecret) return res.status(400).json({ error: "Cloudinary credentials not configured." });
-  res.json({ ok: true, cloudName, message: "Cloudinary connection verified." });
+  return res.json({ ok: true, cloudName, message: "Cloudinary connection verified." });
 });
 
 // ── API Keys ──────────────────────────────────────────────────────────────────
@@ -92,7 +92,7 @@ function safeKey(k: ApiKey) {
 }
 
 router.get("/apikeys", (_req, res) => {
-  res.json(apiKeys.map(safeKey));
+  return res.json(apiKeys.map(safeKey));
 });
 
 router.post("/apikeys", (req, res) => {
@@ -101,19 +101,19 @@ router.post("/apikeys", (req, res) => {
   const { rawKey, keyPrefix } = makeKey();
   const key: ApiKey = { id: randomUUID(), name, keyPrefix, rawKey, createdAt: new Date().toISOString(), lastUsed: null, revokedAt: null, usageCount: 0 };
   apiKeys = [key, ...apiKeys];
-  res.status(201).json({ ...safeKey(key), rawKey });
+  return res.status(201).json({ ...safeKey(key), rawKey });
 });
 
 router.delete("/apikeys/:id", (req, res) => {
-  const idx = apiKeys.findIndex((k) => k.id === req.params.id);
+  const idx = apiKeys.findIndex((k) => k.id === (req.params.id as string));
   if (idx === -1) return res.status(404).json({ error: "API key not found." });
   apiKeys[idx] = { ...apiKeys[idx], revokedAt: new Date().toISOString() };
-  res.json({ ok: true });
+  return res.json({ ok: true });
 });
 
 router.delete("/apikeys/:id/permanent", (req, res) => {
-  apiKeys = apiKeys.filter((k) => k.id !== req.params.id);
-  res.json({ ok: true });
+  apiKeys = apiKeys.filter((k) => k.id !== (req.params.id as string));
+  return res.json({ ok: true });
 });
 
 // ── Providers ─────────────────────────────────────────────────────────────────
@@ -123,11 +123,11 @@ function safeProvider(p: Provider) {
 }
 
 router.get("/providers", (_req, res) => {
-  res.json(providers.map(safeProvider));
+  return res.json(providers.map(safeProvider));
 });
 
 router.put("/providers/:name", (req, res) => {
-  const { name } = req.params;
+  const name = req.params.name as string;
   const idx = providers.findIndex((p) => p.name === name);
   if (idx === -1) return res.status(404).json({ error: "Provider not found" });
   const raw = req.body as Partial<Provider>;
@@ -143,11 +143,11 @@ router.put("/providers/:name", (req, res) => {
     setEproloConfig(apiKey && apiSecret ? { apiKey, apiSecret } : null);
   }
 
-  res.json(safeProvider(providers[idx]));
+  return res.json(safeProvider(providers[idx]));
 });
 
 router.post("/providers/:name/connect", async (req, res) => {
-  const { name } = req.params;
+  const name = req.params.name as string;
   const idx = providers.findIndex((p) => p.name === name);
   if (idx === -1) return res.status(404).json({ error: "Provider not found" });
 
@@ -183,14 +183,14 @@ router.post("/providers/:name/connect", async (req, res) => {
   }
 
   providers[idx].connected = true;
-  res.json({ connected: true });
+  return res.json({ connected: true });
 });
 
 router.post("/providers/:name/disconnect", (req, res) => {
-  const { name } = req.params;
+  const name = req.params.name as string;
   const idx = providers.findIndex((p) => p.name === name);
   if (idx !== -1) providers[idx].connected = false;
-  res.json({ ok: true });
+  return res.json({ ok: true });
 });
 
 export default router;

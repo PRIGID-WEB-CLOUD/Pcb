@@ -160,9 +160,9 @@ router.get("/twitter/me", async (_req, res) => {
     if (!r.ok) {
       return res.status(r.status).json({ error: (data["detail"] as string) ?? (data["title"] as string) ?? `HTTP ${r.status}` });
     }
-    res.json(data);
+    return res.json(data);
   } catch (err) {
-    res.status(500).json({ error: String(err) });
+    return res.status(500).json({ error: String(err) });
   }
 });
 
@@ -217,9 +217,9 @@ router.post("/twitter/posts/publish", async (req, res) => {
       status: "Published", imageStyle: "None",
     };
     queue = [queued, ...queue];
-    res.json({ tweet: (data["data"] as Record<string, unknown>), queued });
+    return res.json({ tweet: (data["data"] as Record<string, unknown>), queued });
   } catch (err) {
-    res.status(500).json({ error: String(err) });
+    return res.status(500).json({ error: String(err) });
   }
 });
 
@@ -242,7 +242,7 @@ router.get("/twitter/verify", async (_req, res) => {
     }
     return res.json({ ok: false, error: `Twitter API returned HTTP ${r.status}` });
   } catch (err) {
-    res.status(500).json({ ok: false, error: String(err) });
+    return res.status(500).json({ ok: false, error: String(err) });
   }
 });
 

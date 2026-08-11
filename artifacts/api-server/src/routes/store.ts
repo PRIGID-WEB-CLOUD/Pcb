@@ -93,88 +93,88 @@ router.post("/products", requireAdmin, validate(productSchema), async (req, res)
   const body = req.body as z.infer<typeof productSchema>;
   const [p] = await db.insert(productsTable).values({ id: randomUUID(), ...body }).returning();
   productVariants.set(p.id, []);
-  res.status(201).json(await enrichProduct(p));
+  return res.status(201).json(await enrichProduct(p));
 });
 
 router.get("/products/:id", async (req, res) => {
-  const rows = await db.select().from(productsTable).where(eq(productsTable.id, req.params.id)).limit(1);
+  const rows = await db.select().from(productsTable).where(eq(productsTable.id, req.params.id as string)).limit(1);
   if (!rows[0]) return res.status(404).json({ error: "Product not found" });
-  res.json(await enrichProduct(rows[0]));
+  return res.json(await enrichProduct(rows[0]));
 });
 
 router.put("/products/:id", requireAdmin, async (req, res) => {
   const allowed = ["name", "price", "categoryId", "stock", "trackQuantity", "status", "imageUrl", "description", "tags"];
   const updates: Record<string, unknown> = {};
   for (const k of allowed) if (k in req.body) updates[k] = req.body[k];
-  const rows = await db.update(productsTable).set(updates).where(eq(productsTable.id, req.params.id)).returning();
+  const rows = await db.update(productsTable).set(updates).where(eq(productsTable.id, req.params.id as string)).returning();
   if (!rows[0]) return res.status(404).json({ error: "Product not found" });
-  res.json(await enrichProduct(rows[0]));
+  return res.json(await enrichProduct(rows[0]));
 });
 
 router.delete("/products/:id", requireAdmin, async (req, res) => {
-  productVariants.delete(req.params.id);
-  await db.delete(productsTable).where(eq(productsTable.id, req.params.id));
-  res.json({ ok: true });
+  productVariants.delete(req.params.id as string);
+  await db.delete(productsTable).where(eq(productsTable.id, req.params.id as string));
+  return res.json({ ok: true });
 });
 
 // ── Manual sync (stamp updatedAt to mark as manually synced) ──────────────────
 router.post("/products/:id/sync", requireAdmin, async (req, res) => {
-  const rows = await db.select().from(productsTable).where(eq(productsTable.id, req.params.id)).limit(1);
+  const rows = await db.select().from(productsTable).where(eq(productsTable.id, req.params.id as string)).limit(1);
   if (!rows[0]) return res.status(404).json({ error: "Product not found" });
   const updates = req.body as Partial<typeof productsTable.$inferInsert>;
   const allowed = ["name", "price", "stock", "status", "imageUrl", "description", "tags"];
   const patch: Record<string, unknown> = {};
   for (const k of allowed) if (k in updates) patch[k] = (updates as Record<string, unknown>)[k];
-  const [updated] = await db.update(productsTable).set(patch).where(eq(productsTable.id, req.params.id)).returning();
-  res.json({ ok: true, product: updated, syncedAt: new Date().toISOString() });
+  const [updated] = await db.update(productsTable).set(patch).where(eq(productsTable.id, req.params.id as string)).returning();
+  return res.json({ ok: true, product: updated, syncedAt: new Date().toISOString() });
 });
 
 // ── Product Variants (in-memory) ──────────────────────────────────────────────
 
 router.get("/products/:id/variants", async (req, res) => {
-  const rows = await db.select().from(productsTable).where(eq(productsTable.id, req.params.id)).limit(1);
+  const rows = await db.select().from(productsTable).where(eq(productsTable.id, req.params.id as string)).limit(1);
   if (!rows[0]) return res.status(404).json({ error: "Product not found" });
-  res.json(productVariants.get(req.params.id) ?? []);
+  return res.json(productVariants.get(req.params.id as string) ?? []);
 });
 
 router.post("/products/:id/variants", requireAdmin, async (req, res) => {
-  const rows = await db.select().from(productsTable).where(eq(productsTable.id, req.params.id)).limit(1);
+  const rows = await db.select().from(productsTable).where(eq(productsTable.id, req.params.id as string)).limit(1);
   if (!rows[0]) return res.status(404).json({ error: "Product not found" });
   const variant: Variant = { id: randomUUID(), size: req.body.size ?? "", color: req.body.color ?? "", stock: req.body.stock ?? 0, price: req.body.price ?? null, sku: req.body.sku ?? "" };
-  const existing = productVariants.get(req.params.id) ?? [];
-  productVariants.set(req.params.id, [...existing, variant]);
-  res.status(201).json(variant);
+  const existing = productVariants.get(req.params.id as string) ?? [];
+  productVariants.set(req.params.id as string, [...existing, variant]);
+  return res.status(201).json(variant);
 });
 
 router.put("/products/:id/variants/:variantId", requireAdmin, (req, res) => {
   const { id, variantId } = req.params;
-  const variants = productVariants.get(id);
+  const variants = productVariants.get(id as string);
   if (!variants) return res.status(404).json({ error: "Product not found" });
   const idx = variants.findIndex((v) => v.id === variantId);
   if (idx === -1) return res.status(404).json({ error: "Variant not found" });
   variants[idx] = { ...variants[idx], ...req.body };
-  productVariants.set(id, variants);
-  res.json(variants[idx]);
+  productVariants.set(id as string, variants);
+  return res.json(variants[idx]);
 });
 
 router.delete("/products/:id/variants/:variantId", requireAdmin, (req, res) => {
   const { id, variantId } = req.params;
-  const variants = productVariants.get(id) ?? [];
-  productVariants.set(id, variants.filter((v) => v.id !== variantId));
-  res.json({ ok: true });
+  const variants = productVariants.get(id as string) ?? [];
+  productVariants.set(id as string, variants.filter((v) => v.id !== variantId));
+  return res.json({ ok: true });
 });
 
 // ── Orders ────────────────────────────────────────────────────────────────────
 
 router.get("/orders", requireAdmin, async (_req, res) => {
   const rows = await db.select().from(ordersTable).orderBy(desc(ordersTable.createdAt));
-  res.json(rows);
+  return res.json(rows);
 });
 
 router.get("/orders/:id", requireAdmin, async (req, res) => {
-  const rows = await db.select().from(ordersTable).where(eq(ordersTable.id, req.params.id)).limit(1);
+  const rows = await db.select().from(ordersTable).where(eq(ordersTable.id, req.params.id as string)).limit(1);
   if (!rows[0]) return res.status(404).json({ error: "Order not found" });
-  res.json(rows[0]);
+  return res.json(rows[0]);
 });
 
 // ── Eprolo auto-fulfillment helper ───────────────────────────────────────────
@@ -237,7 +237,7 @@ router.post("/orders", async (req, res) => {
     customerEmail,
     total: Math.round(total),
     status: "PENDING",
-    items: items ?? [],
+    items: (items as any) ?? [],
   }).returning();
   eventBus.publish({ type: "new_order", payload: {
     id: order.id,
@@ -251,17 +251,17 @@ router.post("/orders", async (req, res) => {
   // Fire-and-forget Eprolo fulfillment for dropship items
   tryAutoForwardToEprolo(order, shippingAddress ?? {}).catch(() => {});
 
-  res.status(201).json(order);
+  return res.status(201).json(order);
 });
 
 router.put("/orders/:id", requireAdmin, async (req, res) => {
   const allowed = ["status"];
   const updates: Record<string, unknown> = {};
   for (const k of allowed) if (k in req.body) updates[k] = req.body[k];
-  const rows = await db.update(ordersTable).set(updates).where(eq(ordersTable.id, req.params.id)).returning();
+  const rows = await db.update(ordersTable).set(updates).where(eq(ordersTable.id, req.params.id as string)).returning();
   if (!rows[0]) return res.status(404).json({ error: "Order not found" });
   eventBus.publish({ type: "order_updated", payload: { id: rows[0].id, status: rows[0].status } });
-  res.json(rows[0]);
+  return res.json(rows[0]);
 });
 
 // ── Categories ────────────────────────────────────────────────────────────────
@@ -272,14 +272,14 @@ router.get("/categories", async (_req, res) => {
     const [{ count }] = await db.select({ count: sql<number>`count(*)::int` }).from(productsTable).where(eq(productsTable.categoryId, c.id));
     return { ...c, productCount: count ?? 0 };
   }));
-  res.json(withCount);
+  return res.json(withCount);
 });
 
 router.post("/categories", requireAdmin, async (req, res) => {
   const { name, description } = req.body as { name: string; description: string };
   const slug = name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
   const [cat] = await db.insert(categoriesTable).values({ id: randomUUID(), name, slug, description: description ?? "" }).returning();
-  res.status(201).json({ ...cat, productCount: 0 });
+  return res.status(201).json({ ...cat, productCount: 0 });
 });
 
 router.put("/categories/:id", requireAdmin, async (req, res) => {
@@ -287,32 +287,32 @@ router.put("/categories/:id", requireAdmin, async (req, res) => {
   const updates: Record<string, unknown> = {};
   for (const k of allowed) if (k in req.body) updates[k] = req.body[k];
   if (req.body.name) updates["slug"] = String(req.body.name).toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
-  const rows = await db.update(categoriesTable).set(updates).where(eq(categoriesTable.id, req.params.id)).returning();
+  const rows = await db.update(categoriesTable).set(updates).where(eq(categoriesTable.id, req.params.id as string)).returning();
   if (!rows[0]) return res.status(404).json({ error: "Category not found" });
-  res.json(rows[0]);
+  return res.json(rows[0]);
 });
 
 router.delete("/categories/:id", requireAdmin, async (req, res) => {
-  await db.delete(categoriesTable).where(eq(categoriesTable.id, req.params.id));
-  res.json({ ok: true });
+  await db.delete(categoriesTable).where(eq(categoriesTable.id, req.params.id as string));
+  return res.json({ ok: true });
 });
 
 // ── Blog Posts ────────────────────────────────────────────────────────────────
 
-router.get("/posts", (_req, res) => { res.json(blogPosts); });
+router.get("/posts", (_req, res) => { return res.json(blogPosts); });
 
 router.post("/posts", requireAdmin, (req, res) => {
   const { title, content, status, authorName } = req.body as Partial<BlogPost>;
   const slug = (title ?? "post").toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
   const post: BlogPost = { id: randomUUID(), title: title ?? "", slug, content: content ?? "", status: status ?? "DRAFT", authorName: authorName ?? "Admin", publishedAt: status === "PUBLISHED" ? new Date().toISOString() : null, createdAt: new Date().toISOString() };
   blogPosts = [post, ...blogPosts];
-  res.status(201).json(post);
+  return res.status(201).json(post);
 });
 
 router.get("/posts/:id", (req, res) => {
   const p = blogPosts.find((x) => x.id === req.params.id);
   if (!p) return res.status(404).json({ error: "Post not found" });
-  res.json(p);
+  return res.json(p);
 });
 
 router.put("/posts/:id", requireAdmin, (req, res) => {
@@ -321,36 +321,36 @@ router.put("/posts/:id", requireAdmin, (req, res) => {
   const updated = { ...blogPosts[idx], ...req.body };
   if (req.body.status === "PUBLISHED" && !blogPosts[idx].publishedAt) updated.publishedAt = new Date().toISOString();
   blogPosts[idx] = updated;
-  res.json(updated);
+  return res.json(updated);
 });
 
 router.delete("/posts/:id", requireAdmin, (req, res) => {
   blogPosts = blogPosts.filter((x) => x.id !== req.params.id);
-  res.json({ ok: true });
+  return res.json({ ok: true });
 });
 
 // ── Media ─────────────────────────────────────────────────────────────────────
 
-router.get("/media", requireAdmin, (_req, res) => { res.json(mediaItems); });
+router.get("/media", requireAdmin, (_req, res) => { return res.json(mediaItems); });
 
 router.delete("/media/:id", requireAdmin, (req, res) => {
   mediaItems = mediaItems.filter((x) => x.id !== req.params.id);
-  res.json({ ok: true });
+  return res.json({ ok: true });
 });
 
 router.post("/media/upload", requireAdmin, (_req, res) => {
   const item: MediaItem = { id: randomUUID(), filename: "upload.jpg", url: "", mimeType: "image/jpeg", size: 0, createdAt: new Date().toISOString() };
   mediaItems = [item, ...mediaItems];
-  res.status(201).json(item);
+  return res.status(201).json(item);
 });
 
 // ── Users / Customers ─────────────────────────────────────────────────────────
 
-router.get("/users", requireAdmin, (_req, res) => { res.json(customers); });
+router.get("/users", requireAdmin, (_req, res) => { return res.json(customers); });
 
 // ── Coupons ───────────────────────────────────────────────────────────────────
 
-router.get("/coupons", requireAdmin, (_req, res) => { res.json(coupons); });
+router.get("/coupons", requireAdmin, (_req, res) => { return res.json(coupons); });
 
 router.post("/coupons", requireAdmin, (req, res) => {
   const now = new Date().toISOString();
@@ -370,42 +370,42 @@ router.post("/coupons", requireAdmin, (req, res) => {
     updatedAt: now,
   };
   coupons = [coupon, ...coupons];
-  res.status(201).json(coupon);
+  return res.status(201).json(coupon);
 });
 
 router.put("/coupons/:id", requireAdmin, (req, res) => {
   const idx = coupons.findIndex((x) => x.id === req.params.id);
   if (idx === -1) return res.status(404).json({ error: "Coupon not found" });
   coupons[idx] = { ...coupons[idx], ...req.body, updatedAt: new Date().toISOString() };
-  res.json(coupons[idx]);
+  return res.json(coupons[idx]);
 });
 
 router.delete("/coupons/:id", requireAdmin, (req, res) => {
   coupons = coupons.filter((x) => x.id !== req.params.id);
-  res.json({ ok: true });
+  return res.json({ ok: true });
 });
 
 // ── Team ──────────────────────────────────────────────────────────────────────
 
-router.get("/team", requireAdmin, (_req, res) => { res.json(teamMembers); });
+router.get("/team", requireAdmin, (_req, res) => { return res.json(teamMembers); });
 
 router.post("/team/invite", requireAdmin, (req, res) => {
   const { email, role } = req.body as { email: string; role: string };
   const member: TeamMember = { id: randomUUID(), name: "", email, role: role ?? "EDITOR", status: "Invited", invitedAt: new Date().toISOString() };
   teamMembers = [...teamMembers, member];
-  res.status(201).json({ ok: true, token: randomUUID() });
+  return res.status(201).json({ ok: true, token: randomUUID() });
 });
 
 router.get("/team/accept", (req, res) => {
   const { token } = req.query as { token?: string };
   if (!token) return res.status(400).json({ error: "token is required" });
-  res.json({ ok: true, email: "" });
+  return res.json({ ok: true, email: "" });
 });
 
 router.post("/team/accept", (req, res) => {
   const { token, name } = req.body as { token: string; name: string };
   if (!token) return res.status(400).json({ error: "token is required" });
-  res.json({ ok: true, name });
+  return res.json({ ok: true, name });
 });
 
 export default router;

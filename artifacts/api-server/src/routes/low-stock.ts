@@ -50,7 +50,7 @@ setTimeout(() => { checkAndEmit().catch(() => {}); }, 30_000);
 
 router.get("/admin/low-stock", async (_req, res) => {
   const products = await fetchLowStockProducts(threshold);
-  res.json({ products, threshold, checkedAt: lastCheckedAt });
+  return res.json({ products, threshold, checkedAt: lastCheckedAt });
 });
 
 router.post("/admin/low-stock/check", async (_req, res) => {
@@ -60,11 +60,11 @@ router.post("/admin/low-stock/check", async (_req, res) => {
   if (products.length > 0) {
     eventBus.publish({ type: "low_stock", payload: { products, threshold, checkedAt: lastCheckedAt } });
   }
-  res.json({ products, threshold, checkedAt: lastCheckedAt });
+  return res.json({ products, threshold, checkedAt: lastCheckedAt });
 });
 
 router.get("/admin/low-stock/settings", (_req, res) => {
-  res.json({ threshold });
+  return res.json({ threshold });
 });
 
 router.put("/admin/low-stock/settings", (req, res) => {
@@ -75,7 +75,7 @@ router.put("/admin/low-stock/settings", (req, res) => {
   threshold = Math.floor(t);
   lastAlertedIds = new Set();
   checkAndEmit().catch(() => {});
-  res.json({ threshold });
+  return res.json({ threshold });
 });
 
 export default router;

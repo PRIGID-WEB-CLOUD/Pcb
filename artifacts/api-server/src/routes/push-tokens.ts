@@ -20,7 +20,7 @@ router.post("/push-tokens/register", async (req, res) => {
       set: { token, platform: platform ?? "unknown", updatedAt: new Date() },
     });
 
-  res.status(201).json({ ok: true, userId: user.id });
+  return res.status(201).json({ ok: true, userId: user.id });
 });
 
 router.delete("/push-tokens/unregister", async (req, res) => {
@@ -28,7 +28,7 @@ router.delete("/push-tokens/unregister", async (req, res) => {
   if (!user) return res.status(401).json({ error: "Authentication required." });
 
   await db.delete(userPushTokensTable).where(eq(userPushTokensTable.userId, user.id));
-  res.json({ ok: true });
+  return res.json({ ok: true });
 });
 
 router.get("/push-tokens", async (req, res) => {
@@ -38,7 +38,7 @@ router.get("/push-tokens", async (req, res) => {
   }
 
   const all = await db.select().from(userPushTokensTable);
-  res.json(all);
+  return res.json(all);
 });
 
 export default router;

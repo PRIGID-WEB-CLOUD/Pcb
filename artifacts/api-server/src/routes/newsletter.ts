@@ -24,7 +24,7 @@ let campaigns: Campaign[] = [
 // ── Subscribers ───────────────────────────────────────────────────────────────
 
 router.get("/newsletter", requireAdmin, (_req, res) => {
-  res.json(subscribers);
+  return res.json(subscribers);
 });
 
 router.post("/newsletter", (req, res) => {
@@ -33,25 +33,25 @@ router.post("/newsletter", (req, res) => {
   if (subscribers.find((s) => s.email === email)) return res.json({ ok: true, alreadySubscribed: true });
   const sub: Subscriber = { id: randomUUID(), email, name: name ?? null, subscribedAt: new Date().toISOString(), active: true };
   subscribers = [...subscribers, sub];
-  res.status(201).json({ ok: true, subscriber: sub });
+  return res.status(201).json({ ok: true, subscriber: sub });
 });
 
 router.delete("/newsletter/:id", requireAdmin, (req, res) => {
-  subscribers = subscribers.filter((s) => s.id !== req.params.id);
-  res.json({ ok: true });
+  subscribers = subscribers.filter((s) => s.id !== (req.params.id as string));
+  return res.json({ ok: true });
 });
 
 router.get("/newsletter/export", requireAdmin, (_req, res) => {
   const rows = ["email,name,subscribedAt", ...subscribers.filter((s) => s.active).map((s) => `${s.email},${s.name ?? ""},${s.subscribedAt}`)].join("\n");
   res.setHeader("Content-Type", "text/csv");
   res.setHeader("Content-Disposition", `attachment; filename="subscribers-${Date.now()}.csv"`);
-  res.send(rows);
+  return res.send(rows);
 });
 
 // ── Campaigns ─────────────────────────────────────────────────────────────────
 
 router.get("/newsletter/campaigns", requireAdmin, (_req, res) => {
-  res.json(campaigns);
+  return res.json(campaigns);
 });
 
 router.post("/newsletter/send", requireAdmin, (req, res) => {
@@ -59,27 +59,27 @@ router.post("/newsletter/send", requireAdmin, (req, res) => {
   if (!subject || !body) return res.status(400).json({ error: "subject and body are required." });
   const campaign: Campaign = { id: randomUUID(), subject, previewText: previewText ?? "", body, status: "sent", sentAt: new Date().toISOString(), sentCount: subscribers.filter((s) => s.active).length, openRate: 0, createdAt: new Date().toISOString() };
   campaigns = [campaign, ...campaigns];
-  res.status(201).json(campaign);
+  return res.status(201).json(campaign);
 });
 
 router.put("/newsletter/campaigns/:id", requireAdmin, (req, res) => {
-  const idx = campaigns.findIndex((c) => c.id === req.params.id);
+  const idx = campaigns.findIndex((c) => c.id === (req.params.id as string));
   if (idx === -1) return res.status(404).json({ error: "Campaign not found" });
   campaigns[idx] = { ...campaigns[idx], ...req.body };
-  res.json(campaigns[idx]);
+  return res.json(campaigns[idx]);
 });
 
 router.delete("/newsletter/campaigns/:id", requireAdmin, (req, res) => {
-  campaigns = campaigns.filter((c) => c.id !== req.params.id);
-  res.json({ ok: true });
+  campaigns = campaigns.filter((c) => c.id !== (req.params.id as string));
+  return res.json({ ok: true });
 });
 
 router.post("/newsletter/campaigns/:id/resend", requireAdmin, (req, res) => {
-  const campaign = campaigns.find((c) => c.id === req.params.id);
+  const campaign = campaigns.find((c) => c.id === (req.params.id as string));
   if (!campaign) return res.status(404).json({ error: "Campaign not found" });
   const resent: Campaign = { ...campaign, id: randomUUID(), status: "sent", sentAt: new Date().toISOString(), sentCount: subscribers.filter((s) => s.active).length, createdAt: new Date().toISOString() };
   campaigns = [resent, ...campaigns];
-  res.status(201).json(resent);
+  return res.status(201).json(resent);
 });
 
 export default router;

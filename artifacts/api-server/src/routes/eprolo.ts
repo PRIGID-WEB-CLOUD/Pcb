@@ -23,32 +23,32 @@ function requireConfig(res: import("express").Response): boolean {
 
 // ── Browse Eprolo catalog ────────────────────────────────────────────────────
 router.get("/eprolo/products", requireAdmin, async (req, res) => {
-  if (!requireConfig(res)) return;
+  if (!requireConfig(res)) return res.status(400);
   const { page_size = "20", page_num = "1", typeid } = req.query as Record<string, string>;
   try {
     const products = await eprolo.getProducts(_config!, { page_size: Number(page_size), page_num: Number(page_num), typeid });
-    res.json({ products, page: Number(page_num), pageSize: Number(page_size) });
+    return res.json({ products, page: Number(page_num), pageSize: Number(page_size) });
   } catch (err: unknown) {
-    res.status(502).json({ error: err instanceof Error ? err.message : "Eprolo request failed" });
+    return res.status(502).json({ error: err instanceof Error ? err.message : "Eprolo request failed" });
   }
 });
 
 // ── Get product detail ────────────────────────────────────────────────────────
 router.get("/eprolo/products/:id", requireAdmin, async (req, res) => {
-  if (!requireConfig(res)) return;
-  const { id } = req.params;
+  if (!requireConfig(res)) return res.status(400);
+  const id = req.params.id as string;
   const { product_id = id } = req.query as { product_id?: string };
   try {
     const detail = await eprolo.getProductDetail(_config!, id, product_id);
-    res.json(detail);
+    return res.json(detail);
   } catch (err: unknown) {
-    res.status(502).json({ error: err instanceof Error ? err.message : "Failed" });
+    return res.status(502).json({ error: err instanceof Error ? err.message : "Failed" });
   }
 });
 
 // ── Sync inventory stock levels ───────────────────────────────────────────────
 router.post("/eprolo/sync", requireAdmin, async (req, res) => {
-  if (!requireConfig(res)) return;
+  if (!requireConfig(res)) return res.status(400);
   try {
     const inventory = await eprolo.syncInventory(_config!);
     let updated = 0;
@@ -61,15 +61,15 @@ router.post("/eprolo/sync", requireAdmin, async (req, res) => {
         .where(eq(productsTable.id, eproloId));
       if (result.rowCount ?? 0 > 0) updated++;
     }
-    res.json({ ok: true, synced: inventory.length, updated, message: `Synced ${inventory.length} items, updated ${updated} store products.` });
+    return res.json({ ok: true, synced: inventory.length, updated, message: `Synced ${inventory.length} items, updated ${updated} store products.` });
   } catch (err: unknown) {
-    res.status(502).json({ error: err instanceof Error ? err.message : "Sync failed" });
+    return res.status(502).json({ error: err instanceof Error ? err.message : "Sync failed" });
   }
 });
 
 // ── Import a product from Eprolo into the store catalog ──────────────────────
 router.post("/eprolo/import", requireAdmin, async (req, res) => {
-  if (!requireConfig(res)) return;
+  if (!requireConfig(res)) return res.status(400);
   const { product } = req.body as { product?: Record<string, unknown> };
   if (!product) return res.status(400).json({ error: "product is required" });
 
@@ -103,16 +103,16 @@ router.post("/eprolo/import", requireAdmin, async (req, res) => {
       tags:        "eprolo,dropship",
     }).returning();
 
-    res.status(201).json({ ok: true, product: newProduct, message: `"${newProduct.name}" added to staging for review before publishing.` });
+    return res.status(201).json({ ok: true, product: newProduct, message: `"${newProduct.name}" added to staging for review before publishing.` });
   } catch (err: unknown) {
-    res.status(500).json({ error: err instanceof Error ? err.message : "Import failed" });
+    return res.status(500).json({ error: err instanceof Error ? err.message : "Import failed" });
   }
 });
 
 // ── Check if Eprolo is configured (public — used to conditionally show UI) ────
 router.get("/eprolo/configured", requireAdmin, (_req, res) => {
   const cfg = _config;
-  res.json({ configured: !!(cfg?.apiKey && cfg?.apiSecret) });
+  return res.json({ configured: !!(cfg?.apiKey && cfg?.apiSecret) });
 });
 
 // ── Staged (DRAFT) Eprolo products awaiting review ───────────────────────────
@@ -120,9 +120,9 @@ router.get("/eprolo/staged", requireAdmin, async (_req, res) => {
   try {
     const rows = await db.select().from(productsTable)
       .where(and(eq(productsTable.status, "DRAFT"), like(productsTable.tags, "%eprolo%")));
-    res.json(rows);
+    return res.json(rows);
   } catch (err: unknown) {
-    res.status(500).json({ error: err instanceof Error ? err.message : "Failed" });
+    return res.status(500).json({ error: err instanceof Error ? err.message : "Failed" });
   }
 });
 
@@ -131,12 +131,12 @@ router.post("/eprolo/staged/:id/publish", requireAdmin, async (req, res) => {
   try {
     const rows = await db.update(productsTable)
       .set({ status: "ACTIVE" })
-      .where(and(eq(productsTable.id, req.params.id), like(productsTable.tags, "%eprolo%")))
+      .where(and(eq(productsTable.id, req.params.id as string), like(productsTable.tags, "%eprolo%")))
       .returning();
     if (!rows[0]) return res.status(404).json({ error: "Staged product not found" });
-    res.json({ ok: true, product: rows[0] });
+    return res.json({ ok: true, product: rows[0] });
   } catch (err: unknown) {
-    res.status(500).json({ error: err instanceof Error ? err.message : "Publish failed" });
+    return res.status(500).json({ error: err instanceof Error ? err.message : "Publish failed" });
   }
 });
 
@@ -144,10 +144,10 @@ router.post("/eprolo/staged/:id/publish", requireAdmin, async (req, res) => {
 router.delete("/eprolo/staged/:id", requireAdmin, async (req, res) => {
   try {
     await db.delete(productsTable)
-      .where(and(eq(productsTable.id, req.params.id), like(productsTable.tags, "%eprolo%")));
-    res.json({ ok: true });
+      .where(and(eq(productsTable.id, req.params.id as string), like(productsTable.tags, "%eprolo%")));
+    return res.json({ ok: true });
   } catch (err: unknown) {
-    res.status(500).json({ error: err instanceof Error ? err.message : "Reject failed" });
+    return res.status(500).json({ error: err instanceof Error ? err.message : "Reject failed" });
   }
 });
 
@@ -169,7 +169,7 @@ router.post("/webhooks/eprolo", async (req, res) => {
     // TODO: update order status to SHIPPED and notify customer
   }
 
-  res.json({ code: 0, msg: "success" });
+  return res.json({ code: 0, msg: "success" });
 });
 
 export default router;

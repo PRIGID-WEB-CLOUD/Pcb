@@ -101,7 +101,7 @@ router.get("/admin/stats", async (req, res) => {
   // Categories count
   const categories = await db.select().from(categoriesTable);
 
-  res.json({
+  return res.json({
     ...base,
     revenueByMonth,
     totalUsers:   totalUsers ?? 0,
