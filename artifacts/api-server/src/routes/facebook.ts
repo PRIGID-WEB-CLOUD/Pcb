@@ -410,7 +410,7 @@ router.post("/facebook/instagram/publish", async (req, res) => {
       body: JSON.stringify({ image_url: imageUrl, caption: caption ?? "", access_token: token }),
     });
     const container = await containerRes.json() as Record<string, string>;
-    if (!containerRes.ok || !container["id"]) return res.status(400).json({ error: (container as Record<string, Record<string, string>>)["error"]?.message ?? "Container creation failed" });
+    if (!containerRes.ok || !container["id"]) return res.status(400).json({ error: (container as any)["error"]?.message ?? "Container creation failed" });
 
     await new Promise((r) => setTimeout(r, 3000));
 
@@ -420,7 +420,7 @@ router.post("/facebook/instagram/publish", async (req, res) => {
       body: JSON.stringify({ creation_id: container["id"], access_token: token }),
     });
     const published = await publishRes.json() as Record<string, string>;
-    if (!publishRes.ok || !published["id"]) return res.status(400).json({ error: (published as Record<string, Record<string, string>>)["error"]?.message ?? "Publish failed" });
+    if (!publishRes.ok || !published["id"]) return res.status(400).json({ error: (published as any)["error"]?.message ?? "Publish failed" });
 
     addEvent("instagram", "Post published to Instagram", `Media ID: ${published["id"]}`, "sync");
     res.json({ mediaId: published["id"] });
