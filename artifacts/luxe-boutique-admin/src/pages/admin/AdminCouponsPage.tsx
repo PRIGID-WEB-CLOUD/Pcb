@@ -51,7 +51,7 @@ function normalizeCoupon(raw: Partial<Coupon> & Record<string, unknown>): Coupon
       : legacyType,
     discountValue: Number(raw.discountValue ?? legacyValue ?? 0),
     minOrderAmount: Number(raw.minOrderAmount ?? 0),
-    maxUses: raw.maxUses == null || raw.maxUses === "" ? null : Number(raw.maxUses),
+    maxUses: raw.maxUses == null || (raw.maxUses as any) === "" ? null : Number(raw.maxUses),
     usedCount: Number(raw.usedCount ?? legacyUsageCount ?? 0),
     active: raw.active !== false,
     expiresAt: typeof raw.expiresAt === "string" ? raw.expiresAt : null,

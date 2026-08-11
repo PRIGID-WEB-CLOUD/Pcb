@@ -1,23 +1,15 @@
 import { Router, type Request, type Response } from "express";
 import { randomUUID } from "crypto";
-import { db, usersTable, sessionsTable } from "@workspace/db";
-import { eq, or } from "drizzle-orm";
+import { db, usersTable, sessionsTable, adminOtpCodesTable } from "@workspace/db";
+import { eq, or, and, gt, lt } from "drizzle-orm";
 import { SESSION_COOKIE, getSessionUser, requireAdmin } from "../middleware/requireAdmin";
 import { validate } from "../middleware/validate";
 import { z } from "zod";
+import bcrypt from "bcryptjs";
 
 const router = Router();
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-const otpStore   = new Map<string, { code: string; expiresAt: number }>();
-const resetTokens = new Map<string, { userId: string; expiresAt: number }>();
-
-function simpleHash(s: string) {
-  let h = 5381;
-  for (let i = 0; i < s.length; i++) h = ((h << 5) + h) ^ s.charCodeAt(i);
-  return String(h >>> 0);
-}
 
 async function setSession(res: Response, userId: string) {
   const token     = randomUUID();
@@ -52,7 +44,8 @@ router.post("/auth/register", validate(registerSchema), async (req, res) => {
   const { name, email, password } = req.body as { name: string; email: string; password: string };
   const existing = await db.select().from(usersTable).where(eq(usersTable.email, email)).limit(1);
   if (existing.length) return res.status(409).json({ error: "Email already registered." });
-  const user = { id: randomUUID(), name, email, role: "CUSTOMER", passwordHash: simpleHash(password) };
+  const hashedPassword = await bcrypt.hash(password, 10);
+  const user = { id: randomUUID(), name, email, role: "CUSTOMER", passwordHash: hashedPassword };
   await db.insert(usersTable).values(user);
   await setSession(res, user.id);
   const { passwordHash: _, ...safe } = user;
@@ -68,7 +61,7 @@ router.post("/auth/login", validate(loginSchema), async (req, res) => {
   const { email, password } = req.body as { email: string; password: string };
   const rows = await db.select().from(usersTable).where(eq(usersTable.email, email)).limit(1);
   const user = rows[0];
-  if (!user || user.passwordHash !== simpleHash(password)) {
+  if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
     return res.status(401).json({ error: "Invalid email or password." });
   }
   await setSession(res, user.id);
@@ -121,7 +114,25 @@ router.post("/auth/admin/request-otp", async (req, res) => {
     return res.status(404).json({ error: "No admin account found for this email." });
   }
   const code = String(Math.floor(100000 + Math.random() * 900000));
-  otpStore.set(email, { code, expiresAt: Date.now() + 10 * 60 * 1000 });
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+  // Invalidate previous codes
+  await db.update(adminOtpCodesTable)
+    .set({ used: true })
+    .where(and(eq(adminOtpCodesTable.email, email), eq(adminOtpCodesTable.used, false)));
+
+  // Clean up expired records to keep table tidy
+  await db.delete(adminOtpCodesTable).where(lt(adminOtpCodesTable.expiresAt, new Date()));
+
+  // Insert new OTP code
+  await db.insert(adminOtpCodesTable).values({
+    id: randomUUID(),
+    email,
+    code,
+    expiresAt,
+    used: false,
+  });
+
   const isDev = process.env["NODE_ENV"] !== "production";
   res.json({ ok: true, ...(isDev ? { devCode: code } : {}) });
 });
@@ -131,13 +142,24 @@ router.post("/auth/admin/verify-otp", async (req, res) => {
   const { email } = body;
   const otp = body.otp ?? body.code;
   if (!email || !otp) return res.status(400).json({ error: "email and otp are required." });
-  const stored = otpStore.get(email);
-  if (!stored || stored.code !== otp) return res.status(401).json({ error: "Invalid or expired code." });
-  if (Date.now() > stored.expiresAt) {
-    otpStore.delete(email);
-    return res.status(401).json({ error: "Code expired. Request a new one." });
-  }
-  otpStore.delete(email);
+
+  // Query database
+  const [stored] = await db.select().from(adminOtpCodesTable)
+    .where(and(
+      eq(adminOtpCodesTable.email, email),
+      eq(adminOtpCodesTable.code, String(otp).trim()),
+      eq(adminOtpCodesTable.used, false),
+      gt(adminOtpCodesTable.expiresAt, new Date())
+    ))
+    .limit(1);
+
+  if (!stored) return res.status(401).json({ error: "Invalid or expired code." });
+
+  // Mark code as used
+  await db.update(adminOtpCodesTable)
+    .set({ used: true })
+    .where(eq(adminOtpCodesTable.id, stored.id));
+
   const rows = await db.select().from(usersTable).where(eq(usersTable.email, email)).limit(1);
   const admin = rows[0];
   if (!admin || (admin.role !== "ADMIN" && admin.role !== "SUPER_ADMIN")) {
@@ -157,8 +179,14 @@ router.post("/auth/forgot-password", async (req, res) => {
   const user = rows[0];
   const ok = { ok: true, message: "If that email is registered, a reset link will be sent." };
   if (!user) return res.json(ok);
+
   const token = randomUUID();
-  resetTokens.set(token, { userId: user.id, expiresAt: Date.now() + 60 * 60 * 1000 });
+  const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+  await db.update(usersTable)
+    .set({ passwordResetToken: token, passwordResetExpiry: expiresAt })
+    .where(eq(usersTable.id, user.id));
+
   const isDev = process.env["NODE_ENV"] !== "production";
   res.json({ ...ok, ...(isDev ? { devToken: token } : {}) });
 });
@@ -166,16 +194,21 @@ router.post("/auth/forgot-password", async (req, res) => {
 router.post("/auth/reset-password", async (req, res) => {
   const { token, password } = req.body as { token?: string; password?: string };
   if (!token || !password) return res.status(400).json({ error: "token and password are required." });
-  const stored = resetTokens.get(token);
-  if (!stored) return res.status(400).json({ error: "Invalid or expired reset token." });
-  if (Date.now() > stored.expiresAt) {
-    resetTokens.delete(token);
+
+  const [user] = await db.select().from(usersTable)
+    .where(eq(usersTable.passwordResetToken, token))
+    .limit(1);
+
+  if (!user) return res.status(400).json({ error: "Invalid or expired reset token." });
+  if (!user.passwordResetExpiry || user.passwordResetExpiry < new Date()) {
     return res.status(400).json({ error: "Reset token expired. Request a new one." });
   }
-  resetTokens.delete(token);
+
+  const hashedPassword = await bcrypt.hash(password, 10);
   await db.update(usersTable)
-    .set({ passwordHash: simpleHash(password) })
-    .where(eq(usersTable.id, stored.userId));
+    .set({ passwordHash: hashedPassword, passwordResetToken: null, passwordResetExpiry: null })
+    .where(eq(usersTable.id, user.id));
+
   res.json({ ok: true, message: "Password reset successfully." });
 });
 

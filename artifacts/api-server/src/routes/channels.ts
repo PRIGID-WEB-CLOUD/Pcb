@@ -151,12 +151,12 @@ router.put("/channels/webhooks/:webhookId", (req, res) => {
 });
 
 router.get("/channels/credentials/:channel", requireAdmin, (req, res) => {
-  const { channel } = req.params;
+  const channel = req.params.channel as string;
   res.json(credentials[channel] ?? {});
 });
 
 router.put("/channels/credentials/:channel", requireAdmin, async (req, res) => {
-  const { channel } = req.params;
+  const channel = req.params.channel as string;
   credentials[channel] = { ...(credentials[channel] ?? {}), ...req.body };
   await persistCredentials(channel);
   addEvent(channel, "API credentials updated", "Credentials saved to database.", "info");
@@ -164,7 +164,7 @@ router.put("/channels/credentials/:channel", requireAdmin, async (req, res) => {
 });
 
 router.delete("/channels/credentials/:channel", requireAdmin, async (req, res) => {
-  const { channel } = req.params;
+  const channel = req.params.channel as string;
   credentials[channel] = {};
   await persistCredentials(channel);
   addEvent(channel, "API credentials cleared", "All credentials removed.", "warning");

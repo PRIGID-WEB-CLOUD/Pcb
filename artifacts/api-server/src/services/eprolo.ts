@@ -33,7 +33,7 @@ async function eproloRequest(
 
   const response = await fetch(url.toString(), options);
   if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-  const data = await response.json();
+  const data = await response.json() as Record<string, any>;
 
   if (data.code !== "0" && data.code !== 0) {
     throw new Error(data.msg || `Eprolo error code ${data.code}`);
