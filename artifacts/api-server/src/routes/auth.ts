@@ -31,7 +31,7 @@ router.get("/auth/me", async (req, res) => {
   const user = await getSessionUser(req);
   if (!user) return res.status(401).json({ error: "Not authenticated" });
   const { passwordHash: _, ...safe } = user;
-  res.json(safe);
+  return res.json(safe);
 });
 
 const registerSchema = z.object({
@@ -49,7 +49,7 @@ router.post("/auth/register", validate(registerSchema), async (req, res) => {
   await db.insert(usersTable).values(user);
   await setSession(res, user.id);
   const { passwordHash: _, ...safe } = user;
-  res.status(201).json(safe);
+  return res.status(201).json(safe);
 });
 
 const loginSchema = z.object({
@@ -66,12 +66,12 @@ router.post("/auth/login", validate(loginSchema), async (req, res) => {
   }
   await setSession(res, user.id);
   const { passwordHash: _, ...safe } = user;
-  res.json(safe);
+  return res.json(safe);
 });
 
 router.post("/auth/logout", async (req, res) => {
   await clearSession(req, res);
-  res.json({ ok: true });
+  return res.json({ ok: true });
 });
 
 // ── Admin OTP auth ────────────────────────────────────────────────────────────
@@ -81,7 +81,7 @@ router.get("/auth/admin/exists", async (_req, res) => {
     .from(usersTable)
     .where(or(eq(usersTable.role, "ADMIN"), eq(usersTable.role, "SUPER_ADMIN")))
     .limit(1);
-  res.json({ exists: rows.length > 0 });
+  return res.json({ exists: rows.length > 0 });
 });
 
 const bootstrapSchema = z.object({
@@ -100,7 +100,7 @@ router.post("/auth/admin/bootstrap", validate(bootstrapSchema), async (req, res)
   await db.insert(usersTable).values(user);
   await setSession(res, user.id);
   const { passwordHash: _, ...safe } = user;
-  res.status(201).json(safe);
+  return res.status(201).json(safe);
 });
 
 router.post("/auth/admin/request-otp", async (req, res) => {
@@ -134,7 +134,7 @@ router.post("/auth/admin/request-otp", async (req, res) => {
   });
 
   const isDev = process.env["NODE_ENV"] !== "production";
-  res.json({ ok: true, ...(isDev ? { devCode: code } : {}) });
+  return res.json({ ok: true, ...(isDev ? { devCode: code } : {}) });
 });
 
 router.post("/auth/admin/verify-otp", async (req, res) => {
@@ -167,7 +167,7 @@ router.post("/auth/admin/verify-otp", async (req, res) => {
   }
   await setSession(res, admin.id);
   const { passwordHash: _, ...safe } = admin;
-  res.json(safe);
+  return res.json(safe);
 });
 
 // ── Password reset ─────────────────────────────────────────────────────────────
@@ -188,7 +188,7 @@ router.post("/auth/forgot-password", async (req, res) => {
     .where(eq(usersTable.id, user.id));
 
   const isDev = process.env["NODE_ENV"] !== "production";
-  res.json({ ...ok, ...(isDev ? { devToken: token } : {}) });
+  return res.json({ ...ok, ...(isDev ? { devToken: token } : {}) });
 });
 
 router.post("/auth/reset-password", async (req, res) => {
@@ -206,10 +206,9 @@ router.post("/auth/reset-password", async (req, res) => {
 
   const hashedPassword = await bcrypt.hash(password, 10);
   await db.update(usersTable)
-    .set({ passwordHash: hashedPassword, passwordResetToken: null, passwordResetExpiry: null })
-    .where(eq(usersTable.id, user.id));
-
-  res.json({ ok: true, message: "Password reset successfully." });
+    .set({ passwordHash: simpleHash(password) })
+    .where(eq(usersTable.id, stored.userId));
+  return res.json({ ok: true, message: "Password reset successfully." });
 });
 
 // ── Google OAuth stub ──────────────────────────────────────────────────────────

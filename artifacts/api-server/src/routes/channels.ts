@@ -93,61 +93,61 @@ export function addEvent(channel: string, event: string, detail: string, type: E
 // ── Routes ───────────────────────────────────────────────────────────────────
 
 router.get("/channels/configs", (_req, res) => {
-  res.json(configs);
+  return res.json(configs);
 });
 
 router.put("/channels/configs/:channelId/status", (req, res) => {
-  const { channelId } = req.params;
+  const channelId = req.params.channelId as string;
   const { status } = req.body as { status: ChannelStatus };
   configs = configs.map((c) => c.channelId === channelId ? { ...c, status } : c);
   addEvent(channelId, `Status changed to ${status}`, `Channel is now ${status.toLowerCase()}.`, status === "CONNECTED" ? "sync" : "warning");
-  res.json(configs.find((c) => c.channelId === channelId));
+  return res.json(configs.find((c) => c.channelId === channelId));
 });
 
 router.post("/channels/configs/:channelId/sync", (req, res) => {
-  const { channelId } = req.params;
+  const channelId = req.params.channelId as string;
   const now = new Date().toISOString();
   configs = configs.map((c) => c.channelId === channelId ? { ...c, lastSync: now } : c);
   addEvent(channelId, "Manual sync triggered", "Sync completed successfully.", "sync");
-  res.json(configs.find((c) => c.channelId === channelId));
+  return res.json(configs.find((c) => c.channelId === channelId));
 });
 
 router.post("/channels/configs/sync-all", (_req, res) => {
   const now = new Date().toISOString();
   configs = configs.map((c) => c.status === "CONNECTED" ? { ...c, lastSync: now } : c);
   addEvent("system", "Sync-all triggered", "All active channels synced.", "sync");
-  res.json({ ok: true });
+  return res.json({ ok: true });
 });
 
 router.post("/channels/configs/:channelId/test", (req, res) => {
-  const { channelId } = req.params;
+  const channelId = req.params.channelId as string;
   const creds = credentials[channelId] ?? {};
   const hasCreds = Object.keys(creds).length > 0 && Object.values(creds).some((v) => v.trim());
   const latency = hasCreds ? Math.floor(Math.random() * 120) + 40 : 0;
   const pass = hasCreds;
   configs = configs.map((c) => c.channelId === channelId ? { ...c, latency } : c);
   addEvent(channelId, hasCreds ? `Connection test passed (${latency}ms)` : "Connection test failed — no credentials", hasCreds ? "All systems operational." : "Add API credentials to connect.", hasCreds ? "sync" : "error");
-  res.json({ pass, latency });
+  return res.json({ pass, latency });
 });
 
 router.get("/channels/events", (_req, res) => {
-  res.json(events);
+  return res.json(events);
 });
 
 router.delete("/channels/events", (_req, res) => {
   events = [];
-  res.json({ ok: true });
+  return res.json({ ok: true });
 });
 
 router.get("/channels/webhooks", (_req, res) => {
-  res.json(webhooks);
+  return res.json(webhooks);
 });
 
 router.put("/channels/webhooks/:webhookId", (req, res) => {
-  const { webhookId } = req.params;
+  const webhookId = req.params.webhookId as string;
   const { active } = req.body as { active: boolean };
   webhooks = webhooks.map((w) => w.webhookId === webhookId ? { ...w, active } : w);
-  res.json(webhooks.find((w) => w.webhookId === webhookId));
+  return res.json(webhooks.find((w) => w.webhookId === webhookId));
 });
 
 router.get("/channels/credentials/:channel", requireAdmin, (req, res) => {
@@ -160,7 +160,7 @@ router.put("/channels/credentials/:channel", requireAdmin, async (req, res) => {
   credentials[channel] = { ...(credentials[channel] ?? {}), ...req.body };
   await persistCredentials(channel);
   addEvent(channel, "API credentials updated", "Credentials saved to database.", "info");
-  res.json({ ok: true });
+  return res.json({ ok: true });
 });
 
 router.delete("/channels/credentials/:channel", requireAdmin, async (req, res) => {
@@ -168,7 +168,7 @@ router.delete("/channels/credentials/:channel", requireAdmin, async (req, res) =
   credentials[channel] = {};
   await persistCredentials(channel);
   addEvent(channel, "API credentials cleared", "All credentials removed.", "warning");
-  res.json({ ok: true });
+  return res.json({ ok: true });
 });
 
 export default router;

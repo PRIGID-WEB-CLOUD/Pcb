@@ -7,7 +7,7 @@ import { MapPin } from "lucide-react";
 export default function AccountAddressesPage() {
   const { user, loading } = useAuth();
   const [, navigate] = useLocation();
-  const isCustomer = user?.role === "USER";
+  const isCustomer = user?.role === "CUSTOMER";
 
   useEffect(() => {
     if (!loading && !user) navigate("/login");

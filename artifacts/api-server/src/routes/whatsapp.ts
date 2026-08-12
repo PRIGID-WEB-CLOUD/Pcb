@@ -81,9 +81,9 @@ router.post("/whatsapp/templates/:id/submit", async (req, res) => {
     if (!r.ok || data["error"]) return res.status(400).json({ error: (data["error"] as Record<string, string>)?.message ?? `HTTP ${r.status}` });
     templates = templates.map((t) => t.id === id ? { ...t, status: "Pending" } : t);
     addEvent("whatsapp", `Template "${template.name}" submitted to Meta`, "Awaiting approval.", "info");
-    res.json({ ok: true, status: "Pending" });
+    return res.json({ ok: true, status: "Pending" });
   } catch (err) {
-    res.status(500).json({ error: String(err) });
+    return res.status(500).json({ error: String(err) });
   }
 });
 
@@ -122,9 +122,9 @@ router.get("/whatsapp/phone-info", async (_req, res) => {
     });
     const data = await r.json() as Record<string, unknown>;
     if (!r.ok || data["error"]) return res.status(400).json({ error: (data["error"] as Record<string, string>)?.message ?? `HTTP ${r.status}` });
-    res.json(data);
+    return res.json(data);
   } catch (err) {
-    res.status(500).json({ error: String(err) });
+    return res.status(500).json({ error: String(err) });
   }
 });
 
@@ -153,9 +153,9 @@ router.post("/whatsapp/messages/send", async (req, res) => {
     const data = await r.json() as Record<string, unknown>;
     if (!r.ok || data["error"]) return res.status(400).json({ error: (data["error"] as Record<string, string>)?.message ?? `HTTP ${r.status}` });
     addEvent("whatsapp", `Message sent to +${to}`, `"${text.slice(0, 50)}${text.length > 50 ? "…" : ""}"`, "sync");
-    res.json({ result: data });
+    return res.json({ result: data });
   } catch (err) {
-    res.status(500).json({ error: String(err) });
+    return res.status(500).json({ error: String(err) });
   }
 });
 

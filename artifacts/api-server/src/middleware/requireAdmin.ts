@@ -61,7 +61,7 @@ export async function requireAdmin(req: Request, res: Response, next: NextFuncti
   if (role !== "ADMIN" && role !== "SUPER_ADMIN") {
     return res.status(403).json({ error: "Admin access required." });
   }
-  next();
+  return next();
 }
 
 export async function requireSuperAdmin(req: Request, res: Response, next: NextFunction) {
@@ -82,5 +82,5 @@ export async function requireSuperAdmin(req: Request, res: Response, next: NextF
   if (row.user.role !== "SUPER_ADMIN") {
     return res.status(403).json({ error: "Super admin access required." });
   }
-  next();
+  return next();
 }

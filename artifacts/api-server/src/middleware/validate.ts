@@ -12,6 +12,6 @@ export function validate(schema: z.ZodType) {
       return res.status(400).json({ error: "Validation failed", issues });
     }
     req.body = result.data;
-    next();
+    return next();
   };
 }

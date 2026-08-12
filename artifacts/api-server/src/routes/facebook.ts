@@ -86,21 +86,21 @@ router.get("/facebook/connections", (_req, res) => {
 });
 
 router.put("/facebook/connections/:connectionKey", (req, res) => {
-  const { connectionKey } = req.params;
+  const connectionKey = req.params.connectionKey as string;
   const { active } = req.body as { active: boolean };
   connections = connections.map((c) => c.connectionKey === connectionKey ? { ...c, active } : c);
-  res.json(connections.find((c) => c.connectionKey === connectionKey));
+  return res.json(connections.find((c) => c.connectionKey === connectionKey));
 });
 
 // ── Catalog ───────────────────────────────────────────────────────────────────
 
 router.get("/facebook/catalog", (_req, res) => {
-  res.json(catalog);
+  return res.json(catalog);
 });
 
 router.put("/facebook/catalog", (req, res) => {
   catalog = { ...catalog, ...req.body };
-  res.json(catalog);
+  return res.json(catalog);
 });
 
 router.get("/facebook/catalog/info", async (_req, res) => {
@@ -116,9 +116,9 @@ router.get("/facebook/catalog/info", async (_req, res) => {
     const r = await fetch(url.toString());
     const data = await r.json() as Record<string, unknown>;
     if (!r.ok || data["error"]) return res.status(400).json({ error: (data["error"] as Record<string, string>)?.message ?? `HTTP ${r.status}` });
-    res.json(data);
+    return res.json(data);
   } catch (err) {
-    res.status(500).json({ error: String(err) });
+    return res.status(500).json({ error: String(err) });
   }
 });
 
@@ -136,9 +136,9 @@ router.get("/facebook/catalog/products", async (_req, res) => {
     const r = await fetch(url.toString());
     const data = await r.json() as Record<string, unknown>;
     if (!r.ok || data["error"]) return res.status(400).json({ error: (data["error"] as Record<string, string>)?.message ?? `HTTP ${r.status}` });
-    res.json(data);
+    return res.json(data);
   } catch (err) {
-    res.status(500).json({ error: String(err) });
+    return res.status(500).json({ error: String(err) });
   }
 });
 
@@ -220,26 +220,26 @@ router.post("/facebook/catalog/sync", async (req, res) => {
   }
 
   addEvent("commerce", `Catalog synced — ${totalSynced} product${totalSynced !== 1 ? "s" : ""} pushed`, `Live data pushed to Facebook Catalog ${catalogId}.`, "sync");
-  res.json({ ok: true, synced: totalSynced, catalogId, message: `Successfully synced ${totalSynced} product${totalSynced !== 1 ? "s" : ""} to your Facebook catalog.` });
+  return res.json({ ok: true, synced: totalSynced, catalogId, message: `Successfully synced ${totalSynced} product${totalSynced !== 1 ? "s" : ""} to your Facebook catalog.` });
 });
 
 // ── Pixel Events ───────────────────────────────────────────────────────────────
 
 router.get("/facebook/pixel-events", (_req, res) => {
-  res.json(pixelEvents);
+  return res.json(pixelEvents);
 });
 
 router.put("/facebook/pixel-events/:id", (req, res) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
   const { enabled } = req.body as { enabled: boolean };
   pixelEvents = pixelEvents.map((e) => e.id === id ? { ...e, enabled } : e);
-  res.json(pixelEvents.find((e) => e.id === id));
+  return res.json(pixelEvents.find((e) => e.id === id));
 });
 
 // ── Audiences ─────────────────────────────────────────────────────────────────
 
 router.get("/facebook/audiences", (_req, res) => {
-  res.json(audiences);
+  return res.json(audiences);
 });
 
 router.post("/facebook/audiences", (req, res) => {
@@ -247,25 +247,25 @@ router.post("/facebook/audiences", (req, res) => {
   const aud: Audience = { id: randomUUID(), name, size: "Building…", type, status: "Building" };
   audiences = [aud, ...audiences];
   addEvent("facebook", `Audience created: ${name}`, "Building audience — this may take 24-48 hours.", "info");
-  res.status(201).json(aud);
+  return res.status(201).json(aud);
 });
 
 router.put("/facebook/audiences/:id", (req, res) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
   const { status } = req.body as { status: string };
   audiences = audiences.map((a) => a.id === id ? { ...a, status } : a);
-  res.json(audiences.find((a) => a.id === id));
+  return res.json(audiences.find((a) => a.id === id));
 });
 
 router.delete("/facebook/audiences/:id", (req, res) => {
-  audiences = audiences.filter((a) => a.id !== req.params.id);
-  res.json({ ok: true });
+  audiences = audiences.filter((a) => a.id !== (req.params.id as string));
+  return res.json({ ok: true });
 });
 
 // ── Page Posts ────────────────────────────────────────────────────────────────
 
 router.get("/facebook/posts", (_req, res) => {
-  res.json(posts);
+  return res.json(posts);
 });
 
 router.post("/facebook/posts", (req, res) => {
@@ -283,11 +283,11 @@ router.post("/facebook/posts", (req, res) => {
   };
   posts = [post, ...posts];
   addEvent("facebook", `Post ${post.status.toLowerCase()}: ${post.caption.slice(0, 60)}…`, post.status === "Published" ? "Post is live on your Facebook Page." : `Saved as ${post.status.toLowerCase()}.`, "sync");
-  res.status(201).json(post);
+  return res.status(201).json(post);
 });
 
 router.post("/facebook/posts/:id/publish", async (req, res) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
   const { pageId, pageAccessToken } = req.body as { pageId?: string; pageAccessToken?: string };
   const post = posts.find((p) => p.id === id);
   if (!post) return res.status(404).json({ error: "Post not found" });
@@ -313,34 +313,34 @@ router.post("/facebook/posts/:id/publish", async (req, res) => {
     const updated: PagePost = { ...post, status: "Published" };
     posts = posts.map((p) => p.id === id ? updated : p);
     addEvent("facebook", "Post published to Facebook Page", `Post ID: ${String(data["id"] ?? id)}`, "sync");
-    res.json(updated);
+    return res.json(updated);
   } catch (err) {
-    res.status(500).json({ error: String(err) });
+    return res.status(500).json({ error: String(err) });
   }
 });
 
 router.delete("/facebook/posts/:id", (req, res) => {
-  posts = posts.filter((p) => p.id !== req.params.id);
-  res.json({ ok: true });
+  posts = posts.filter((p) => p.id !== (req.params.id as string));
+  return res.json({ ok: true });
 });
 
 // ── Post Templates ────────────────────────────────────────────────────────────
 
 router.get("/facebook/post-templates", (_req, res) => {
-  res.json(postTemplates);
+  return res.json(postTemplates);
 });
 
 router.post("/facebook/post-templates", (req, res) => {
   const { name, body, postType } = req.body as { name: string; body: string; postType: string };
   const tpl: PostTemplate = { id: randomUUID(), name, body, postType: postType ?? "Standard", usageCount: 0 };
   postTemplates = [tpl, ...postTemplates];
-  res.status(201).json(tpl);
+  return res.status(201).json(tpl);
 });
 
 router.put("/facebook/post-templates/:id/use", (req, res) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
   postTemplates = postTemplates.map((t) => t.id === id ? { ...t, usageCount: t.usageCount + 1 } : t);
-  res.json(postTemplates.find((t) => t.id === id));
+  return res.json(postTemplates.find((t) => t.id === id));
 });
 
 // ── Live: Page Info ────────────────────────────────────────────────────────────
@@ -351,7 +351,7 @@ router.get("/facebook/page-info", async (_req, res) => {
   if (!pageId) return res.status(400).json({ error: "Missing Facebook Page ID — add credentials in channel settings." });
   const result = await fbGraphGet(`/${pageId}`, { fields: "name,fan_count,followers_count,link,picture" });
   if (!result.ok) return res.status(400).json({ error: result.error });
-  res.json(result.data);
+  return res.json(result.data);
 });
 
 // ── Live: Instagram ────────────────────────────────────────────────────────────
@@ -369,9 +369,9 @@ router.get("/facebook/instagram/account", async (_req, res) => {
     const r = await fetch(url.toString());
     const data = await r.json() as Record<string, unknown>;
     if (!r.ok || data["error"]) return res.status(400).json({ error: (data["error"] as Record<string, string>)?.message ?? `HTTP ${r.status}` });
-    res.json({ instagram_business_account: data });
+    return res.json({ instagram_business_account: data });
   } catch (err) {
-    res.status(500).json({ error: String(err) });
+    return res.status(500).json({ error: String(err) });
   }
 });
 
@@ -389,9 +389,9 @@ router.get("/facebook/instagram/media", async (_req, res) => {
     const r = await fetch(url.toString());
     const data = await r.json() as Record<string, unknown>;
     if (!r.ok || data["error"]) return res.status(400).json({ error: (data["error"] as Record<string, string>)?.message ?? `HTTP ${r.status}` });
-    res.json(data);
+    return res.json(data);
   } catch (err) {
-    res.status(500).json({ error: String(err) });
+    return res.status(500).json({ error: String(err) });
   }
 });
 
@@ -423,9 +423,9 @@ router.post("/facebook/instagram/publish", async (req, res) => {
     if (!publishRes.ok || !published["id"]) return res.status(400).json({ error: (published as any)["error"]?.message ?? "Publish failed" });
 
     addEvent("instagram", "Post published to Instagram", `Media ID: ${published["id"]}`, "sync");
-    res.json({ mediaId: published["id"] });
+    return res.json({ mediaId: published["id"] });
   } catch (err) {
-    res.status(500).json({ error: String(err) });
+    return res.status(500).json({ error: String(err) });
   }
 });
 
@@ -445,9 +445,9 @@ router.get("/facebook/ads/account", async (_req, res) => {
     const r = await fetch(url.toString());
     const data = await r.json() as Record<string, unknown>;
     if (!r.ok || data["error"]) return res.status(400).json({ error: (data["error"] as Record<string, string>)?.message ?? `HTTP ${r.status}` });
-    res.json(data);
+    return res.json(data);
   } catch (err) {
-    res.status(500).json({ error: String(err) });
+    return res.status(500).json({ error: String(err) });
   }
 });
 
@@ -467,9 +467,9 @@ router.get("/facebook/ads/insights", async (req, res) => {
     const r = await fetch(url.toString());
     const data = await r.json() as Record<string, unknown>;
     if (!r.ok || data["error"]) return res.status(400).json({ error: (data["error"] as Record<string, string>)?.message ?? `HTTP ${r.status}` });
-    res.json(data);
+    return res.json(data);
   } catch (err) {
-    res.status(500).json({ error: String(err) });
+    return res.status(500).json({ error: String(err) });
   }
 });
 
@@ -487,9 +487,9 @@ router.get("/facebook/ads/campaigns", async (_req, res) => {
     const r = await fetch(url.toString());
     const data = await r.json() as Record<string, unknown>;
     if (!r.ok || data["error"]) return res.status(400).json({ error: (data["error"] as Record<string, string>)?.message ?? `HTTP ${r.status}` });
-    res.json(data);
+    return res.json(data);
   } catch (err) {
-    res.status(500).json({ error: String(err) });
+    return res.status(500).json({ error: String(err) });
   }
 });
 

@@ -49,7 +49,7 @@ router.post("/cart", (req, res) => {
   const item: CartItem = { id: randomUUID(), sessionId: sid, productId, quantity, product: product ?? { id: productId, name: "Product", price: 0, imageUrl: null } };
   const updated = [...existing, item];
   carts.set(sid, updated);
-  res.status(201).json(cartResponse(updated));
+  return res.status(201).json(cartResponse(updated));
 });
 
 function updateCartItem(req: any, res: any) {
@@ -84,7 +84,7 @@ router.delete("/cart/:productId", (req, res) => {
 
 router.get("/wishlist", (req, res) => {
   const sid = sessionId(req);
-  res.json(wishlists.get(sid) ?? []);
+  return res.json(wishlists.get(sid) ?? []);
 });
 
 router.post("/wishlist", (req, res) => {
@@ -95,14 +95,14 @@ router.post("/wishlist", (req, res) => {
   if (existing.find((i) => i.productId === productId)) return res.json({ ok: true, alreadyWishlisted: true });
   const item: WishlistItem = { id: randomUUID(), sessionId: sid, productId, product: product ?? { id: productId, name: "Product", price: 0, imageUrl: null } };
   wishlists.set(sid, [...existing, item]);
-  res.status(201).json(item);
+  return res.status(201).json(item);
 });
 
 router.delete("/wishlist/:productId", (req, res) => {
   const sid = sessionId(req);
   const { productId } = req.params;
   wishlists.set(sid, (wishlists.get(sid) ?? []).filter((i) => i.productId !== productId));
-  res.json({ ok: true });
+  return res.json({ ok: true });
 });
 
 // ── Coupons ───────────────────────────────────────────────────────────────────
@@ -121,7 +121,7 @@ router.post("/coupons/validate", (req, res) => {
   const discount = coupon.type === "PERCENTAGE"
     ? Math.floor(((orderAmount ?? 0) * coupon.value) / 100)
     : coupon.value;
-  res.json({ code: code.toUpperCase(), type: coupon.type, value: coupon.value, discount, description: `${coupon.type === "PERCENTAGE" ? `${coupon.value}%` : `$${coupon.value}`} off your order` });
+  return res.json({ code: code.toUpperCase(), type: coupon.type, value: coupon.value, discount, description: `${coupon.type === "PERCENTAGE" ? `${coupon.value}%` : `$${coupon.value}`} off your order` });
 });
 
 router.post("/coupons/redeem", (req, res) => {
@@ -132,7 +132,7 @@ router.post("/coupons/redeem", (req, res) => {
   const discount = coupon.type === "PERCENTAGE"
     ? Math.floor(((orderAmount ?? 0) * coupon.value) / 100)
     : coupon.value;
-  res.json({ ok: true, code: code.toUpperCase(), discount });
+  return res.json({ ok: true, code: code.toUpperCase(), discount });
 });
 
 // ── Payments ──────────────────────────────────────────────────────────────────
@@ -146,9 +146,9 @@ router.post("/payments/initialize", (req, res) => {
   paymentOrders.set(reference, order);
 
   if (provider === "flutterwave") {
-    res.json({ status: "success", message: "Hosted Link", data: { link: callbackUrl ? `${callbackUrl}&reference=${reference}&status=successful` : `/?payment=success&reference=${reference}` } });
+    return res.json({ status: "success", message: "Hosted Link", data: { link: callbackUrl ? `${callbackUrl}&reference=${reference}&status=successful` : `/?payment=success&reference=${reference}` } });
   } else {
-    res.json({ status: "success", message: "Authorization URL created", data: { authorization_url: callbackUrl ? `${callbackUrl}&reference=${reference}` : `/?payment=success&reference=${reference}`, access_code: reference, reference } });
+    return res.json({ status: "success", message: "Authorization URL created", data: { authorization_url: callbackUrl ? `${callbackUrl}&reference=${reference}` : `/?payment=success&reference=${reference}`, access_code: reference, reference } });
   }
 });
 
@@ -158,7 +158,7 @@ router.get("/payments/verify/:reference", (req, res) => {
   if (!order) return res.status(404).json({ error: "Payment reference not found." });
   order.status = "success";
   paymentOrders.set(reference, order);
-  res.json({ status: "success", data: { reference, status: "success", amount: order.amount, paid_at: new Date().toISOString() } });
+  return res.json({ status: "success", data: { reference, status: "success", amount: order.amount, paid_at: new Date().toISOString() } });
 });
 
 // ── Reviews ───────────────────────────────────────────────────────────────────
@@ -166,7 +166,7 @@ router.get("/payments/verify/:reference", (req, res) => {
 router.get("/reviews", (req, res) => {
   const { productId } = req.query as { productId?: string };
   if (productId) return res.json(reviews.filter((r) => r.productId === productId));
-  res.json(reviews);
+  return res.json(reviews);
 });
 
 router.post("/reviews", (req, res) => {
@@ -174,7 +174,7 @@ router.post("/reviews", (req, res) => {
   if (!productId || !rating) return res.status(400).json({ error: "productId and rating are required." });
   const review: Review = { id: randomUUID(), productId, rating, comment: comment ?? "", authorName: authorName ?? "Anonymous", createdAt: new Date().toISOString() };
   reviews = [review, ...reviews];
-  res.status(201).json(review);
+  return res.status(201).json(review);
 });
 
 export default router;
