@@ -1,249 +1,276 @@
 import { Router } from "express";
-import { randomUUID, createHmac } from "crypto";
-import { addEvent, credentials } from "./channels";
-import { requireAdmin } from "../middleware/requireAdmin";
+import { db } from "@workspace/db";
+import {
+  twitterHashtags, twitterAutoRules, twitterTweetQueue,
+  twitterContentTemplates, twitterSchedulerSettings,
+} from "@workspace/db/schema";
+import { eq, desc } from "drizzle-orm";
+import { getSession } from "../lib/auth";
+import { getCredMap, missingCreds } from "../lib/social/credentials";
+import * as Twitter from "../lib/social/twitter";
 
 const router = Router();
-router.use(requireAdmin);
+const TWITTER_CREDS = ["api_key", "api_secret", "access_token", "access_token_secret", "bearer_token"];
 
-// ── In-memory store ──────────────────────────────────────────────────────────
-
-interface Hashtag         { id: string; tag: string; }
-interface AutoRule        { id: string; trigger: string; action: string; template: string; active: boolean; }
-interface QueuedTweet     { id: string; text: string; scheduledFor: string; status: string; imageStyle: string; }
-interface ContentTemplate { id: string; name: string; body: string; usageCount: number; }
-interface Scheduler       { id: string; schedulerOn: boolean; dropFrequency: string; imageStyle: string; }
-
-let hashtags: Hashtag[] = [
-  { id: randomUUID(), tag: "#LuxeBoutique" },
-  { id: randomUUID(), tag: "#NewArrival" },
-  { id: randomUUID(), tag: "#SustainableLuxury" },
-];
-
-let rules: AutoRule[] = [
-  { id: randomUUID(), trigger: "New Product Published", action: "Post immediately", template: "new_arrival", active: true  },
-  { id: randomUUID(), trigger: "Collection Launch",     action: "Post immediately", template: "collection",  active: true  },
-  { id: randomUUID(), trigger: "Flash Sale Started",    action: "Post immediately", template: "promotion",   active: false },
-];
-
-let queue: QueuedTweet[] = [];
-
-let templates: ContentTemplate[] = [
-  { id: randomUUID(), name: "New Arrival",       body: "✨ Now available: {product_name} — crafted for the discerning few. Shop now. #LuxeBoutique #NewArrival",         usageCount: 12 },
-  { id: randomUUID(), name: "Collection Launch", body: "Introducing The {collection_name} Collection. Where precision meets quiet luxury. Available now. #LuxeBoutique", usageCount: 5  },
-  { id: randomUUID(), name: "Sale Announcement", body: "Limited time: {discount}% off select pieces. Because effortless style shouldn't be out of reach. #LuxeBoutique",usageCount: 3  },
-];
-
-let scheduler: Scheduler = {
-  id: randomUUID(),
-  schedulerOn: false,
-  dropFrequency: "Daily Digest (6 PM)",
-  imageStyle: "Product Photo",
-};
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function getTwCreds() { return credentials["twitter"] ?? {}; }
-
-function oauthSign(
-  method: string,
-  url: string,
-  params: Record<string, string>,
-  consumerSecret: string,
-  tokenSecret: string,
-): string {
-  const enc = encodeURIComponent;
-  const sorted = Object.entries(params).sort(([a], [b]) => (a < b ? -1 : 1));
-  const paramStr = sorted.map(([k, v]) => `${enc(k)}=${enc(v)}`).join("&");
-  const base = `${method.toUpperCase()}&${enc(url)}&${enc(paramStr)}`;
-  const sigKey = `${enc(consumerSecret)}&${enc(tokenSecret)}`;
-  return createHmac("sha1", sigKey).update(base).digest("base64");
+async function adminOnly(req: any, res: any): Promise<boolean> {
+  const user = await getSession(req);
+  if (!user || user.role !== "ADMIN") { res.status(401).json({ error: "Unauthorized" }); return false; }
+  return true;
 }
 
-// ── Hashtag Routes ────────────────────────────────────────────────────────────
+async function getTwitterCreds(): Promise<Twitter.TwitterCreds | null> {
+  const creds = await getCredMap("twitter", TWITTER_CREDS);
+  const missing = missingCreds(creds, ["api_key", "api_secret", "access_token", "access_token_secret"]);
+  if (missing.length) return null;
+  return {
+    api_key: creds.api_key,
+    api_secret: creds.api_secret,
+    access_token: creds.access_token,
+    access_token_secret: creds.access_token_secret,
+    bearer_token: creds.bearer_token,
+  };
+}
 
-router.get("/twitter/hashtags", (_req, res) => { res.json(hashtags); });
+// ── Account Info ──────────────────────────────────────────────────────────────
 
-router.post("/twitter/hashtags", (req, res) => {
-  const { tag } = req.body as { tag: string };
-  const ht: Hashtag = { id: randomUUID(), tag };
-  hashtags = [...hashtags, ht];
-  res.status(201).json(ht);
-});
-
-router.delete("/twitter/hashtags/:id", (req, res) => {
-  hashtags = hashtags.filter((h) => h.id !== req.params.id);
-  res.json({ ok: true });
-});
-
-// ── Auto-rule Routes ──────────────────────────────────────────────────────────
-
-router.get("/twitter/rules", (_req, res) => { res.json(rules); });
-
-router.post("/twitter/rules", (req, res) => {
-  const { trigger, action, template, active } = req.body as AutoRule;
-  const rule: AutoRule = { id: randomUUID(), trigger, action, template: template ?? "default", active: active ?? true };
-  rules = [...rules, rule];
-  res.status(201).json(rule);
-});
-
-router.put("/twitter/rules/:id", (req, res) => {
-  const { id } = req.params;
-  const { active } = req.body as { active: boolean };
-  rules = rules.map((r) => (r.id === id ? { ...r, active } : r));
-  res.json(rules.find((r) => r.id === id));
-});
-
-// ── Queue Routes ──────────────────────────────────────────────────────────────
-
-router.get("/twitter/queue", (_req, res) => { res.json(queue); });
-
-router.post("/twitter/queue", (req, res) => {
-  const { text, scheduledFor, status, imageStyle } = req.body as QueuedTweet;
-  const tweet: QueuedTweet = { id: randomUUID(), text, scheduledFor: scheduledFor ?? "", status: status ?? "Queued", imageStyle: imageStyle ?? "None" };
-  queue = [tweet, ...queue];
-  res.status(201).json(tweet);
-});
-
-router.put("/twitter/queue/:id", (req, res) => {
-  const { id } = req.params;
-  const { status } = req.body as { status: string };
-  queue = queue.map((t) => (t.id === id ? { ...t, status } : t));
-  res.json(queue.find((t) => t.id === id));
-});
-
-router.delete("/twitter/queue/:id", (req, res) => {
-  queue = queue.filter((t) => t.id !== req.params.id);
-  res.json({ ok: true });
-});
-
-// ── Template Routes ───────────────────────────────────────────────────────────
-
-router.get("/twitter/templates", (_req, res) => { res.json(templates); });
-
-router.post("/twitter/templates", (req, res) => {
-  const { name, body } = req.body as { name: string; body: string };
-  const tpl: ContentTemplate = { id: randomUUID(), name, body, usageCount: 0 };
-  templates = [tpl, ...templates];
-  res.status(201).json(tpl);
-});
-
-router.put("/twitter/templates/:id/use", (req, res) => {
-  const { id } = req.params;
-  templates = templates.map((t) => (t.id === id ? { ...t, usageCount: t.usageCount + 1 } : t));
-  res.json(templates.find((t) => t.id === id));
-});
-
-// ── Scheduler Routes ──────────────────────────────────────────────────────────
-
-router.get("/twitter/scheduler", (_req, res) => { res.json(scheduler); });
-
-router.put("/twitter/scheduler", (req, res) => {
-  scheduler = { ...scheduler, ...req.body };
-  res.json(scheduler);
-});
-
-// ── Live: Twitter/X Me ────────────────────────────────────────────────────────
-
-router.get("/twitter/me", async (_req, res) => {
-  const creds = getTwCreds();
-  const bearerToken = creds["bearer_token"];
-  if (!bearerToken) {
-    return res.status(400).json({ error: "Missing Twitter Bearer Token — add credentials in channel settings." });
-  }
+router.get("/me", async (req, res) => {
   try {
-    const r = await fetch(
-      "https://api.twitter.com/2/users/me?user.fields=name,username,profile_image_url,public_metrics,description",
-      { headers: { Authorization: `Bearer ${bearerToken}` } },
-    );
-    const data = await r.json() as Record<string, unknown>;
-    if (!r.ok) {
-      return res.status(r.status).json({ error: (data["detail"] as string) ?? (data["title"] as string) ?? `HTTP ${r.status}` });
-    }
+    if (!await adminOnly(req, res)) return;
+    const creds = await getTwitterCreds();
+    if (!creds) { res.status(400).json({ error: "Missing Twitter credentials. Add them in Credentials tab.", missing: ["api_key","api_secret","access_token","access_token_secret"] }); return; }
+    const data = await Twitter.getMyUser(creds);
     res.json(data);
-  } catch (err) {
-    res.status(500).json({ error: String(err) });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message ?? "Failed to fetch Twitter account" });
   }
 });
 
-// ── Live: Publish Tweet ───────────────────────────────────────────────────────
-
-router.post("/twitter/posts/publish", async (req, res) => {
-  const creds = getTwCreds();
-  const { text } = req.body as { text: string };
-  if (!text?.trim()) return res.status(400).json({ error: "Tweet text is required." });
-
-  const requiredKeys = ["api_key", "api_secret", "access_token", "access_token_secret"];
-  const missing = requiredKeys.filter((k) => !creds[k]?.trim());
-  if (missing.length > 0) {
-    return res.status(400).json({ error: `Missing Twitter credentials: ${missing.join(", ")}. Add them in channel settings.` });
-  }
-
+router.get("/verify", async (req, res) => {
   try {
-    const tweetUrl = "https://api.twitter.com/2/tweets";
-    const oauthParams: Record<string, string> = {
-      oauth_consumer_key:     creds["api_key"]!,
-      oauth_token:            creds["access_token"]!,
-      oauth_signature_method: "HMAC-SHA1",
-      oauth_version:          "1.0",
-      oauth_timestamp:        String(Math.floor(Date.now() / 1000)),
-      oauth_nonce:            randomUUID().replace(/-/g, ""),
-    };
-    oauthParams["oauth_signature"] = oauthSign(
-      "POST", tweetUrl, oauthParams,
-      creds["api_secret"]!,
-      creds["access_token_secret"]!,
-    );
-    const authHeader =
-      "OAuth " +
-      Object.entries(oauthParams)
-        .map(([k, v]) => `${k}="${encodeURIComponent(v)}"`)
-        .join(", ");
+    if (!await adminOnly(req, res)) return;
+    const creds = await getTwitterCreds();
+    if (!creds) { res.json({ ok: false, error: "Missing credentials" }); return; }
+    const result = await Twitter.verifyCredentials(creds);
+    res.json(result);
+  } catch (err: any) {
+    res.json({ ok: false, error: err.message });
+  }
+});
 
-    const r = await fetch(tweetUrl, {
-      method: "POST",
-      headers: { Authorization: authHeader, "Content-Type": "application/json" },
-      body: JSON.stringify({ text }),
-    });
-    const data = await r.json() as Record<string, unknown>;
-    if (!r.ok) {
-      return res.status(r.status).json({ error: (data["detail"] as string) ?? `HTTP ${r.status}` });
+// ── Timeline ──────────────────────────────────────────────────────────────────
+
+router.get("/timeline/:userId", async (req, res) => {
+  try {
+    if (!await adminOnly(req, res)) return;
+    const creds = await getTwitterCreds();
+    if (!creds) { res.status(400).json({ error: "Missing Twitter credentials", missing: [] }); return; }
+    const data = await Twitter.getUserTimeline(creds, req.params.userId);
+    res.json(data);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message ?? "Failed to fetch timeline" });
+  }
+});
+
+// ── Publish Tweets ────────────────────────────────────────────────────────────
+
+router.post("/posts/publish", async (req, res) => {
+  try {
+    if (!await adminOnly(req, res)) return;
+    const creds = await getTwitterCreds();
+    if (!creds) {
+      res.status(400).json({ error: "Missing Twitter credentials. Add them in Credentials tab.", missing: ["api_key","api_secret","access_token","access_token_secret"] });
+      return;
     }
 
-    addEvent("twitter", "Tweet published", `"${text.slice(0, 60)}${text.length > 60 ? "…" : ""}"`, "sync");
-    const queued: QueuedTweet = {
-      id: randomUUID(), text,
+    const { text, replyToId } = req.body;
+    if (!text?.trim()) { res.status(400).json({ error: "Tweet text is required" }); return; }
+    if (text.length > 280) { res.status(400).json({ error: "Tweet exceeds 280 characters" }); return; }
+
+    const result = await Twitter.postTweet(creds, text, replyToId);
+    const tweetId = (result as any).data?.id;
+
+    const [queued] = await db.insert(twitterTweetQueue).values({
+      text,
       scheduledFor: new Date().toISOString(),
-      status: "Published", imageStyle: "None",
-    };
-    queue = [queued, ...queue];
-    res.json({ tweet: (data["data"] as Record<string, unknown>), queued });
-  } catch (err) {
-    res.status(500).json({ error: String(err) });
+      status: "Sent",
+      imageStyle: "None",
+    }).returning();
+
+    res.json({ ok: true, tweet: (result as any).data, queued });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message ?? "Tweet publish failed" });
   }
 });
 
-// ── Verify credentials ────────────────────────────────────────────────────────
-
-router.get("/twitter/verify", async (_req, res) => {
-  const creds = getTwCreds();
-  const bearerToken = creds["bearer_token"];
-  if (!bearerToken) {
-    return res.status(400).json({ ok: false, error: "Missing Twitter Bearer Token — add credentials in channel settings." });
-  }
+router.post("/posts/reply", async (req, res) => {
   try {
-    const r = await fetch(
-      "https://api.twitter.com/2/users/me?user.fields=name,username,profile_image_url",
-      { headers: { Authorization: `Bearer ${bearerToken}` } },
-    );
-    if (r.ok) {
-      const data = await r.json() as Record<string, unknown>;
-      return res.json({ ok: true, user: (data["data"] as Record<string, unknown>) });
-    }
-    return res.json({ ok: false, error: `Twitter API returned HTTP ${r.status}` });
-  } catch (err) {
-    res.status(500).json({ ok: false, error: String(err) });
+    if (!await adminOnly(req, res)) return;
+    const creds = await getTwitterCreds();
+    if (!creds) { res.status(400).json({ error: "Missing Twitter credentials" }); return; }
+
+    const { tweetId, text } = req.body;
+    if (!tweetId || !text) { res.status(400).json({ error: "tweetId and text are required" }); return; }
+
+    const result = await Twitter.replyToTweet(creds, tweetId, text);
+    res.json({ ok: true, tweet: (result as any).data });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message ?? "Reply failed" });
   }
+});
+
+router.get("/tweets/:id/metrics", async (req, res) => {
+  try {
+    if (!await adminOnly(req, res)) return;
+    const creds = await getTwitterCreds();
+    if (!creds) { res.status(400).json({ error: "Missing Twitter credentials" }); return; }
+    const data = await Twitter.getTweetMetrics(creds, req.params.id);
+    res.json(data);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message ?? "Failed to fetch tweet metrics" });
+  }
+});
+
+// ── Hashtags ──────────────────────────────────────────────────────────────────
+
+router.get("/hashtags", async (req, res) => {
+  try {
+    if (!await adminOnly(req, res)) return;
+    res.json(await db.select().from(twitterHashtags));
+  } catch { res.status(500).json({ error: "Failed" }); }
+});
+
+router.post("/hashtags", async (req, res) => {
+  try {
+    if (!await adminOnly(req, res)) return;
+    const tag = req.body.tag.startsWith("#") ? req.body.tag : `#${req.body.tag}`;
+    const [created] = await db.insert(twitterHashtags).values({ tag }).returning();
+    res.json(created);
+  } catch { res.status(500).json({ error: "Failed" }); }
+});
+
+router.delete("/hashtags/:id", async (req, res) => {
+  try {
+    if (!await adminOnly(req, res)) return;
+    await db.delete(twitterHashtags).where(eq(twitterHashtags.id, req.params.id));
+    res.json({ ok: true });
+  } catch { res.status(500).json({ error: "Failed" }); }
+});
+
+// ── Auto Rules ────────────────────────────────────────────────────────────────
+
+router.get("/rules", async (req, res) => {
+  try {
+    if (!await adminOnly(req, res)) return;
+    res.json(await db.select().from(twitterAutoRules));
+  } catch { res.status(500).json({ error: "Failed" }); }
+});
+
+router.post("/rules", async (req, res) => {
+  try {
+    if (!await adminOnly(req, res)) return;
+    const [created] = await db.insert(twitterAutoRules).values(req.body).returning();
+    res.json(created);
+  } catch { res.status(500).json({ error: "Failed" }); }
+});
+
+router.put("/rules/:id", async (req, res) => {
+  try {
+    if (!await adminOnly(req, res)) return;
+    const [updated] = await db.update(twitterAutoRules)
+      .set({ active: req.body.active })
+      .where(eq(twitterAutoRules.id, req.params.id))
+      .returning();
+    res.json(updated);
+  } catch { res.status(500).json({ error: "Failed" }); }
+});
+
+// ── Queue ─────────────────────────────────────────────────────────────────────
+
+router.get("/queue", async (req, res) => {
+  try {
+    if (!await adminOnly(req, res)) return;
+    res.json(await db.select().from(twitterTweetQueue).orderBy(desc(twitterTweetQueue.createdAt)));
+  } catch { res.status(500).json({ error: "Failed" }); }
+});
+
+router.post("/queue", async (req, res) => {
+  try {
+    if (!await adminOnly(req, res)) return;
+    const [created] = await db.insert(twitterTweetQueue).values(req.body).returning();
+    res.json(created);
+  } catch { res.status(500).json({ error: "Failed" }); }
+});
+
+router.put("/queue/:id", async (req, res) => {
+  try {
+    if (!await adminOnly(req, res)) return;
+    const [updated] = await db.update(twitterTweetQueue)
+      .set(req.body)
+      .where(eq(twitterTweetQueue.id, req.params.id))
+      .returning();
+    res.json(updated);
+  } catch { res.status(500).json({ error: "Failed" }); }
+});
+
+router.delete("/queue/:id", async (req, res) => {
+  try {
+    if (!await adminOnly(req, res)) return;
+    await db.delete(twitterTweetQueue).where(eq(twitterTweetQueue.id, req.params.id));
+    res.json({ ok: true });
+  } catch { res.status(500).json({ error: "Failed" }); }
+});
+
+// ── Content Templates ─────────────────────────────────────────────────────────
+
+router.get("/templates", async (req, res) => {
+  try {
+    if (!await adminOnly(req, res)) return;
+    res.json(await db.select().from(twitterContentTemplates));
+  } catch { res.status(500).json({ error: "Failed" }); }
+});
+
+router.post("/templates", async (req, res) => {
+  try {
+    if (!await adminOnly(req, res)) return;
+    const [created] = await db.insert(twitterContentTemplates)
+      .values({ name: req.body.name.toLowerCase().replace(/\s+/g, "_"), body: req.body.body })
+      .returning();
+    res.json(created);
+  } catch { res.status(500).json({ error: "Failed" }); }
+});
+
+router.put("/templates/:id/use", async (req, res) => {
+  try {
+    if (!await adminOnly(req, res)) return;
+    const [tpl] = await db.select().from(twitterContentTemplates).where(eq(twitterContentTemplates.id, req.params.id)).limit(1);
+    const [updated] = await db.update(twitterContentTemplates)
+      .set({ usageCount: (tpl?.usageCount ?? 0) + 1 })
+      .where(eq(twitterContentTemplates.id, req.params.id))
+      .returning();
+    res.json(updated);
+  } catch { res.status(500).json({ error: "Failed" }); }
+});
+
+// ── Scheduler ─────────────────────────────────────────────────────────────────
+
+router.get("/scheduler", async (req, res) => {
+  try {
+    if (!await adminOnly(req, res)) return;
+    const [settings] = await db.select().from(twitterSchedulerSettings).limit(1);
+    res.json(settings);
+  } catch { res.status(500).json({ error: "Failed" }); }
+});
+
+router.put("/scheduler", async (req, res) => {
+  try {
+    if (!await adminOnly(req, res)) return;
+    const [existing] = await db.select().from(twitterSchedulerSettings).limit(1);
+    const [updated] = await db.update(twitterSchedulerSettings)
+      .set({ ...req.body, updatedAt: new Date() })
+      .where(eq(twitterSchedulerSettings.id, existing.id))
+      .returning();
+    res.json(updated);
+  } catch { res.status(500).json({ error: "Failed" }); }
 });
 
 export default router;

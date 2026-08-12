@@ -1,495 +1,472 @@
 import { Router } from "express";
-import { randomUUID } from "crypto";
-import { addEvent, credentials } from "./channels";
-import { requireAdmin } from "../middleware/requireAdmin";
-import { db, productsTable, categoriesTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { db } from "@workspace/db";
+import {
+  facebookConnections, facebookCatalogSettings,
+  facebookPixelEvents, facebookAudiences,
+  facebookPagePosts, facebookPostTemplates, products, categories,
+} from "@workspace/db/schema";
+import { eq, desc } from "drizzle-orm";
+import { getSession } from "../lib/auth";
+import { getCredMap, missingCreds } from "../lib/social/credentials";
+import * as Meta from "../lib/social/meta";
 
 const router = Router();
-router.use(requireAdmin);
 
-// ── In-memory store ──────────────────────────────────────────────────────────
+const FACEBOOK_CREDS = ["page_id", "app_id", "app_secret", "page_access_token"];
+const INSTAGRAM_CREDS = ["page_id", "page_access_token"];
+const CATALOG_CREDS = ["catalog_id", "page_access_token"];
+const ADS_CREDS = ["ad_account_id", "page_access_token"];
 
-interface Connection      { id: string; connectionKey: string; active: boolean; }
-interface CatalogSettings { id: string; includedCategories: string[]; minPrice: number; maxPrice: number; }
-interface PixelEvent      { id: string; storeEvent: string; fbEvent: string; enabled: boolean; }
-interface Audience        { id: string; name: string; size: string; type: string; status: string; }
-interface PagePost {
-  id: string; caption: string; imageUrl: string | null; link: string | null;
-  postType: string; scheduledFor: string | null; status: string;
-  likes: number; comments: number; shares: number; reach: number; createdAt: string;
-}
-interface PostTemplate { id: string; name: string; body: string; postType: string; usageCount: number; }
-
-let connections: Connection[] = [
-  { id: randomUUID(), connectionKey: "facebook",  active: false },
-  { id: randomUUID(), connectionKey: "instagram", active: false },
-  { id: randomUUID(), connectionKey: "pixel",     active: false },
-  { id: randomUUID(), connectionKey: "messenger", active: false },
-];
-
-let catalog: CatalogSettings = {
-  id: randomUUID(),
-  includedCategories: ["Ready-to-Wear", "Accessories", "Footwear"],
-  minPrice: 0,
-  maxPrice: 10000,
-};
-
-let pixelEvents: PixelEvent[] = [
-  { id: randomUUID(), storeEvent: "Page View",        fbEvent: "PageView",        enabled: true  },
-  { id: randomUUID(), storeEvent: "Product Viewed",   fbEvent: "ViewContent",     enabled: true  },
-  { id: randomUUID(), storeEvent: "Add to Cart",      fbEvent: "AddToCart",       enabled: true  },
-  { id: randomUUID(), storeEvent: "Begin Checkout",   fbEvent: "InitiateCheckout",enabled: true  },
-  { id: randomUUID(), storeEvent: "Purchase",         fbEvent: "Purchase",        enabled: true  },
-  { id: randomUUID(), storeEvent: "Search",           fbEvent: "Search",          enabled: false },
-  { id: randomUUID(), storeEvent: "Wishlist Add",     fbEvent: "AddToWishlist",   enabled: false },
-];
-
-let audiences: Audience[] = [
-  { id: randomUUID(), name: "Past Customers (180d)", size: "12.4K", type: "Custom",    status: "Active"   },
-  { id: randomUUID(), name: "High-Value Lookalike",  size: "2.1M",  type: "Lookalike", status: "Active"   },
-  { id: randomUUID(), name: "Cart Abandoners",       size: "3.8K",  type: "Retargeting",status: "Building" },
-];
-
-let posts: PagePost[] = [];
-let postTemplates: PostTemplate[] = [
-  { id: randomUUID(), name: "New Arrival Drop", body: "✨ Just arrived — {product_name}. Crafted for the discerning few. Shop now via our link in bio. #LuxeBoutique #NewArrival", postType: "Product Spotlight", usageCount: 7 },
-  { id: randomUUID(), name: "Collection Launch", body: "Introducing The {collection_name} Collection — where precision meets quiet luxury. Available now. #LuxeBoutique", postType: "Collection Launch", usageCount: 3 },
-  { id: randomUUID(), name: "Brand Story",       body: "Every thread tells a story. At LUXE BOUTIQUE, we believe in garments that last beyond seasons. Discover our heritage. 🖤", postType: "Brand Story", usageCount: 2 },
-];
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-function getFbCreds() { return credentials["facebook"] ?? {}; }
-
-async function fbGraphGet(path: string, params: Record<string, string> = {}): Promise<{ ok: boolean; data?: unknown; error?: string }> {
-  const creds = getFbCreds();
-  const token = creds["page_access_token"];
-  if (!token) return { ok: false, error: "Missing Facebook credentials — add Page Access Token in channel settings." };
-  const url = new URL(`https://graph.facebook.com/v21.0${path}`);
-  url.searchParams.set("access_token", token);
-  for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
-  try {
-    const r = await fetch(url.toString());
-    const body = await r.json() as Record<string, unknown>;
-    if (!r.ok || body["error"]) return { ok: false, error: (body["error"] as Record<string, string>)?.message ?? `HTTP ${r.status}` };
-    return { ok: true, data: body };
-  } catch (err) {
-    return { ok: false, error: String(err) };
-  }
+async function adminOnly(req: any, res: any): Promise<boolean> {
+  const user = await getSession(req);
+  if (!user || user.role !== "ADMIN") { res.status(401).json({ error: "Unauthorized" }); return false; }
+  return true;
 }
 
-// ── Connections ───────────────────────────────────────────────────────────────
+const DEFAULT_CONNECTIONS = [
+  { connectionKey: "facebook",  active: true  },
+  { connectionKey: "instagram", active: true  },
+  { connectionKey: "pixel",     active: true  },
+  { connectionKey: "messenger", active: false },
+];
 
-router.get("/facebook/connections", (_req, res) => {
-  res.json(connections);
-});
+const DEFAULT_PIXEL_EVENTS = [
+  { storeEvent: "Product Viewed",   fbEvent: "ViewContent",          enabled: true  },
+  { storeEvent: "Add to Cart",      fbEvent: "AddToCart",            enabled: true  },
+  { storeEvent: "Checkout Started", fbEvent: "InitiateCheckout",     enabled: true  },
+  { storeEvent: "Order Completed",  fbEvent: "Purchase",             enabled: true  },
+  { storeEvent: "Wishlist Added",   fbEvent: "AddToWishlist",        enabled: false },
+  { storeEvent: "Search Performed", fbEvent: "Search",               enabled: false },
+  { storeEvent: "Account Created",  fbEvent: "CompleteRegistration", enabled: true  },
+];
 
-router.put("/facebook/connections/:connectionKey", (req, res) => {
-  const { connectionKey } = req.params;
-  const { active } = req.body as { active: boolean };
-  connections = connections.map((c) => c.connectionKey === connectionKey ? { ...c, active } : c);
-  res.json(connections.find((c) => c.connectionKey === connectionKey));
-});
+const DEFAULT_AUDIENCES = [
+  { name: "Past 30-Day Purchasers", size: "4,820", type: "Custom",      status: "Active"   },
+  { name: "Lookalike — Top LTV",    size: "180K",  type: "Lookalike",   status: "Active"   },
+  { name: "Cart Abandoners (7d)",   size: "1,240", type: "Retargeting", status: "Active"   },
+  { name: "VIP Segment Lookalike",  size: "92K",   type: "Lookalike",   status: "Building" },
+];
 
-// ── Catalog ───────────────────────────────────────────────────────────────────
+// ── Connections ──────────────────────────────────────────────────────────────
 
-router.get("/facebook/catalog", (_req, res) => {
-  res.json(catalog);
-});
-
-router.put("/facebook/catalog", (req, res) => {
-  catalog = { ...catalog, ...req.body };
-  res.json(catalog);
-});
-
-router.get("/facebook/catalog/info", async (_req, res) => {
-  const creds = credentials["commerce"] ?? {};
-  const fbCreds = getFbCreds();
-  const catalogId = creds["catalog_id"] || fbCreds["catalog_id"];
-  const token = creds["page_access_token"] || fbCreds["page_access_token"];
-  if (!catalogId || !token) return res.status(400).json({ error: "Missing Commerce credentials — add Catalog ID and Page Access Token." });
-  const url = new URL(`https://graph.facebook.com/v21.0/${catalogId}`);
-  url.searchParams.set("fields", "id,name,product_count,vertical,description");
-  url.searchParams.set("access_token", token);
+router.get("/connections", async (req, res) => {
   try {
-    const r = await fetch(url.toString());
-    const data = await r.json() as Record<string, unknown>;
-    if (!r.ok || data["error"]) return res.status(400).json({ error: (data["error"] as Record<string, string>)?.message ?? `HTTP ${r.status}` });
-    res.json(data);
-  } catch (err) {
-    res.status(500).json({ error: String(err) });
-  }
-});
-
-router.get("/facebook/catalog/products", async (_req, res) => {
-  const creds = credentials["commerce"] ?? {};
-  const fbCreds = getFbCreds();
-  const catalogId = creds["catalog_id"] || fbCreds["catalog_id"];
-  const token = creds["page_access_token"] || fbCreds["page_access_token"];
-  if (!catalogId || !token) return res.status(400).json({ error: "Missing Commerce credentials — add Catalog ID and Page Access Token." });
-  const url = new URL(`https://graph.facebook.com/v21.0/${catalogId}/products`);
-  url.searchParams.set("fields", "id,name,price,currency,availability,condition,retailer_id,image_url,product_type");
-  url.searchParams.set("limit", "50");
-  url.searchParams.set("access_token", token);
-  try {
-    const r = await fetch(url.toString());
-    const data = await r.json() as Record<string, unknown>;
-    if (!r.ok || data["error"]) return res.status(400).json({ error: (data["error"] as Record<string, string>)?.message ?? `HTTP ${r.status}` });
-    res.json(data);
-  } catch (err) {
-    res.status(500).json({ error: String(err) });
-  }
-});
-
-router.post("/facebook/catalog/sync", async (req, res) => {
-  const commerceCreds = credentials["commerce"] ?? {};
-  const fbCreds = getFbCreds();
-  const catalogId = commerceCreds["catalog_id"] || fbCreds["catalog_id"];
-  const token = commerceCreds["page_access_token"] || fbCreds["page_access_token"];
-  const storeDomain = (req.body as { storeDomain?: string }).storeDomain ?? process.env["REPLIT_DEV_DOMAIN"] ?? "luxeboutique.com";
-
-  if (!catalogId || !token) {
-    return res.status(400).json({ error: "Missing Commerce credentials — add Catalog ID and Page Access Token in channel settings." });
-  }
-
-  // Fetch active products with their categories from the DB
-  const rows = await db
-    .select({
-      id:          productsTable.id,
-      name:        productsTable.name,
-      description: productsTable.description,
-      price:       productsTable.price,
-      stock:       productsTable.stock,
-      imageUrl:    productsTable.imageUrl,
-      status:      productsTable.status,
-      categoryName: categoriesTable.name,
-    })
-    .from(productsTable)
-    .leftJoin(categoriesTable, eq(productsTable.categoryId, categoriesTable.id))
-    .where(eq(productsTable.status, "ACTIVE"));
-
-  if (rows.length === 0) {
-    return res.status(400).json({ error: "No active products found to sync." });
-  }
-
-  // Build Facebook Catalog Batch API payload
-  const requests = rows.map((p) => ({
-    method: "UPDATE",
-    retailer_id: p.id,
-    data: {
-      title:        p.name,
-      description:  p.description || p.name,
-      availability: (p.stock ?? 0) > 0 ? "in stock" : "out of stock",
-      condition:    "new",
-      price:        `${p.price} GBP`,
-      link:         `https://${storeDomain}/products/${p.id}`,
-      image_link:   p.imageUrl ?? `https://${storeDomain}/placeholder.jpg`,
-      brand:        "LUXE BOUTIQUE",
-      google_product_category: p.categoryName ?? "Apparel & Accessories",
-    },
-  }));
-
-  // Push in batches of 50 (Facebook API limit per request)
-  const BATCH = 50;
-  let totalSynced = 0;
-  const errors: string[] = [];
-
-  for (let i = 0; i < requests.length; i += BATCH) {
-    const chunk = requests.slice(i, i + BATCH);
-    try {
-      const r = await fetch(`https://graph.facebook.com/v21.0/${catalogId}/items_batch`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ access_token: token, item_type: "PRODUCT_ITEM", requests: chunk }),
-      });
-      const data = await r.json() as Record<string, unknown>;
-      if (!r.ok || data["error"]) {
-        errors.push((data["error"] as Record<string, string>)?.message ?? `HTTP ${r.status}`);
-      } else {
-        totalSynced += chunk.length;
-      }
-    } catch (err) {
-      errors.push(String(err));
+    if (!await adminOnly(req, res)) return;
+    let rows = await db.select().from(facebookConnections);
+    if (!rows.length) {
+      rows = await db.insert(facebookConnections).values(DEFAULT_CONNECTIONS).returning();
     }
-  }
-
-  if (errors.length > 0) {
-    addEvent("commerce", `Catalog sync failed (${errors.length} error${errors.length > 1 ? "s" : ""})`, errors[0]!, "error");
-    return res.status(400).json({ ok: false, synced: totalSynced, errors });
-  }
-
-  addEvent("commerce", `Catalog synced — ${totalSynced} product${totalSynced !== 1 ? "s" : ""} pushed`, `Live data pushed to Facebook Catalog ${catalogId}.`, "sync");
-  res.json({ ok: true, synced: totalSynced, catalogId, message: `Successfully synced ${totalSynced} product${totalSynced !== 1 ? "s" : ""} to your Facebook catalog.` });
+    res.json(rows);
+  } catch { res.status(500).json({ error: "Failed" }); }
 });
 
-// ── Pixel Events ───────────────────────────────────────────────────────────────
-
-router.get("/facebook/pixel-events", (_req, res) => {
-  res.json(pixelEvents);
-});
-
-router.put("/facebook/pixel-events/:id", (req, res) => {
-  const { id } = req.params;
-  const { enabled } = req.body as { enabled: boolean };
-  pixelEvents = pixelEvents.map((e) => e.id === id ? { ...e, enabled } : e);
-  res.json(pixelEvents.find((e) => e.id === id));
-});
-
-// ── Audiences ─────────────────────────────────────────────────────────────────
-
-router.get("/facebook/audiences", (_req, res) => {
-  res.json(audiences);
-});
-
-router.post("/facebook/audiences", (req, res) => {
-  const { name, type } = req.body as { name: string; type: string };
-  const aud: Audience = { id: randomUUID(), name, size: "Building…", type, status: "Building" };
-  audiences = [aud, ...audiences];
-  addEvent("facebook", `Audience created: ${name}`, "Building audience — this may take 24-48 hours.", "info");
-  res.status(201).json(aud);
-});
-
-router.put("/facebook/audiences/:id", (req, res) => {
-  const { id } = req.params;
-  const { status } = req.body as { status: string };
-  audiences = audiences.map((a) => a.id === id ? { ...a, status } : a);
-  res.json(audiences.find((a) => a.id === id));
-});
-
-router.delete("/facebook/audiences/:id", (req, res) => {
-  audiences = audiences.filter((a) => a.id !== req.params.id);
-  res.json({ ok: true });
-});
-
-// ── Page Posts ────────────────────────────────────────────────────────────────
-
-router.get("/facebook/posts", (_req, res) => {
-  res.json(posts);
-});
-
-router.post("/facebook/posts", (req, res) => {
-  const { caption, imageUrl, link, postType, scheduledFor, status } = req.body as Partial<PagePost>;
-  const post: PagePost = {
-    id: randomUUID(),
-    caption: caption ?? "",
-    imageUrl: imageUrl ?? null,
-    link: link ?? null,
-    postType: postType ?? "Standard",
-    scheduledFor: scheduledFor ?? null,
-    status: status ?? "Draft",
-    likes: 0, comments: 0, shares: 0, reach: 0,
-    createdAt: new Date().toISOString(),
-  };
-  posts = [post, ...posts];
-  addEvent("facebook", `Post ${post.status.toLowerCase()}: ${post.caption.slice(0, 60)}…`, post.status === "Published" ? "Post is live on your Facebook Page." : `Saved as ${post.status.toLowerCase()}.`, "sync");
-  res.status(201).json(post);
-});
-
-router.post("/facebook/posts/:id/publish", async (req, res) => {
-  const { id } = req.params;
-  const { pageId, pageAccessToken } = req.body as { pageId?: string; pageAccessToken?: string };
-  const post = posts.find((p) => p.id === id);
-  if (!post) return res.status(404).json({ error: "Post not found" });
-
-  if (!pageId || !pageAccessToken) {
-    return res.status(400).json({ error: "Missing pageId or pageAccessToken — add Facebook credentials first." });
-  }
-
-  const url = new URL(`https://graph.facebook.com/v21.0/${pageId}/feed`);
+router.put("/connections/:key", async (req, res) => {
   try {
-    const body: Record<string, string> = { message: post.caption, access_token: pageAccessToken };
-    if (post.link) body["link"] = post.link;
-    const r = await fetch(url.toString(), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const data = await r.json() as Record<string, unknown>;
-    if (!r.ok || data["error"]) {
-      const errMsg = (data["error"] as Record<string, string>)?.message ?? `HTTP ${r.status}`;
-      return res.status(400).json({ error: errMsg });
-    }
-    const updated: PagePost = { ...post, status: "Published" };
-    posts = posts.map((p) => p.id === id ? updated : p);
-    addEvent("facebook", "Post published to Facebook Page", `Post ID: ${String(data["id"] ?? id)}`, "sync");
+    if (!await adminOnly(req, res)) return;
+    const [updated] = await db.update(facebookConnections)
+      .set({ active: req.body.active, updatedAt: new Date() })
+      .where(eq(facebookConnections.connectionKey, req.params.key))
+      .returning();
     res.json(updated);
-  } catch (err) {
-    res.status(500).json({ error: String(err) });
+  } catch { res.status(500).json({ error: "Failed" }); }
+});
+
+// ── Page Info (real Graph API) ────────────────────────────────────────────────
+
+router.get("/page-info", async (req, res) => {
+  try {
+    if (!await adminOnly(req, res)) return;
+    const creds = await getCredMap("facebook", FACEBOOK_CREDS);
+    const missing = missingCreds(creds, ["page_id", "page_access_token"]);
+    if (missing.length) {
+      res.status(400).json({ error: `Missing credentials: ${missing.join(", ")}`, missing });
+      return;
+    }
+    const info = await Meta.getPageInfo(creds.page_id, creds.page_access_token);
+    res.json(info);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message ?? "Failed to fetch page info" });
   }
 });
 
-router.delete("/facebook/posts/:id", (req, res) => {
-  posts = posts.filter((p) => p.id !== req.params.id);
-  res.json({ ok: true });
+// ── Live Page Posts (real Graph API) ─────────────────────────────────────────
+
+router.get("/page-posts/live", async (req, res) => {
+  try {
+    if (!await adminOnly(req, res)) return;
+    const creds = await getCredMap("facebook", FACEBOOK_CREDS);
+    const missing = missingCreds(creds, ["page_id", "page_access_token"]);
+    if (missing.length) {
+      res.status(400).json({ error: `Missing credentials: ${missing.join(", ")}`, missing });
+      return;
+    }
+    const data = await Meta.getPagePosts(creds.page_id, creds.page_access_token);
+    res.json(data);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message ?? "Failed to fetch live posts" });
+  }
+});
+
+// ── Catalog ──────────────────────────────────────────────────────────────────
+
+router.get("/catalog", async (req, res) => {
+  try {
+    if (!await adminOnly(req, res)) return;
+    let [settings] = await db.select().from(facebookCatalogSettings).limit(1);
+    if (!settings) {
+      [settings] = await db.insert(facebookCatalogSettings).values({}).returning();
+    }
+    res.json({ ...settings, includedCategories: JSON.parse(settings.includedCategories) });
+  } catch { res.status(500).json({ error: "Failed" }); }
+});
+
+router.put("/catalog", async (req, res) => {
+  try {
+    if (!await adminOnly(req, res)) return;
+    const { includedCategories, minPrice, maxPrice } = req.body;
+    let [existing] = await db.select().from(facebookCatalogSettings).limit(1);
+    if (!existing) {
+      [existing] = await db.insert(facebookCatalogSettings).values({}).returning();
+    }
+    const [updated] = await db.update(facebookCatalogSettings)
+      .set({ includedCategories: JSON.stringify(includedCategories), minPrice, maxPrice, updatedAt: new Date() })
+      .where(eq(facebookCatalogSettings.id, existing.id))
+      .returning();
+    res.json({ ...updated, includedCategories });
+  } catch { res.status(500).json({ error: "Failed" }); }
+});
+
+// ── Catalog: real Meta Commerce sync ─────────────────────────────────────────
+
+router.get("/catalog/info", async (req, res) => {
+  try {
+    if (!await adminOnly(req, res)) return;
+    const creds = await getCredMap("commerce", CATALOG_CREDS);
+    const missing = missingCreds(creds, ["catalog_id", "page_access_token"]);
+    if (missing.length) {
+      res.status(400).json({ error: `Missing credentials: ${missing.join(", ")}`, missing });
+      return;
+    }
+    const info = await Meta.getCatalogInfo(creds.catalog_id, creds.page_access_token);
+    res.json(info);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message ?? "Failed to fetch catalog info" });
+  }
+});
+
+router.get("/catalog/products", async (req, res) => {
+  try {
+    if (!await adminOnly(req, res)) return;
+    const creds = await getCredMap("commerce", CATALOG_CREDS);
+    const missing = missingCreds(creds, ["catalog_id", "page_access_token"]);
+    if (missing.length) { res.status(400).json({ error: `Missing credentials: ${missing.join(", ")}`, missing }); return; }
+    const data = await Meta.getCatalogProducts(creds.catalog_id, creds.page_access_token);
+    res.json(data);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message ?? "Failed to fetch catalog products" });
+  }
+});
+
+router.post("/catalog/sync", async (req, res) => {
+  try {
+    if (!await adminOnly(req, res)) return;
+    const creds = await getCredMap("commerce", CATALOG_CREDS);
+    const missing = missingCreds(creds, ["catalog_id", "page_access_token"]);
+    if (missing.length) {
+      res.status(400).json({ error: `Missing credentials: ${missing.join(", ")}`, missing });
+      return;
+    }
+
+    const [settings] = await db.select().from(facebookCatalogSettings).limit(1);
+    const cats: string[] = settings ? JSON.parse(settings.includedCategories) : [];
+
+    const allProducts = await db
+      .select({ p: products, c: categories })
+      .from(products)
+      .leftJoin(categories, eq(products.categoryId, categories.id));
+
+    const filtered = allProducts.filter(({ p, c }) => {
+      if (!cats.length) return true;
+      return c && cats.includes(c.name);
+    });
+
+    const requests = filtered.map(({ p }) => ({
+      method: "UPDATE",
+      retailer_id: p.id,
+      data: {
+        name: p.name,
+        description: p.description,
+        price: `${Math.round(p.price * 100)} USD`,
+        availability: "in stock",
+        condition: "new",
+        image_url: p.imageUrl ?? "",
+        url: `${process.env.STORE_URL ?? "https://example.com"}/products/${p.id}`,
+      },
+    }));
+
+    const result = await Meta.batchUpdateCatalog(creds.catalog_id, creds.page_access_token, requests);
+    res.json({ synced: requests.length, result });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message ?? "Catalog sync failed" });
+  }
+});
+
+// ── Pixel Events ─────────────────────────────────────────────────────────────
+
+router.get("/pixel-events", async (req, res) => {
+  try {
+    if (!await adminOnly(req, res)) return;
+    let rows = await db.select().from(facebookPixelEvents);
+    if (!rows.length) {
+      rows = await db.insert(facebookPixelEvents).values(DEFAULT_PIXEL_EVENTS).returning();
+    }
+    res.json(rows);
+  } catch { res.status(500).json({ error: "Failed" }); }
+});
+
+router.put("/pixel-events/:id", async (req, res) => {
+  try {
+    if (!await adminOnly(req, res)) return;
+    const [updated] = await db.update(facebookPixelEvents)
+      .set({ enabled: req.body.enabled, updatedAt: new Date() })
+      .where(eq(facebookPixelEvents.id, req.params.id))
+      .returning();
+    res.json(updated);
+  } catch { res.status(500).json({ error: "Failed" }); }
+});
+
+// ── Audiences ────────────────────────────────────────────────────────────────
+
+router.get("/audiences", async (req, res) => {
+  try {
+    if (!await adminOnly(req, res)) return;
+    let rows = await db.select().from(facebookAudiences);
+    if (!rows.length) {
+      rows = await db.insert(facebookAudiences).values(DEFAULT_AUDIENCES).returning();
+    }
+    res.json(rows);
+  } catch { res.status(500).json({ error: "Failed" }); }
+});
+
+router.post("/audiences", async (req, res) => {
+  try {
+    if (!await adminOnly(req, res)) return;
+    const [created] = await db.insert(facebookAudiences)
+      .values({ name: req.body.name, type: req.body.type, status: "Building", size: "Building…" })
+      .returning();
+    res.json(created);
+  } catch { res.status(500).json({ error: "Failed" }); }
+});
+
+router.put("/audiences/:id", async (req, res) => {
+  try {
+    if (!await adminOnly(req, res)) return;
+    const [updated] = await db.update(facebookAudiences)
+      .set({ status: req.body.status })
+      .where(eq(facebookAudiences.id, req.params.id))
+      .returning();
+    res.json(updated);
+  } catch { res.status(500).json({ error: "Failed" }); }
+});
+
+router.delete("/audiences/:id", async (req, res) => {
+  try {
+    if (!await adminOnly(req, res)) return;
+    await db.delete(facebookAudiences).where(eq(facebookAudiences.id, req.params.id));
+    res.json({ ok: true });
+  } catch { res.status(500).json({ error: "Failed" }); }
+});
+
+// ── Page Posts (local DB) ─────────────────────────────────────────────────────
+
+router.get("/posts", async (req, res) => {
+  try {
+    if (!await adminOnly(req, res)) return;
+    res.json(await db.select().from(facebookPagePosts).orderBy(desc(facebookPagePosts.createdAt)));
+  } catch { res.status(500).json({ error: "Failed" }); }
+});
+
+router.post("/posts", async (req, res) => {
+  try {
+    if (!await adminOnly(req, res)) return;
+    const { caption, imageUrl, link, postType, scheduledFor, status } = req.body;
+    const [created] = await db.insert(facebookPagePosts)
+      .values({ caption, imageUrl: imageUrl || null, link: link || null, postType, scheduledFor: scheduledFor || null, status: status || "Draft" })
+      .returning();
+    res.json(created);
+  } catch { res.status(500).json({ error: "Failed" }); }
+});
+
+router.put("/posts/:id", async (req, res) => {
+  try {
+    if (!await adminOnly(req, res)) return;
+    const { caption, imageUrl, link, postType, scheduledFor, status } = req.body;
+    const [updated] = await db.update(facebookPagePosts)
+      .set({ caption, imageUrl: imageUrl || null, link: link || null, postType, scheduledFor: scheduledFor || null, status })
+      .where(eq(facebookPagePosts.id, req.params.id))
+      .returning();
+    res.json(updated);
+  } catch { res.status(500).json({ error: "Failed" }); }
+});
+
+router.delete("/posts/:id", async (req, res) => {
+  try {
+    if (!await adminOnly(req, res)) return;
+    await db.delete(facebookPagePosts).where(eq(facebookPagePosts.id, req.params.id));
+    res.json({ ok: true });
+  } catch { res.status(500).json({ error: "Failed" }); }
+});
+
+// POST /api/facebook/posts/:id/publish — real Facebook Graph API
+router.post("/posts/:id/publish", async (req, res) => {
+  try {
+    if (!await adminOnly(req, res)) return;
+    const creds = await getCredMap("facebook", FACEBOOK_CREDS);
+    const pageId = (req.body.pageId as string) || creds.page_id;
+    const accessToken = (req.body.pageAccessToken as string) || creds.page_access_token;
+
+    if (!pageId || !accessToken) {
+      res.status(400).json({ error: "Missing Facebook Page ID or access token. Add them in Credentials." });
+      return;
+    }
+
+    const [post] = await db.select().from(facebookPagePosts).where(eq(facebookPagePosts.id, req.params.id)).limit(1);
+    if (!post) { res.status(404).json({ error: "Post not found" }); return; }
+
+    const result = await Meta.publishPagePost(pageId, accessToken, post.caption, post.link ?? undefined);
+    const [updated] = await db.update(facebookPagePosts)
+      .set({ status: "Published", scheduledFor: null })
+      .where(eq(facebookPagePosts.id, req.params.id))
+      .returning();
+    res.json({ post: updated, fbResult: result });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message ?? "Publish failed" });
+  }
 });
 
 // ── Post Templates ────────────────────────────────────────────────────────────
 
-router.get("/facebook/post-templates", (_req, res) => {
-  res.json(postTemplates);
-});
-
-router.post("/facebook/post-templates", (req, res) => {
-  const { name, body, postType } = req.body as { name: string; body: string; postType: string };
-  const tpl: PostTemplate = { id: randomUUID(), name, body, postType: postType ?? "Standard", usageCount: 0 };
-  postTemplates = [tpl, ...postTemplates];
-  res.status(201).json(tpl);
-});
-
-router.put("/facebook/post-templates/:id/use", (req, res) => {
-  const { id } = req.params;
-  postTemplates = postTemplates.map((t) => t.id === id ? { ...t, usageCount: t.usageCount + 1 } : t);
-  res.json(postTemplates.find((t) => t.id === id));
-});
-
-// ── Live: Page Info ────────────────────────────────────────────────────────────
-
-router.get("/facebook/page-info", async (_req, res) => {
-  const creds = getFbCreds();
-  const pageId = creds["page_id"];
-  if (!pageId) return res.status(400).json({ error: "Missing Facebook Page ID — add credentials in channel settings." });
-  const result = await fbGraphGet(`/${pageId}`, { fields: "name,fan_count,followers_count,link,picture" });
-  if (!result.ok) return res.status(400).json({ error: result.error });
-  res.json(result.data);
-});
-
-// ── Live: Instagram ────────────────────────────────────────────────────────────
-
-router.get("/facebook/instagram/account", async (_req, res) => {
-  const igCreds = credentials["instagram"] ?? {};
-  const fbCreds = getFbCreds();
-  const igUserId = igCreds["ig_user_id"];
-  const token = igCreds["page_access_token"] || fbCreds["page_access_token"];
-  if (!igUserId || !token) return res.status(400).json({ error: "Missing Instagram credentials — add IG Business Account ID and Page Access Token." });
-  const url = new URL(`https://graph.facebook.com/v21.0/${igUserId}`);
-  url.searchParams.set("fields", "name,username,profile_picture_url,followers_count,media_count,biography,website");
-  url.searchParams.set("access_token", token);
+router.get("/post-templates", async (req, res) => {
   try {
-    const r = await fetch(url.toString());
-    const data = await r.json() as Record<string, unknown>;
-    if (!r.ok || data["error"]) return res.status(400).json({ error: (data["error"] as Record<string, string>)?.message ?? `HTTP ${r.status}` });
-    res.json({ instagram_business_account: data });
-  } catch (err) {
-    res.status(500).json({ error: String(err) });
-  }
+    if (!await adminOnly(req, res)) return;
+    res.json(await db.select().from(facebookPostTemplates).orderBy(desc(facebookPostTemplates.usageCount)));
+  } catch { res.status(500).json({ error: "Failed" }); }
 });
 
-router.get("/facebook/instagram/media", async (_req, res) => {
-  const igCreds = credentials["instagram"] ?? {};
-  const fbCreds = getFbCreds();
-  const igUserId = igCreds["ig_user_id"];
-  const token = igCreds["page_access_token"] || fbCreds["page_access_token"];
-  if (!igUserId || !token) return res.status(400).json({ error: "Missing Instagram credentials." });
-  const url = new URL(`https://graph.facebook.com/v21.0/${igUserId}/media`);
-  url.searchParams.set("fields", "id,caption,media_type,media_url,thumbnail_url,timestamp,like_count,comments_count,permalink");
-  url.searchParams.set("limit", "24");
-  url.searchParams.set("access_token", token);
+router.post("/post-templates", async (req, res) => {
   try {
-    const r = await fetch(url.toString());
-    const data = await r.json() as Record<string, unknown>;
-    if (!r.ok || data["error"]) return res.status(400).json({ error: (data["error"] as Record<string, string>)?.message ?? `HTTP ${r.status}` });
+    if (!await adminOnly(req, res)) return;
+    const [created] = await db.insert(facebookPostTemplates)
+      .values({ name: req.body.name.toLowerCase().replace(/\s+/g, "_"), body: req.body.body, postType: req.body.postType || "Standard" })
+      .returning();
+    res.json(created);
+  } catch { res.status(500).json({ error: "Failed" }); }
+});
+
+router.put("/post-templates/:id/use", async (req, res) => {
+  try {
+    if (!await adminOnly(req, res)) return;
+    const [tpl] = await db.select().from(facebookPostTemplates).where(eq(facebookPostTemplates.id, req.params.id)).limit(1);
+    const [updated] = await db.update(facebookPostTemplates)
+      .set({ usageCount: (tpl?.usageCount ?? 0) + 1 })
+      .where(eq(facebookPostTemplates.id, req.params.id))
+      .returning();
+    res.json(updated);
+  } catch { res.status(500).json({ error: "Failed" }); }
+});
+
+// ── Instagram (via Page Access Token) ────────────────────────────────────────
+
+router.get("/instagram/account", async (req, res) => {
+  try {
+    if (!await adminOnly(req, res)) return;
+    const creds = await getCredMap("facebook", INSTAGRAM_CREDS);
+    const missing = missingCreds(creds, ["page_id", "page_access_token"]);
+    if (missing.length) { res.status(400).json({ error: `Missing credentials: ${missing.join(", ")}`, missing }); return; }
+    const data = await Meta.getInstagramAccountFromPage(creds.page_id, creds.page_access_token);
     res.json(data);
-  } catch (err) {
-    res.status(500).json({ error: String(err) });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message ?? "Failed to fetch Instagram account" });
   }
 });
 
-router.post("/facebook/instagram/publish", async (req, res) => {
-  const igCreds = credentials["instagram"] ?? {};
-  const fbCreds = getFbCreds();
-  const igUserId = igCreds["ig_user_id"];
-  const token = igCreds["page_access_token"] || fbCreds["page_access_token"];
-  const { imageUrl, caption } = req.body as { imageUrl: string; caption?: string };
-  if (!igUserId || !token) return res.status(400).json({ error: "Missing Instagram credentials." });
-  if (!imageUrl) return res.status(400).json({ error: "imageUrl is required." });
+router.get("/instagram/media", async (req, res) => {
   try {
-    const containerRes = await fetch(`https://graph.facebook.com/v21.0/${igUserId}/media`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ image_url: imageUrl, caption: caption ?? "", access_token: token }),
+    if (!await adminOnly(req, res)) return;
+    const creds = await getCredMap("instagram", ["ig_user_id", "page_access_token"]);
+    const missing = missingCreds(creds, ["ig_user_id", "page_access_token"]);
+    if (missing.length) { res.status(400).json({ error: `Missing credentials: ${missing.join(", ")}`, missing }); return; }
+    const data = await Meta.getInstagramMedia(creds.ig_user_id, creds.page_access_token);
+    res.json(data);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message ?? "Failed to fetch Instagram media" });
+  }
+});
+
+router.post("/instagram/publish", async (req, res) => {
+  try {
+    if (!await adminOnly(req, res)) return;
+    const creds = await getCredMap("instagram", ["ig_user_id", "page_access_token"]);
+    const missing = missingCreds(creds, ["ig_user_id", "page_access_token"]);
+    if (missing.length) { res.status(400).json({ error: `Missing credentials: ${missing.join(", ")}`, missing }); return; }
+
+    const { imageUrl, caption, mediaType = "IMAGE" } = req.body;
+    if (!imageUrl) { res.status(400).json({ error: "imageUrl is required" }); return; }
+
+    const container = await Meta.createInstagramMediaContainer(creds.ig_user_id, creds.page_access_token, {
+      image_url: imageUrl,
+      caption,
+      media_type: mediaType,
     });
-    const container = await containerRes.json() as Record<string, string>;
-    if (!containerRes.ok || !container["id"]) return res.status(400).json({ error: (container as any)["error"]?.message ?? "Container creation failed" });
 
     await new Promise((r) => setTimeout(r, 3000));
 
-    const publishRes = await fetch(`https://graph.facebook.com/v21.0/${igUserId}/media_publish`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ creation_id: container["id"], access_token: token }),
-    });
-    const published = await publishRes.json() as Record<string, string>;
-    if (!publishRes.ok || !published["id"]) return res.status(400).json({ error: (published as any)["error"]?.message ?? "Publish failed" });
-
-    addEvent("instagram", "Post published to Instagram", `Media ID: ${published["id"]}`, "sync");
-    res.json({ mediaId: published["id"] });
-  } catch (err) {
-    res.status(500).json({ error: String(err) });
+    const published = await Meta.publishInstagramMedia(creds.ig_user_id, creds.page_access_token, (container as any).id);
+    res.json({ ok: true, mediaId: (published as any).id, containerId: (container as any).id });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message ?? "Instagram publish failed" });
   }
 });
 
-// ── Live: Meta Ads ─────────────────────────────────────────────────────────────
+// ── Meta Ads Insights (real Graph API) ───────────────────────────────────────
 
-router.get("/facebook/ads/account", async (_req, res) => {
-  const adsCreds = credentials["ads"] ?? {};
-  const fbCreds = getFbCreds();
-  const adAccountId = adsCreds["ad_account_id"] || fbCreds["ad_account_id"];
-  const token = adsCreds["page_access_token"] || fbCreds["page_access_token"];
-  if (!adAccountId || !token) return res.status(400).json({ error: "Missing ad account credentials — add Ad Account ID and Page Access Token." });
-  const actId = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`;
-  const url = new URL(`https://graph.facebook.com/v21.0/${actId}`);
-  url.searchParams.set("fields", "id,name,currency,account_status,amount_spent,balance,spend_cap");
-  url.searchParams.set("access_token", token);
+router.get("/ads/insights", async (req, res) => {
   try {
-    const r = await fetch(url.toString());
-    const data = await r.json() as Record<string, unknown>;
-    if (!r.ok || data["error"]) return res.status(400).json({ error: (data["error"] as Record<string, string>)?.message ?? `HTTP ${r.status}` });
+    if (!await adminOnly(req, res)) return;
+    const creds = await getCredMap("ads", ADS_CREDS);
+    const missing = missingCreds(creds, ["ad_account_id", "page_access_token"]);
+    if (missing.length) { res.status(400).json({ error: `Missing credentials: ${missing.join(", ")}`, missing }); return; }
+    const datePreset = (req.query.date_preset as string) || "last_30d";
+    const data = await Meta.getAdAccountInsights(creds.ad_account_id, creds.page_access_token, datePreset);
     res.json(data);
-  } catch (err) {
-    res.status(500).json({ error: String(err) });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message ?? "Failed to fetch ad insights" });
   }
 });
 
-router.get("/facebook/ads/insights", async (req, res) => {
-  const adsCreds = credentials["ads"] ?? {};
-  const fbCreds = getFbCreds();
-  const adAccountId = adsCreds["ad_account_id"] || fbCreds["ad_account_id"];
-  const token = adsCreds["page_access_token"] || fbCreds["page_access_token"];
-  if (!adAccountId || !token) return res.status(400).json({ error: "Missing ad account credentials." });
-  const preset = (req.query["date_preset"] ?? req.query["preset"] ?? "last_7d") as string;
-  const actId = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`;
-  const url = new URL(`https://graph.facebook.com/v21.0/${actId}/insights`);
-  url.searchParams.set("fields", "spend,impressions,clicks,reach,ctr,cpc,frequency");
-  url.searchParams.set("date_preset", preset);
-  url.searchParams.set("access_token", token);
+router.get("/ads/campaigns", async (req, res) => {
   try {
-    const r = await fetch(url.toString());
-    const data = await r.json() as Record<string, unknown>;
-    if (!r.ok || data["error"]) return res.status(400).json({ error: (data["error"] as Record<string, string>)?.message ?? `HTTP ${r.status}` });
+    if (!await adminOnly(req, res)) return;
+    const creds = await getCredMap("ads", ADS_CREDS);
+    const missing = missingCreds(creds, ["ad_account_id", "page_access_token"]);
+    if (missing.length) { res.status(400).json({ error: `Missing credentials: ${missing.join(", ")}`, missing }); return; }
+    const data = await Meta.getCampaigns(creds.ad_account_id, creds.page_access_token);
     res.json(data);
-  } catch (err) {
-    res.status(500).json({ error: String(err) });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message ?? "Failed to fetch campaigns" });
   }
 });
 
-router.get("/facebook/ads/campaigns", async (_req, res) => {
-  const adsCreds = credentials["ads"] ?? {};
-  const fbCreds = getFbCreds();
-  const adAccountId = adsCreds["ad_account_id"] || fbCreds["ad_account_id"];
-  const token = adsCreds["page_access_token"] || fbCreds["page_access_token"];
-  if (!adAccountId || !token) return res.status(400).json({ error: "Missing ad account credentials." });
-  const actId = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`;
-  const url = new URL(`https://graph.facebook.com/v21.0/${actId}/campaigns`);
-  url.searchParams.set("fields", "id,name,status,objective,budget_remaining,daily_budget,lifetime_budget");
-  url.searchParams.set("access_token", token);
+router.get("/ads/account", async (req, res) => {
   try {
-    const r = await fetch(url.toString());
-    const data = await r.json() as Record<string, unknown>;
-    if (!r.ok || data["error"]) return res.status(400).json({ error: (data["error"] as Record<string, string>)?.message ?? `HTTP ${r.status}` });
+    if (!await adminOnly(req, res)) return;
+    const creds = await getCredMap("ads", ADS_CREDS);
+    const missing = missingCreds(creds, ["ad_account_id", "page_access_token"]);
+    if (missing.length) { res.status(400).json({ error: `Missing credentials: ${missing.join(", ")}`, missing }); return; }
+    const data = await Meta.getAdAccountInfo(creds.ad_account_id, creds.page_access_token);
     res.json(data);
-  } catch (err) {
-    res.status(500).json({ error: String(err) });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message ?? "Failed to fetch ad account info" });
   }
 });
 

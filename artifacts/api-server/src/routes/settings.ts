@@ -1,196 +1,108 @@
 import { Router } from "express";
-import { randomUUID } from "crypto";
-import { requireAdmin } from "../middleware/requireAdmin";
-import { eprolo } from "../services/eprolo";
-import { setEproloConfig } from "./eprolo";
+import { db } from "@workspace/db";
+import { appSettings } from "@workspace/db/schema";
+import { getSession } from "../lib/auth";
+import { getSettings, upsertSettings, getSmtpConfig, getCloudinaryConfig, MASK, SENSITIVE } from "../lib/settings";
+import nodemailer from "nodemailer";
 
 const router = Router();
-router.use(requireAdmin);
 
-// ── In-memory store ──────────────────────────────────────────────────────────
+router.get("/", async (req, res) => {
+  try {
+    const session = await getSession(req);
+    if (!session || session.role !== "ADMIN") return res.status(401).json({ error: "Unauthorized" });
 
-interface SettingsRecord { [key: string]: string }
-interface ApiKey { id: string; name: string; keyPrefix: string; rawKey: string; createdAt: string; lastUsed: string | null; revokedAt: string | null; usageCount: number; }
-interface Provider {
-  id: string; name: string; label: string; description: string;
-  mode: string; enabled: boolean; connected: boolean;
-  apiKey: string | null; apiSecret: string | null;
-  webhookUrl: string | null; lastSyncAt: string | null; lastError: string | null;
-  updatedAt: string; logoUrl: string | null; storeId: string | null;
-}
+    const raw = await getSettings();
 
-let settings: SettingsRecord = {
-  store_name:                  "LUXE BOUTIQUE",
-  store_email:                 "",
-  smtp_host:                   "",
-  smtp_port:                   "587",
-  smtp_user:                   "",
-  smtp_pass:                   "",
-  smtp_from:                   "",
-  cloudinary_cloud_name:       "",
-  cloudinary_api_key:          "",
-  cloudinary_api_secret:       "",
-  cloudinary_upload_preset:    "",
-  paystack_public_key:         "",
-  paystack_secret_key:         "",
-  flutterwave_public_key:      "",
-  flutterwave_secret_key:      "",
-};
+    const masked: Record<string, string> = {};
+    for (const [k, v] of Object.entries(raw)) {
+      masked[k] = SENSITIVE.has(k) ? MASK : v;
+    }
 
-function makeKey() {
-  const raw = `pk_live_${randomUUID().replace(/-/g, "")}`;
-  return { rawKey: raw, keyPrefix: raw.slice(0, 12) };
-}
+    const smtp      = await getSmtpConfig();
+    const cloudinary = await getCloudinaryConfig();
 
-const _seed = makeKey();
-let apiKeys: ApiKey[] = [
-  { id: randomUUID(), name: "Production Key", keyPrefix: _seed.keyPrefix, rawKey: _seed.rawKey, createdAt: new Date(Date.now() - 86400000 * 30).toISOString(), lastUsed: new Date(Date.now() - 3600000).toISOString(), revokedAt: null, usageCount: 148 },
-];
-
-const now = new Date().toISOString();
-let providers: Provider[] = [
-  { id: randomUUID(), name: "eprolo",      label: "Eprolo",      description: "Dropshipping & fulfillment — browse the Eprolo catalog, import products, and auto-forward orders.",  mode: "live", enabled: false, connected: false, apiKey: null, apiSecret: null, webhookUrl: null, lastSyncAt: null, lastError: null, updatedAt: now, logoUrl: null, storeId: null },
-  { id: randomUUID(), name: "paystack",    label: "Paystack",    description: "Accept card payments via Paystack (NGN, GHS, ZAR, USD).",       mode: "live", enabled: false, connected: false, apiKey: null, apiSecret: null, webhookUrl: null, lastSyncAt: null, lastError: null, updatedAt: now, logoUrl: null, storeId: null },
-  { id: randomUUID(), name: "flutterwave", label: "Flutterwave", description: "Multi-currency payments via Flutterwave across Africa.",          mode: "live", enabled: false, connected: false, apiKey: null, apiSecret: null, webhookUrl: null, lastSyncAt: null, lastError: null, updatedAt: now, logoUrl: null, storeId: null },
-  { id: randomUUID(), name: "stripe",      label: "Stripe",      description: "Global card payments via Stripe (all major currencies).",        mode: "live", enabled: false, connected: false, apiKey: null, apiSecret: null, webhookUrl: null, lastSyncAt: null, lastError: null, updatedAt: now, logoUrl: null, storeId: null },
-];
-
-// ── Settings ──────────────────────────────────────────────────────────────────
-
-router.get("/settings", (_req, res) => {
-  const smtpConfigured = !!(settings["smtp_host"] && settings["smtp_user"] && settings["smtp_pass"]);
-  const cloudinaryConfigured = !!(settings["cloudinary_cloud_name"] && settings["cloudinary_api_key"] && settings["cloudinary_api_secret"]);
-  res.json({ settings, status: { smtpConfigured, cloudinaryConfigured } });
+    res.json({
+      settings: masked,
+      status: {
+        smtpConfigured:      !!(smtp.host && smtp.user && smtp.pass),
+        cloudinaryConfigured: !!(cloudinary.cloudName && cloudinary.apiKey && cloudinary.apiSecret),
+      },
+    });
+  } catch (e) { res.status(500).json({ error: "Internal server error" }); }
 });
 
-router.put("/settings", (req, res) => {
-  settings = { ...settings, ...req.body };
-  const smtpConfigured = !!(settings["smtp_host"] && settings["smtp_user"] && settings["smtp_pass"]);
-  const cloudinaryConfigured = !!(settings["cloudinary_cloud_name"] && settings["cloudinary_api_key"] && settings["cloudinary_api_secret"]);
-  res.json({ settings, status: { smtpConfigured, cloudinaryConfigured } });
+router.put("/", async (req, res) => {
+  try {
+    const session = await getSession(req);
+    if (!session || session.role !== "ADMIN") return res.status(401).json({ error: "Unauthorized" });
+
+    const updates: Record<string, string> = req.body;
+    if (typeof updates !== "object") return res.status(400).json({ error: "Invalid body" });
+
+    await upsertSettings(updates);
+    res.json({ success: true });
+  } catch { res.status(500).json({ error: "Internal server error" }); }
 });
 
-router.post("/settings/test/email", (_req, res) => {
-  const smtpConfigured = !!(settings["smtp_host"] && settings["smtp_user"] && settings["smtp_pass"]);
-  if (!smtpConfigured) return res.status(400).json({ error: "SMTP is not configured. Add SMTP credentials first." });
-  res.json({ ok: true, message: "Test email sent (simulation — wire a real SMTP server to deliver)." });
-});
+router.post("/test/email", async (req, res) => {
+  try {
+    const session = await getSession(req);
+    if (!session || session.role !== "ADMIN") return res.status(401).json({ error: "Unauthorized" });
 
-router.post("/settings/test/cloudinary", (_req, res) => {
-  const cloudName = settings["cloudinary_cloud_name"];
-  const apiKey = settings["cloudinary_api_key"];
-  const apiSecret = settings["cloudinary_api_secret"];
-  if (!cloudName || !apiKey || !apiSecret) return res.status(400).json({ error: "Cloudinary credentials not configured." });
-  res.json({ ok: true, cloudName, message: "Cloudinary connection verified." });
-});
+    const smtp = await getSmtpConfig();
+    if (!smtp.host || !smtp.user || !smtp.pass)
+      return res.status(400).json({ error: "SMTP is not configured. Save your credentials first." });
 
-// ── API Keys ──────────────────────────────────────────────────────────────────
+    const transport = nodemailer.createTransport({
+      host: smtp.host,
+      port: smtp.port,
+      secure: smtp.port === 465,
+      auth: { user: smtp.user, pass: smtp.pass },
+    });
 
-function safeKey(k: ApiKey) {
-  const { rawKey: _, ...rest } = k;
-  return rest;
-}
+    await transport.sendMail({
+      from: smtp.from ?? `Luxe Boutique <${smtp.user}>`,
+      to: session.email,
+      subject: "✓ Luxe Boutique — Email connection test",
+      html: `<div style="font-family:sans-serif;padding:32px;max-width:480px;margin:auto;">
+        <h2 style="color:#006c49;">Connection successful!</h2>
+        <p>Your SMTP credentials are working correctly. Campaigns and notifications will be delivered.</p>
+        <hr style="border:none;border-top:1px solid #eee;margin:24px 0;"/>
+        <p style="color:#999;font-size:12px;">Sent from Luxe Boutique admin settings · ${new Date().toUTCString()}</p>
+      </div>`,
+    });
 
-router.get("/apikeys", (_req, res) => {
-  res.json(apiKeys.map(safeKey));
-});
-
-router.post("/apikeys", (req, res) => {
-  const { name } = req.body as { name?: string };
-  if (!name) return res.status(400).json({ error: "name is required." });
-  const { rawKey, keyPrefix } = makeKey();
-  const key: ApiKey = { id: randomUUID(), name, keyPrefix, rawKey, createdAt: new Date().toISOString(), lastUsed: null, revokedAt: null, usageCount: 0 };
-  apiKeys = [key, ...apiKeys];
-  res.status(201).json({ ...safeKey(key), rawKey });
-});
-
-router.delete("/apikeys/:id", (req, res) => {
-  const idx = apiKeys.findIndex((k) => k.id === req.params.id);
-  if (idx === -1) return res.status(404).json({ error: "API key not found." });
-  apiKeys[idx] = { ...apiKeys[idx], revokedAt: new Date().toISOString() };
-  res.json({ ok: true });
-});
-
-router.delete("/apikeys/:id/permanent", (req, res) => {
-  apiKeys = apiKeys.filter((k) => k.id !== req.params.id);
-  res.json({ ok: true });
-});
-
-// ── Providers ─────────────────────────────────────────────────────────────────
-
-function safeProvider(p: Provider) {
-  return { ...p, apiKey: p.apiKey ? `${p.apiKey.slice(0, 6)}…` : null, apiSecret: p.apiSecret ? "●●●●●●●●" : null };
-}
-
-router.get("/providers", (_req, res) => {
-  res.json(providers.map(safeProvider));
-});
-
-router.put("/providers/:name", (req, res) => {
-  const { name } = req.params;
-  const idx = providers.findIndex((p) => p.name === name);
-  if (idx === -1) return res.status(404).json({ error: "Provider not found" });
-  const raw = req.body as Partial<Provider>;
-  if (raw.apiKey)    providers[idx].apiKey    = raw.apiKey;
-  if (raw.apiSecret) providers[idx].apiSecret = raw.apiSecret;
-  if (raw.storeId !== undefined) providers[idx].storeId = raw.storeId;
-  if (raw.enabled  !== undefined) providers[idx].enabled = raw.enabled;
-  providers[idx].updatedAt = new Date().toISOString();
-
-  // Keep eprolo service in sync
-  if (name === "eprolo") {
-    const { apiKey, apiSecret } = providers[idx];
-    setEproloConfig(apiKey && apiSecret ? { apiKey, apiSecret } : null);
+    res.json({ success: true, sentTo: session.email });
+  } catch (e: any) {
+    res.status(500).json({ error: `SMTP test failed: ${e.message}` });
   }
-
-  res.json(safeProvider(providers[idx]));
 });
 
-router.post("/providers/:name/connect", async (req, res) => {
-  const { name } = req.params;
-  const idx = providers.findIndex((p) => p.name === name);
-  if (idx === -1) return res.status(404).json({ error: "Provider not found" });
+router.post("/test/cloudinary", async (req, res) => {
+  try {
+    const session = await getSession(req);
+    if (!session || session.role !== "ADMIN") return res.status(401).json({ error: "Unauthorized" });
 
-  const provider = providers[idx];
+    const cfg = await getCloudinaryConfig();
+    if (!cfg.cloudName || !cfg.apiKey || !cfg.apiSecret)
+      return res.status(400).json({ error: "Cloudinary is not configured. Save your credentials first." });
 
-  if (!provider.apiKey) {
-    return res.status(400).json({ connected: false, error: "No API key saved — add your key first." });
+    const creds = Buffer.from(`${cfg.apiKey}:${cfg.apiSecret}`).toString("base64");
+    const response = await fetch(
+      `https://api.cloudinary.com/v1_1/${cfg.cloudName}/resources/image?max_results=1`,
+      { headers: { Authorization: `Basic ${creds}` } }
+    );
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({})) as any;
+      return res.status(400).json({ error: err?.error?.message || "Invalid Cloudinary credentials" });
+    }
+
+    res.json({ success: true, cloudName: cfg.cloudName });
+  } catch (e: any) {
+    res.status(500).json({ error: `Cloudinary test failed: ${e.message}` });
   }
-
-  if (name === "eprolo") {
-    if (!provider.apiSecret) return res.status(400).json({ connected: false, error: "Eprolo requires both API Key and API Secret." });
-    const result = await eprolo.testConnection({ apiKey: provider.apiKey, apiSecret: provider.apiSecret });
-    providers[idx].connected = result.ok;
-    providers[idx].lastError  = result.ok ? null : result.message;
-    if (result.ok) setEproloConfig({ apiKey: provider.apiKey, apiSecret: provider.apiSecret });
-    return res.json({ connected: result.ok, message: result.message });
-  }
-
-  if (name === "paystack") {
-    try {
-      const r = await fetch("https://api.paystack.co/bank", { headers: { Authorization: `Bearer ${provider.apiKey}` } });
-      if (r.ok) { providers[idx].connected = true; return res.json({ connected: true }); }
-      return res.json({ connected: false, error: "Invalid Paystack secret key." });
-    } catch { return res.json({ connected: false, error: "Could not reach Paystack API." }); }
-  }
-
-  if (name === "flutterwave") {
-    try {
-      const r = await fetch("https://api.flutterwave.com/v3/banks/NG", { headers: { Authorization: `Bearer ${provider.apiKey}` } });
-      if (r.ok) { providers[idx].connected = true; return res.json({ connected: true }); }
-      return res.json({ connected: false, error: "Invalid Flutterwave secret key." });
-    } catch { return res.json({ connected: false, error: "Could not reach Flutterwave API." }); }
-  }
-
-  providers[idx].connected = true;
-  res.json({ connected: true });
-});
-
-router.post("/providers/:name/disconnect", (req, res) => {
-  const { name } = req.params;
-  const idx = providers.findIndex((p) => p.name === name);
-  if (idx !== -1) providers[idx].connected = false;
-  res.json({ ok: true });
 });
 
 export default router;

@@ -1,85 +1,211 @@
 import { Router } from "express";
-import { randomUUID } from "crypto";
-import { requireAdmin } from "../middleware/requireAdmin";
+import { db } from "@workspace/db";
+import { newsletter, newsletterCampaigns } from "@workspace/db/schema";
+import { eq, desc } from "drizzle-orm";
+import { getSession } from "../lib/auth";
+import { sendCampaignEmail, isSmtpConfigured } from "../lib/email";
 
 const router = Router();
 
-// ── In-memory store ──────────────────────────────────────────────────────────
-
-interface Subscriber { id: string; email: string; name: string | null; subscribedAt: string; active: boolean; }
-interface Campaign   { id: string; subject: string; previewText: string; body: string; status: "draft" | "sent"; sentAt: string | null; sentCount: number; openRate: number; createdAt: string; }
-
-let subscribers: Subscriber[] = [
-  { id: randomUUID(), email: "audrey@example.com",   name: "Audrey Chen",    subscribedAt: new Date(Date.now() - 86400000 * 30).toISOString(), active: true },
-  { id: randomUUID(), email: "marcus@example.com",   name: "Marcus Webb",    subscribedAt: new Date(Date.now() - 86400000 * 20).toISOString(), active: true },
-  { id: randomUUID(), email: "isabelle@example.com", name: "Isabelle Morel", subscribedAt: new Date(Date.now() - 86400000 * 15).toISOString(), active: true },
-  { id: randomUUID(), email: "james@example.com",    name: "James Harlow",   subscribedAt: new Date(Date.now() - 86400000 * 5).toISOString(),  active: true },
-];
-
-let campaigns: Campaign[] = [
-  { id: randomUUID(), subject: "The Autumn Edit — New Arrivals", previewText: "Discover what's new this season.", body: "Dear atelier member,\n\nThis autumn's collection has arrived…", status: "sent", sentAt: new Date(Date.now() - 86400000 * 14).toISOString(), sentCount: 3820, openRate: 41.2, createdAt: new Date(Date.now() - 86400000 * 15).toISOString() },
-  { id: randomUUID(), subject: "Members-Only: Early Access Event",previewText: "You're invited — enter before anyone else.", body: "As a valued member…",                                  status: "sent", sentAt: new Date(Date.now() - 86400000 * 7).toISOString(),  sentCount: 3820, openRate: 55.8, createdAt: new Date(Date.now() - 86400000 * 8).toISOString()  },
-];
-
-// ── Subscribers ───────────────────────────────────────────────────────────────
-
-router.get("/newsletter", requireAdmin, (_req, res) => {
-  res.json(subscribers);
+router.post("/", async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email || !/\S+@\S+\.\S+/.test(email))
+      return res.status(400).json({ error: "Valid email required" });
+    const [existing] = await db.select().from(newsletter).where(eq(newsletter.email, email)).limit(1);
+    if (existing) return res.status(400).json({ error: "Email is already subscribed" });
+    await db.insert(newsletter).values({ email });
+    res.json({ message: "Successfully subscribed to the newsletter!" });
+  } catch { res.status(500).json({ error: "Internal server error" }); }
 });
 
-router.post("/newsletter", (req, res) => {
-  const { email, name } = req.body as { email?: string; name?: string };
-  if (!email || !email.includes("@")) return res.status(400).json({ error: "A valid email is required." });
-  if (subscribers.find((s) => s.email === email)) return res.json({ ok: true, alreadySubscribed: true });
-  const sub: Subscriber = { id: randomUUID(), email, name: name ?? null, subscribedAt: new Date().toISOString(), active: true };
-  subscribers = [...subscribers, sub];
-  res.status(201).json({ ok: true, subscriber: sub });
+router.get("/", async (req, res) => {
+  try {
+    const session = await getSession(req);
+    if (!session || session.role !== "ADMIN") return res.status(401).json({ error: "Unauthorized" });
+
+    const rows = await db.select().from(newsletter).orderBy(desc(newsletter.createdAt));
+
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const startOfWeek  = new Date(now); startOfWeek.setDate(now.getDate() - now.getDay());
+
+    const thisMonth = rows.filter(r => new Date(r.createdAt) >= startOfMonth).length;
+    const thisWeek  = rows.filter(r => new Date(r.createdAt) >= startOfWeek).length;
+
+    const byMonth: Record<string, number> = {};
+    rows.forEach(r => {
+      const key = new Date(r.createdAt).toISOString().slice(0, 7);
+      byMonth[key] = (byMonth[key] || 0) + 1;
+    });
+    const growth = Object.entries(byMonth)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .slice(-6)
+      .map(([month, count]) => ({ month, count }));
+
+    res.json({
+      subscribers: rows,
+      total: rows.length,
+      thisMonth,
+      thisWeek,
+      growth,
+      smtpConfigured: await isSmtpConfigured(),
+    });
+  } catch { res.status(500).json({ error: "Internal server error" }); }
 });
 
-router.delete("/newsletter/:id", requireAdmin, (req, res) => {
-  subscribers = subscribers.filter((s) => s.id !== req.params.id);
-  res.json({ ok: true });
+router.get("/export", async (req, res) => {
+  try {
+    const session = await getSession(req);
+    if (!session || session.role !== "ADMIN") return res.status(401).json({ error: "Unauthorized" });
+
+    const rows = await db.select().from(newsletter).orderBy(desc(newsletter.createdAt));
+    const csv = ["Email,Subscribed At", ...rows.map(r => `${r.email},${r.createdAt}`)].join("\n");
+
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", `attachment; filename="newsletter-subscribers-${Date.now()}.csv"`);
+    res.send(csv);
+  } catch { res.status(500).json({ error: "Internal server error" }); }
 });
 
-router.get("/newsletter/export", requireAdmin, (_req, res) => {
-  const rows = ["email,name,subscribedAt", ...subscribers.filter((s) => s.active).map((s) => `${s.email},${s.name ?? ""},${s.subscribedAt}`)].join("\n");
-  res.setHeader("Content-Type", "text/csv");
-  res.setHeader("Content-Disposition", `attachment; filename="subscribers-${Date.now()}.csv"`);
-  res.send(rows);
+router.get("/campaigns", async (req, res) => {
+  try {
+    const session = await getSession(req);
+    if (!session || session.role !== "ADMIN") return res.status(401).json({ error: "Unauthorized" });
+    const campaigns = await db.select().from(newsletterCampaigns).orderBy(desc(newsletterCampaigns.createdAt));
+    res.json(campaigns);
+  } catch { res.status(500).json({ error: "Internal server error" }); }
 });
 
-// ── Campaigns ─────────────────────────────────────────────────────────────────
+router.post("/send", async (req, res) => {
+  try {
+    const session = await getSession(req);
+    if (!session || session.role !== "ADMIN") return res.status(401).json({ error: "Unauthorized" });
 
-router.get("/newsletter/campaigns", requireAdmin, (_req, res) => {
-  res.json(campaigns);
+    const { subject, body, saveAsDraft, scheduledFor } = req.body;
+    if (!subject?.trim() || !body?.trim())
+      return res.status(400).json({ error: "Subject and body are required" });
+
+    if (saveAsDraft) {
+      const [campaign] = await db.insert(newsletterCampaigns).values({
+        subject: subject.trim(),
+        body: body.trim(),
+        recipientCount: 0,
+        sentCount: 0,
+        status: "DRAFT",
+        scheduledFor: scheduledFor ? new Date(scheduledFor) : null,
+      }).returning();
+      return res.json({ message: "Draft saved", campaignId: campaign.id, status: "DRAFT" });
+    }
+
+    const subscribers = await db.select().from(newsletter).orderBy(desc(newsletter.createdAt));
+    if (subscribers.length === 0)
+      return res.status(400).json({ error: "No subscribers to send to" });
+
+    const [campaign] = await db.insert(newsletterCampaigns).values({
+      subject: subject.trim(),
+      body: body.trim(),
+      recipientCount: subscribers.length,
+      sentCount: 0,
+      status: "SENDING",
+      sentAt: new Date(),
+    }).returning();
+
+    res.json({ message: "Campaign queued", campaignId: campaign.id, recipientCount: subscribers.length });
+
+    let sentCount = 0;
+    for (const sub of subscribers) {
+      try {
+        await sendCampaignEmail(sub.email, subject.trim(), body.trim());
+        sentCount++;
+      } catch (err) {
+        console.error(`Failed to send to ${sub.email}:`, err);
+      }
+    }
+
+    const finalStatus = sentCount === 0 ? "FAILED" : sentCount === subscribers.length ? "SENT" : "PARTIAL";
+    await db.update(newsletterCampaigns)
+      .set({ sentCount, status: finalStatus, updatedAt: new Date() })
+      .where(eq(newsletterCampaigns.id, campaign.id));
+
+  } catch { res.status(500).json({ error: "Internal server error" }); }
 });
 
-router.post("/newsletter/send", requireAdmin, (req, res) => {
-  const { subject, previewText, body } = req.body as { subject?: string; previewText?: string; body?: string };
-  if (!subject || !body) return res.status(400).json({ error: "subject and body are required." });
-  const campaign: Campaign = { id: randomUUID(), subject, previewText: previewText ?? "", body, status: "sent", sentAt: new Date().toISOString(), sentCount: subscribers.filter((s) => s.active).length, openRate: 0, createdAt: new Date().toISOString() };
-  campaigns = [campaign, ...campaigns];
-  res.status(201).json(campaign);
+router.put("/campaigns/:id", async (req, res) => {
+  try {
+    const session = await getSession(req);
+    if (!session || session.role !== "ADMIN") return res.status(401).json({ error: "Unauthorized" });
+
+    const { subject, body, status, scheduledFor } = req.body;
+    const updates: Record<string, unknown> = { updatedAt: new Date() };
+    if (subject?.trim()) updates.subject = subject.trim();
+    if (body?.trim())    updates.body    = body.trim();
+    if (status)          updates.status  = status;
+    if (scheduledFor !== undefined) updates.scheduledFor = scheduledFor ? new Date(scheduledFor) : null;
+
+    const [updated] = await db.update(newsletterCampaigns)
+      .set(updates)
+      .where(eq(newsletterCampaigns.id, req.params.id))
+      .returning();
+
+    if (!updated) return res.status(404).json({ error: "Campaign not found" });
+    res.json(updated);
+  } catch { res.status(500).json({ error: "Internal server error" }); }
 });
 
-router.put("/newsletter/campaigns/:id", requireAdmin, (req, res) => {
-  const idx = campaigns.findIndex((c) => c.id === req.params.id);
-  if (idx === -1) return res.status(404).json({ error: "Campaign not found" });
-  campaigns[idx] = { ...campaigns[idx], ...req.body };
-  res.json(campaigns[idx]);
+router.delete("/campaigns/:id", async (req, res) => {
+  try {
+    const session = await getSession(req);
+    if (!session || session.role !== "ADMIN") return res.status(401).json({ error: "Unauthorized" });
+    await db.delete(newsletterCampaigns).where(eq(newsletterCampaigns.id, req.params.id));
+    res.json({ success: true });
+  } catch { res.status(500).json({ error: "Internal server error" }); }
 });
 
-router.delete("/newsletter/campaigns/:id", requireAdmin, (req, res) => {
-  campaigns = campaigns.filter((c) => c.id !== req.params.id);
-  res.json({ ok: true });
+router.post("/campaigns/:id/resend", async (req, res) => {
+  try {
+    const session = await getSession(req);
+    if (!session || session.role !== "ADMIN") return res.status(401).json({ error: "Unauthorized" });
+
+    const [campaign] = await db.select().from(newsletterCampaigns)
+      .where(eq(newsletterCampaigns.id, req.params.id))
+      .limit(1);
+    if (!campaign) return res.status(404).json({ error: "Campaign not found" });
+
+    const subscribers = await db.select().from(newsletter);
+    if (subscribers.length === 0) return res.status(400).json({ error: "No subscribers to send to" });
+
+    await db.update(newsletterCampaigns)
+      .set({ status: "SENDING", recipientCount: subscribers.length, sentCount: 0, sentAt: new Date(), updatedAt: new Date() })
+      .where(eq(newsletterCampaigns.id, campaign.id));
+
+    res.json({ message: "Resend queued", campaignId: campaign.id, recipientCount: subscribers.length });
+
+    let sentCount = 0;
+    for (const sub of subscribers) {
+      try {
+        await sendCampaignEmail(sub.email, campaign.subject, campaign.body);
+        sentCount++;
+      } catch (err) {
+        console.error(`Failed to resend to ${sub.email}:`, err);
+      }
+    }
+
+    const finalStatus = sentCount === 0 ? "FAILED" : sentCount === subscribers.length ? "SENT" : "PARTIAL";
+    await db.update(newsletterCampaigns)
+      .set({ sentCount, status: finalStatus, updatedAt: new Date() })
+      .where(eq(newsletterCampaigns.id, campaign.id));
+
+  } catch { res.status(500).json({ error: "Internal server error" }); }
 });
 
-router.post("/newsletter/campaigns/:id/resend", requireAdmin, (req, res) => {
-  const campaign = campaigns.find((c) => c.id === req.params.id);
-  if (!campaign) return res.status(404).json({ error: "Campaign not found" });
-  const resent: Campaign = { ...campaign, id: randomUUID(), status: "sent", sentAt: new Date().toISOString(), sentCount: subscribers.filter((s) => s.active).length, createdAt: new Date().toISOString() };
-  campaigns = [resent, ...campaigns];
-  res.status(201).json(resent);
+router.delete("/:id", async (req, res) => {
+  try {
+    const session = await getSession(req);
+    if (!session || session.role !== "ADMIN") return res.status(401).json({ error: "Unauthorized" });
+    await db.delete(newsletter).where(eq(newsletter.id, req.params.id));
+    res.json({ success: true });
+  } catch { res.status(500).json({ error: "Internal server error" }); }
 });
 
 export default router;
