@@ -1,85 +1,90 @@
 import { Router } from "express";
 import { randomUUID } from "crypto";
+import { desc, eq } from "drizzle-orm";
+import { db, newsletterCampaignsTable, newsletterSubscribersTable } from "@workspace/db";
 import { requireAdmin } from "../middleware/requireAdmin";
 
 const router = Router();
 
-// ── In-memory store ──────────────────────────────────────────────────────────
-
-interface Subscriber { id: string; email: string; name: string | null; subscribedAt: string; active: boolean; }
-interface Campaign   { id: string; subject: string; previewText: string; body: string; status: "draft" | "sent"; sentAt: string | null; sentCount: number; openRate: number; createdAt: string; }
-
-let subscribers: Subscriber[] = [
-  { id: randomUUID(), email: "audrey@example.com",   name: "Audrey Chen",    subscribedAt: new Date(Date.now() - 86400000 * 30).toISOString(), active: true },
-  { id: randomUUID(), email: "marcus@example.com",   name: "Marcus Webb",    subscribedAt: new Date(Date.now() - 86400000 * 20).toISOString(), active: true },
-  { id: randomUUID(), email: "isabelle@example.com", name: "Isabelle Morel", subscribedAt: new Date(Date.now() - 86400000 * 15).toISOString(), active: true },
-  { id: randomUUID(), email: "james@example.com",    name: "James Harlow",   subscribedAt: new Date(Date.now() - 86400000 * 5).toISOString(),  active: true },
-];
-
-let campaigns: Campaign[] = [
-  { id: randomUUID(), subject: "The Autumn Edit — New Arrivals", previewText: "Discover what's new this season.", body: "Dear atelier member,\n\nThis autumn's collection has arrived…", status: "sent", sentAt: new Date(Date.now() - 86400000 * 14).toISOString(), sentCount: 3820, openRate: 41.2, createdAt: new Date(Date.now() - 86400000 * 15).toISOString() },
-  { id: randomUUID(), subject: "Members-Only: Early Access Event",previewText: "You're invited — enter before anyone else.", body: "As a valued member…",                                  status: "sent", sentAt: new Date(Date.now() - 86400000 * 7).toISOString(),  sentCount: 3820, openRate: 55.8, createdAt: new Date(Date.now() - 86400000 * 8).toISOString()  },
-];
-
-// ── Subscribers ───────────────────────────────────────────────────────────────
-
-router.get("/newsletter", requireAdmin, (_req, res) => {
-  return res.json(subscribers);
+router.get("/newsletter", requireAdmin, async (_req, res) => {
+  return res.json(await db.select().from(newsletterSubscribersTable).orderBy(desc(newsletterSubscribersTable.subscribedAt)));
 });
 
-router.post("/newsletter", (req, res) => {
+router.post("/newsletter", async (req, res) => {
   const { email, name } = req.body as { email?: string; name?: string };
   if (!email || !email.includes("@")) return res.status(400).json({ error: "A valid email is required." });
-  if (subscribers.find((s) => s.email === email)) return res.json({ ok: true, alreadySubscribed: true });
-  const sub: Subscriber = { id: randomUUID(), email, name: name ?? null, subscribedAt: new Date().toISOString(), active: true };
-  subscribers = [...subscribers, sub];
-  return res.status(201).json({ ok: true, subscriber: sub });
+  const [existing] = await db.select().from(newsletterSubscribersTable)
+    .where(eq(newsletterSubscribersTable.email, email)).limit(1);
+  if (existing) return res.json({ ok: true, alreadySubscribed: true, subscriber: existing });
+  const [subscriber] = await db.insert(newsletterSubscribersTable)
+    .values({ id: randomUUID(), email, name: name ?? null }).returning();
+  return res.status(201).json({ ok: true, subscriber });
 });
 
-router.delete("/newsletter/:id", requireAdmin, (req, res) => {
-  subscribers = subscribers.filter((s) => s.id !== (req.params.id as string));
+router.delete("/newsletter/:id", requireAdmin, async (req, res) => {
+  await db.delete(newsletterSubscribersTable).where(eq(newsletterSubscribersTable.id, req.params.id as string));
   return res.json({ ok: true });
 });
 
-router.get("/newsletter/export", requireAdmin, (_req, res) => {
-  const rows = ["email,name,subscribedAt", ...subscribers.filter((s) => s.active).map((s) => `${s.email},${s.name ?? ""},${s.subscribedAt}`)].join("\n");
+router.get("/newsletter/export", requireAdmin, async (_req, res) => {
+  const subscribers = await db.select().from(newsletterSubscribersTable)
+    .where(eq(newsletterSubscribersTable.active, true));
+  const escapeCsv = (value: string | null) => `"${String(value ?? "").replaceAll('"', '""')}"`;
+  const rows = [
+    "email,name,subscribedAt",
+    ...subscribers.map((s) => [s.email, s.name, s.subscribedAt.toISOString()].map(escapeCsv).join(",")),
+  ].join("\n");
   res.setHeader("Content-Type", "text/csv");
   res.setHeader("Content-Disposition", `attachment; filename="subscribers-${Date.now()}.csv"`);
   return res.send(rows);
 });
 
-// ── Campaigns ─────────────────────────────────────────────────────────────────
-
-router.get("/newsletter/campaigns", requireAdmin, (_req, res) => {
-  return res.json(campaigns);
+router.get("/newsletter/campaigns", requireAdmin, async (_req, res) => {
+  return res.json(await db.select().from(newsletterCampaignsTable).orderBy(desc(newsletterCampaignsTable.createdAt)));
 });
 
-router.post("/newsletter/send", requireAdmin, (req, res) => {
-  const { subject, previewText, body } = req.body as { subject?: string; previewText?: string; body?: string };
+router.post("/newsletter/send", requireAdmin, async (req, res) => {
+  const { subject, body, scheduledFor } = req.body as { subject?: string; body?: string; scheduledFor?: string };
   if (!subject || !body) return res.status(400).json({ error: "subject and body are required." });
-  const campaign: Campaign = { id: randomUUID(), subject, previewText: previewText ?? "", body, status: "sent", sentAt: new Date().toISOString(), sentCount: subscribers.filter((s) => s.active).length, openRate: 0, createdAt: new Date().toISOString() };
-  campaigns = [campaign, ...campaigns];
-  return res.status(201).json(campaign);
+  const [{ count }] = await db.select({ count: newsletterSubscribersTable.id })
+    .from(newsletterSubscribersTable).where(eq(newsletterSubscribersTable.active, true));
+  const [campaign] = await db.insert(newsletterCampaignsTable).values({
+    id: randomUUID(), subject, body, recipientCount: count ? Number(count) : 0,
+    status: scheduledFor ? "SCHEDULED" : "DRAFT",
+    scheduledFor: scheduledFor ? new Date(scheduledFor) : null,
+  }).returning();
+  return res.status(201).json({
+    ...campaign,
+    error: "Campaign saved. Configure SMTP before sending email.",
+  });
 });
 
-router.put("/newsletter/campaigns/:id", requireAdmin, (req, res) => {
-  const idx = campaigns.findIndex((c) => c.id === (req.params.id as string));
-  if (idx === -1) return res.status(404).json({ error: "Campaign not found" });
-  campaigns[idx] = { ...campaigns[idx], ...req.body };
-  return res.json(campaigns[idx]);
+router.put("/newsletter/campaigns/:id", requireAdmin, async (req, res) => {
+  const updates: Record<string, unknown> = { updatedAt: new Date() };
+  for (const key of ["subject", "body", "status"]) if (key in req.body) updates[key] = req.body[key];
+  if ("scheduledFor" in req.body) updates.scheduledFor = req.body.scheduledFor ? new Date(req.body.scheduledFor) : null;
+  const [campaign] = await db.update(newsletterCampaignsTable).set(updates)
+    .where(eq(newsletterCampaignsTable.id, req.params.id as string)).returning();
+  if (!campaign) return res.status(404).json({ error: "Campaign not found" });
+  return res.json(campaign);
 });
 
-router.delete("/newsletter/campaigns/:id", requireAdmin, (req, res) => {
-  campaigns = campaigns.filter((c) => c.id !== (req.params.id as string));
+router.delete("/newsletter/campaigns/:id", requireAdmin, async (req, res) => {
+  await db.delete(newsletterCampaignsTable).where(eq(newsletterCampaignsTable.id, req.params.id as string));
   return res.json({ ok: true });
 });
 
-router.post("/newsletter/campaigns/:id/resend", requireAdmin, (req, res) => {
-  const campaign = campaigns.find((c) => c.id === (req.params.id as string));
+router.post("/newsletter/campaigns/:id/resend", requireAdmin, async (req, res) => {
+  const [campaign] = await db.select().from(newsletterCampaignsTable)
+    .where(eq(newsletterCampaignsTable.id, req.params.id as string)).limit(1);
   if (!campaign) return res.status(404).json({ error: "Campaign not found" });
-  const resent: Campaign = { ...campaign, id: randomUUID(), status: "sent", sentAt: new Date().toISOString(), sentCount: subscribers.filter((s) => s.active).length, createdAt: new Date().toISOString() };
-  campaigns = [resent, ...campaigns];
-  return res.status(201).json(resent);
+  const [{ count }] = await db.select({ count: newsletterSubscribersTable.id })
+    .from(newsletterSubscribersTable).where(eq(newsletterSubscribersTable.active, true));
+  const [resent] = await db.insert(newsletterCampaignsTable).values({
+    id: randomUUID(), subject: campaign.subject, body: campaign.body,
+    recipientCount: count ? Number(count) : 0, status: "DRAFT",
+  }).returning();
+  return res.status(201).json({ ...resent, error: "Campaign copied. Configure SMTP before sending email." });
 });
 
 export default router;

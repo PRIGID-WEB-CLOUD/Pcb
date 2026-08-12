@@ -206,8 +206,8 @@ router.post("/auth/reset-password", async (req, res) => {
 
   const hashedPassword = await bcrypt.hash(password, 10);
   await db.update(usersTable)
-    .set({ passwordHash: simpleHash(password) })
-    .where(eq(usersTable.id, stored.userId));
+    .set({ passwordHash: hashedPassword, passwordResetToken: null, passwordResetExpiry: null })
+    .where(eq(usersTable.id, user.id));
   return res.json({ ok: true, message: "Password reset successfully." });
 });
 

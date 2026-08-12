@@ -1,179 +1,171 @@
 import { Router } from "express";
 import { randomUUID } from "crypto";
+import { and, desc, eq } from "drizzle-orm";
+import {
+  db,
+  productsTable,
+  couponsTable,
+  reviewsTable,
+  storeCartItemsTable,
+  storeWishlistItemsTable,
+} from "@workspace/db";
 
 const router = Router();
-
-// ── In-memory store ──────────────────────────────────────────────────────────
-
-interface CartItem    { id: string; sessionId: string; productId: string; quantity: number; product: { id: string; name: string; price: number; imageUrl: string | null }; }
-interface WishlistItem{ id: string; sessionId: string; productId: string; product: { id: string; name: string; price: number; imageUrl: string | null }; }
-interface Review      { id: string; productId: string; rating: number; comment: string; authorName: string; createdAt: string; }
-interface Order       { id: string; sessionId: string; reference: string; status: string; amount: number; provider: string; email: string; createdAt: string; }
-
-const carts     = new Map<string, CartItem[]>();
-const wishlists = new Map<string, WishlistItem[]>();
-let reviews: Review[] = [
-  { id: randomUUID(), productId: "seed", rating: 5, comment: "Exceptional quality — the cashmere is incredibly soft.", authorName: "A. Chen",    createdAt: new Date(Date.now() - 86400000 * 5).toISOString() },
-  { id: randomUUID(), productId: "seed", rating: 4, comment: "Beautiful piece. Delivery was very fast.",             authorName: "M. Webb",    createdAt: new Date(Date.now() - 86400000 * 2).toISOString() },
-];
-const paymentOrders = new Map<string, Order>();
 
 function sessionId(req: { cookies?: Record<string, string>; headers: Record<string, string | string[] | undefined> }): string {
   return (req.cookies?.["luxe_session"] ?? req.headers["x-session-id"] ?? "anon") as string;
 }
 
-// ── Cart helpers ──────────────────────────────────────────────────────────────
-
-function cartResponse(items: CartItem[]) {
-  return { items };
+async function productSnapshot(productId: string) {
+  const [product] = await db.select({
+    id: productsTable.id,
+    name: productsTable.name,
+    price: productsTable.price,
+    imageUrl: productsTable.imageUrl,
+  }).from(productsTable).where(eq(productsTable.id, productId)).limit(1);
+  return product ?? null;
 }
 
-// ── Cart ──────────────────────────────────────────────────────────────────────
+async function cartItems(sid: string) {
+  return db.select().from(storeCartItemsTable)
+    .where(eq(storeCartItemsTable.sessionId, sid))
+    .orderBy(desc(storeCartItemsTable.updatedAt));
+}
 
-router.get("/cart", (req, res) => {
-  const sid = sessionId(req);
-  res.json(cartResponse(carts.get(sid) ?? []));
+router.get("/cart", async (req, res) => {
+  return res.json({ items: await cartItems(sessionId(req)) });
 });
 
-router.post("/cart", (req, res) => {
+router.post("/cart", async (req, res) => {
   const sid = sessionId(req);
-  const { productId, quantity = 1, product } = req.body as { productId: string; quantity?: number; product?: CartItem["product"] };
+  const { productId, quantity = 1 } = req.body as { productId?: string; quantity?: number };
   if (!productId) return res.status(400).json({ error: "productId is required" });
-  const existing = carts.get(sid) ?? [];
-  const idx = existing.findIndex((i) => i.productId === productId);
-  if (idx >= 0) {
-    existing[idx].quantity += quantity;
-    carts.set(sid, existing);
-    return res.json(cartResponse(existing));
+  const product = await productSnapshot(productId);
+  if (!product) return res.status(404).json({ error: "Product not found" });
+  const [existing] = await db.select().from(storeCartItemsTable)
+    .where(and(eq(storeCartItemsTable.sessionId, sid), eq(storeCartItemsTable.productId, productId))).limit(1);
+  if (existing) {
+    await db.update(storeCartItemsTable)
+      .set({ quantity: existing.quantity + Number(quantity), product, updatedAt: new Date() })
+      .where(eq(storeCartItemsTable.id, existing.id));
+  } else {
+    await db.insert(storeCartItemsTable).values({
+      id: randomUUID(), sessionId: sid, productId, quantity: Number(quantity), product,
+    });
   }
-  const item: CartItem = { id: randomUUID(), sessionId: sid, productId, quantity, product: product ?? { id: productId, name: "Product", price: 0, imageUrl: null } };
-  const updated = [...existing, item];
-  carts.set(sid, updated);
-  return res.status(201).json(cartResponse(updated));
+  return res.status(existing ? 200 : 201).json({ items: await cartItems(sid) });
 });
 
-function updateCartItem(req: any, res: any) {
+async function updateCartItem(req: any, res: any) {
   const sid = sessionId(req);
-  const { productId } = req.params;
-  const { quantity } = req.body as { quantity: number };
-  const items = carts.get(sid) ?? [];
-  const idx = items.findIndex((i: CartItem) => i.productId === productId);
-  if (idx === -1) return res.status(404).json({ error: "Item not in cart" });
-  if (quantity <= 0) {
-    const filtered = items.filter((i: CartItem) => i.productId !== productId);
-    carts.set(sid, filtered);
-    return res.json(cartResponse(filtered));
-  }
-  items[idx].quantity = quantity;
-  carts.set(sid, items);
-  res.json(cartResponse(items));
+  const productId = req.params.productId as string;
+  const quantity = Number(req.body.quantity);
+  const [item] = await db.select().from(storeCartItemsTable)
+    .where(and(eq(storeCartItemsTable.sessionId, sid), eq(storeCartItemsTable.productId, productId))).limit(1);
+  if (!item) return res.status(404).json({ error: "Item not in cart" });
+  if (quantity <= 0) await db.delete(storeCartItemsTable).where(eq(storeCartItemsTable.id, item.id));
+  else await db.update(storeCartItemsTable).set({ quantity, updatedAt: new Date() }).where(eq(storeCartItemsTable.id, item.id));
+  return res.json({ items: await cartItems(sid) });
 }
 
 router.put("/cart/:productId", updateCartItem);
 router.patch("/cart/:productId", updateCartItem);
 
-router.delete("/cart/:productId", (req, res) => {
+router.delete("/cart/:productId", async (req, res) => {
   const sid = sessionId(req);
-  const { productId } = req.params;
-  const filtered = (carts.get(sid) ?? []).filter((i) => i.productId !== productId);
-  carts.set(sid, filtered);
-  res.json(cartResponse(filtered));
+  await db.delete(storeCartItemsTable).where(and(
+    eq(storeCartItemsTable.sessionId, sid),
+    eq(storeCartItemsTable.productId, req.params.productId as string),
+  ));
+  return res.json({ items: await cartItems(sid) });
 });
 
-// ── Wishlist ──────────────────────────────────────────────────────────────────
-
-router.get("/wishlist", (req, res) => {
-  const sid = sessionId(req);
-  return res.json(wishlists.get(sid) ?? []);
+router.get("/wishlist", async (req, res) => {
+  return res.json(await db.select().from(storeWishlistItemsTable)
+    .where(eq(storeWishlistItemsTable.sessionId, sessionId(req)))
+    .orderBy(desc(storeWishlistItemsTable.createdAt)));
 });
 
-router.post("/wishlist", (req, res) => {
+router.post("/wishlist", async (req, res) => {
   const sid = sessionId(req);
-  const { productId, product } = req.body as { productId: string; product?: WishlistItem["product"] };
+  const { productId } = req.body as { productId?: string };
   if (!productId) return res.status(400).json({ error: "productId is required" });
-  const existing = wishlists.get(sid) ?? [];
-  if (existing.find((i) => i.productId === productId)) return res.json({ ok: true, alreadyWishlisted: true });
-  const item: WishlistItem = { id: randomUUID(), sessionId: sid, productId, product: product ?? { id: productId, name: "Product", price: 0, imageUrl: null } };
-  wishlists.set(sid, [...existing, item]);
+  const product = await productSnapshot(productId);
+  if (!product) return res.status(404).json({ error: "Product not found" });
+  const [existing] = await db.select().from(storeWishlistItemsTable)
+    .where(and(eq(storeWishlistItemsTable.sessionId, sid), eq(storeWishlistItemsTable.productId, productId))).limit(1);
+  if (existing) return res.json({ ok: true, alreadyWishlisted: true, item: existing });
+  const [item] = await db.insert(storeWishlistItemsTable)
+    .values({ id: randomUUID(), sessionId: sid, productId, product }).returning();
   return res.status(201).json(item);
 });
 
-router.delete("/wishlist/:productId", (req, res) => {
-  const sid = sessionId(req);
-  const { productId } = req.params;
-  wishlists.set(sid, (wishlists.get(sid) ?? []).filter((i) => i.productId !== productId));
+router.delete("/wishlist/:productId", async (req, res) => {
+  await db.delete(storeWishlistItemsTable).where(and(
+    eq(storeWishlistItemsTable.sessionId, sessionId(req)),
+    eq(storeWishlistItemsTable.productId, req.params.productId as string),
+  ));
   return res.json({ ok: true });
 });
 
-// ── Coupons ───────────────────────────────────────────────────────────────────
-
-const STORE_COUPONS: Record<string, { type: "PERCENTAGE" | "FIXED"; value: number }> = {
-  LUXE20:    { type: "PERCENTAGE", value: 20 },
-  WELCOME10: { type: "PERCENTAGE", value: 10 },
-  FLAT50:    { type: "FIXED",      value: 50  },
-};
-
-router.post("/coupons/validate", (req, res) => {
-  const { code, orderAmount } = req.body as { code?: string; orderAmount?: number };
+router.post("/coupons/validate", async (req, res) => {
+  const { code, orderAmount = 0 } = req.body as { code?: string; orderAmount?: number };
   if (!code) return res.status(400).json({ error: "code is required" });
-  const coupon = STORE_COUPONS[code.toUpperCase()];
-  if (!coupon) return res.status(404).json({ error: "Coupon code not found or expired." });
-  const discount = coupon.type === "PERCENTAGE"
-    ? Math.floor(((orderAmount ?? 0) * coupon.value) / 100)
-    : coupon.value;
-  return res.json({ code: code.toUpperCase(), type: coupon.type, value: coupon.value, discount, description: `${coupon.type === "PERCENTAGE" ? `${coupon.value}%` : `$${coupon.value}`} off your order` });
-});
-
-router.post("/coupons/redeem", (req, res) => {
-  const { code, orderAmount } = req.body as { code?: string; orderAmount?: number };
-  if (!code) return res.status(400).json({ error: "code is required" });
-  const coupon = STORE_COUPONS[code.toUpperCase()];
-  if (!coupon) return res.status(404).json({ error: "Coupon not found." });
-  const discount = coupon.type === "PERCENTAGE"
-    ? Math.floor(((orderAmount ?? 0) * coupon.value) / 100)
-    : coupon.value;
-  return res.json({ ok: true, code: code.toUpperCase(), discount });
-});
-
-// ── Payments ──────────────────────────────────────────────────────────────────
-
-router.post("/payments/initialize", (req, res) => {
-  const { amount, email, provider, callbackUrl } = req.body as { amount?: number; email?: string; provider?: string; callbackUrl?: string };
-  if (!amount || !email) return res.status(400).json({ error: "amount and email are required." });
-
-  const reference = `LUX-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
-  const order: Order = { id: randomUUID(), sessionId: "anon", reference, status: "pending", amount: amount, provider: provider ?? "paystack", email, createdAt: new Date().toISOString() };
-  paymentOrders.set(reference, order);
-
-  if (provider === "flutterwave") {
-    return res.json({ status: "success", message: "Hosted Link", data: { link: callbackUrl ? `${callbackUrl}&reference=${reference}&status=successful` : `/?payment=success&reference=${reference}` } });
-  } else {
-    return res.json({ status: "success", message: "Authorization URL created", data: { authorization_url: callbackUrl ? `${callbackUrl}&reference=${reference}` : `/?payment=success&reference=${reference}`, access_code: reference, reference } });
+  const [coupon] = await db.select().from(couponsTable)
+    .where(eq(couponsTable.code, code.toUpperCase())).limit(1);
+  if (!coupon || !coupon.active || (coupon.expiresAt && coupon.expiresAt < new Date())) {
+    return res.status(404).json({ error: "Coupon code not found or expired." });
   }
+  if (coupon.maxUses != null && coupon.usedCount >= coupon.maxUses) {
+    return res.status(400).json({ error: "Coupon usage limit reached." });
+  }
+  if (Number(orderAmount) < Number(coupon.minOrderAmount)) {
+    return res.status(400).json({ error: `Minimum order amount is ${coupon.minOrderAmount}.` });
+  }
+  const discount = coupon.discountType === "PERCENTAGE"
+    ? Math.floor((Number(orderAmount) * Number(coupon.discountValue)) / 100)
+    : Number(coupon.discountValue);
+  return res.json({ code: coupon.code, type: coupon.discountType, value: coupon.discountValue, discount, description: coupon.description });
 });
 
-router.get("/payments/verify/:reference", (req, res) => {
-  const { reference } = req.params;
-  const order = paymentOrders.get(reference);
-  if (!order) return res.status(404).json({ error: "Payment reference not found." });
-  order.status = "success";
-  paymentOrders.set(reference, order);
-  return res.json({ status: "success", data: { reference, status: "success", amount: order.amount, paid_at: new Date().toISOString() } });
+router.post("/coupons/redeem", async (req, res) => {
+  const { code, orderAmount = 0 } = req.body as { code?: string; orderAmount?: number };
+  if (!code) return res.status(400).json({ error: "code is required" });
+  const [coupon] = await db.select().from(couponsTable)
+    .where(eq(couponsTable.code, code.toUpperCase())).limit(1);
+  if (!coupon || !coupon.active) return res.status(404).json({ error: "Coupon not found." });
+  const discount = coupon.discountType === "PERCENTAGE"
+    ? Math.floor((Number(orderAmount) * Number(coupon.discountValue)) / 100)
+    : Number(coupon.discountValue);
+  await db.update(couponsTable).set({ usedCount: coupon.usedCount + 1, updatedAt: new Date() })
+    .where(eq(couponsTable.id, coupon.id));
+  return res.json({ ok: true, code: coupon.code, discount });
 });
 
-// ── Reviews ───────────────────────────────────────────────────────────────────
-
-router.get("/reviews", (req, res) => {
-  const { productId } = req.query as { productId?: string };
-  if (productId) return res.json(reviews.filter((r) => r.productId === productId));
-  return res.json(reviews);
+router.post("/payments/initialize", (_req, res) => {
+  return res.status(501).json({ error: "Payment provider is not configured. Connect Paystack, Flutterwave, or Stripe in admin settings." });
 });
 
-router.post("/reviews", (req, res) => {
+router.get("/payments/verify/:reference", (_req, res) => {
+  return res.status(501).json({ error: "Payment provider is not configured." });
+});
+
+router.get("/reviews", async (req, res) => {
+  const productId = req.query.productId as string | undefined;
+  const rows = productId
+    ? await db.select().from(reviewsTable).where(eq(reviewsTable.productId, productId)).orderBy(desc(reviewsTable.createdAt))
+    : await db.select().from(reviewsTable).orderBy(desc(reviewsTable.createdAt));
+  return res.json(rows);
+});
+
+router.post("/reviews", async (req, res) => {
   const { productId, rating, comment, authorName } = req.body as { productId?: string; rating?: number; comment?: string; authorName?: string };
   if (!productId || !rating) return res.status(400).json({ error: "productId and rating are required." });
-  const review: Review = { id: randomUUID(), productId, rating, comment: comment ?? "", authorName: authorName ?? "Anonymous", createdAt: new Date().toISOString() };
-  reviews = [review, ...reviews];
+  const product = await productSnapshot(productId);
+  if (!product) return res.status(404).json({ error: "Product not found" });
+  const [review] = await db.insert(reviewsTable).values({
+    id: randomUUID(), productId, rating: Number(rating), comment: comment ?? "", authorName: authorName ?? "Anonymous",
+  }).returning();
   return res.status(201).json(review);
 });
 

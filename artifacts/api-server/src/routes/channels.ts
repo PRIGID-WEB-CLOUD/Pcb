@@ -1,62 +1,28 @@
 import { Router } from "express";
 import { randomUUID } from "crypto";
 import { requireAdmin } from "../middleware/requireAdmin";
-import { db, channelCredentialsTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import {
+  db,
+  channelCredentialsTable,
+  channelConfigsTable,
+  channelEventLogsTable,
+  channelWebhooksTable,
+} from "@workspace/db";
+import { desc, eq } from "drizzle-orm";
 
 const router = Router();
 router.use(requireAdmin);
 
-// ── In-memory store ──────────────────────────────────────────────────────────
-
 type ChannelStatus = "CONNECTED" | "PAUSED" | "DISCONNECTED";
+type EventType = "sync" | "error" | "warning" | "info";
 
-interface ChannelConfig {
-  id: string;
-  channelId: string;
-  status: ChannelStatus;
-  lastSync: string | null;
-  latency: number;
-}
-
-interface EventLog {
-  id: string;
-  channel: string;
-  event: string;
-  detail: string;
-  type: "sync" | "error" | "warning" | "info";
-  createdAt: string;
-}
-
-interface Webhook {
-  id: string;
-  webhookId: string;
-  label: string;
-  url: string;
-  active: boolean;
-}
-
-let configs: ChannelConfig[] = [
-  { id: randomUUID(), channelId: "facebook",  status: "DISCONNECTED", lastSync: null, latency: 0 },
-  { id: randomUUID(), channelId: "instagram", status: "DISCONNECTED", lastSync: null, latency: 0 },
-  { id: randomUUID(), channelId: "commerce",  status: "DISCONNECTED", lastSync: null, latency: 0 },
-  { id: randomUUID(), channelId: "ads",       status: "DISCONNECTED", lastSync: null, latency: 0 },
-  { id: randomUUID(), channelId: "whatsapp",  status: "DISCONNECTED", lastSync: null, latency: 0 },
-  { id: randomUUID(), channelId: "twitter",   status: "DISCONNECTED", lastSync: null, latency: 0 },
+const CHANNELS = ["facebook", "instagram", "commerce", "ads", "whatsapp", "twitter"] as const;
+const DEFAULT_WEBHOOKS = [
+  { webhookId: "order_created", label: "Order Created", url: "/webhooks/order-created", active: true },
+  { webhookId: "product_updated", label: "Product Updated", url: "/webhooks/product-updated", active: true },
+  { webhookId: "cart_abandoned", label: "Cart Abandoned", url: "/webhooks/cart-abandoned", active: false },
+  { webhookId: "customer_signup", label: "Customer Sign-up", url: "/webhooks/customer-signup", active: true },
 ];
-
-let events: EventLog[] = [
-  { id: randomUUID(), channel: "system", event: "Channel Hub Ready", detail: "Connect your social channels to see live events here.", type: "info", createdAt: new Date().toISOString() },
-];
-
-let webhooks: Webhook[] = [
-  { id: randomUUID(), webhookId: "order_created",    label: "Order Created",    url: "/webhooks/order-created",    active: true  },
-  { id: randomUUID(), webhookId: "product_updated",  label: "Product Updated",  url: "/webhooks/product-updated",  active: true  },
-  { id: randomUUID(), webhookId: "cart_abandoned",   label: "Cart Abandoned",   url: "/webhooks/cart-abandoned",   active: false },
-  { id: randomUUID(), webhookId: "customer_signup",  label: "Customer Sign-up", url: "/webhooks/customer-signup",  active: true  },
-];
-
-// ── DB-backed credentials (in-memory for sync reads, persisted to DB on write) ─
 
 export const credentials: Record<string, Record<string, string>> = {
   facebook: {}, instagram: {}, twitter: {}, whatsapp: {}, ads: {}, commerce: {},
@@ -65,15 +31,14 @@ export const credentials: Record<string, Record<string, string>> = {
 async function loadCredentialsFromDb() {
   try {
     const rows = await db.select().from(channelCredentialsTable);
-    for (const row of rows) {
-      credentials[row.channel] = row.data;
-    }
+    for (const row of rows) credentials[row.channel] = row.data;
   } catch {
-    // Non-fatal: use empty defaults if DB not ready
+    // The API can still boot before the database is available.
   }
 }
+void loadCredentialsFromDb();
 
-async function persistCredentials(channel: string): Promise<void> {
+async function persistCredentials(channel: string) {
   await db.insert(channelCredentialsTable)
     .values({ channel, data: credentials[channel] ?? {}, updatedAt: new Date() })
     .onConflictDoUpdate({
@@ -82,80 +47,100 @@ async function persistCredentials(channel: string): Promise<void> {
     });
 }
 
-// Load credentials from DB on startup
-loadCredentialsFromDb();
-
-export function addEvent(channel: string, event: string, detail: string, type: EventLog["type"] = "info") {
-  events.unshift({ id: randomUUID(), channel, event, detail, type, createdAt: new Date().toISOString() });
-  if (events.length > 200) events = events.slice(0, 200);
+async function ensureDefaults() {
+  for (const channelId of CHANNELS) {
+    await db.insert(channelConfigsTable)
+      .values({ id: randomUUID(), channelId, status: "DISCONNECTED", latency: 0 })
+      .onConflictDoNothing({ target: channelConfigsTable.channelId });
+  }
+  for (const webhook of DEFAULT_WEBHOOKS) {
+    await db.insert(channelWebhooksTable)
+      .values({ id: randomUUID(), ...webhook })
+      .onConflictDoNothing({ target: channelWebhooksTable.webhookId });
+  }
 }
 
-// ── Routes ───────────────────────────────────────────────────────────────────
+export function addEvent(channel: string, event: string, detail: string, type: EventType = "info") {
+  void db.insert(channelEventLogsTable).values({
+    id: randomUUID(), channel, event, detail, type,
+  }).catch(() => {});
+}
 
-router.get("/channels/configs", (_req, res) => {
-  return res.json(configs);
+router.get("/channels/configs", async (_req, res) => {
+  await ensureDefaults();
+  return res.json(await db.select().from(channelConfigsTable));
 });
 
-router.put("/channels/configs/:channelId/status", (req, res) => {
+router.put("/channels/configs/:channelId/status", async (req, res) => {
   const channelId = req.params.channelId as string;
-  const { status } = req.body as { status: ChannelStatus };
-  configs = configs.map((c) => c.channelId === channelId ? { ...c, status } : c);
+  const status = req.body.status as ChannelStatus;
+  const [updated] = await db.update(channelConfigsTable)
+    .set({ status, updatedAt: new Date() })
+    .where(eq(channelConfigsTable.channelId, channelId))
+    .returning();
+  if (!updated) return res.status(404).json({ error: "Channel not found" });
   addEvent(channelId, `Status changed to ${status}`, `Channel is now ${status.toLowerCase()}.`, status === "CONNECTED" ? "sync" : "warning");
-  return res.json(configs.find((c) => c.channelId === channelId));
+  return res.json(updated);
 });
 
-router.post("/channels/configs/:channelId/sync", (req, res) => {
+router.post("/channels/configs/:channelId/sync", async (req, res) => {
   const channelId = req.params.channelId as string;
-  const now = new Date().toISOString();
-  configs = configs.map((c) => c.channelId === channelId ? { ...c, lastSync: now } : c);
-  addEvent(channelId, "Manual sync triggered", "Sync completed successfully.", "sync");
-  return res.json(configs.find((c) => c.channelId === channelId));
+  const [updated] = await db.update(channelConfigsTable)
+    .set({ lastSync: new Date(), updatedAt: new Date() })
+    .where(eq(channelConfigsTable.channelId, channelId))
+    .returning();
+  if (!updated) return res.status(404).json({ error: "Channel not found" });
+  addEvent(channelId, "Manual sync triggered", "Sync timestamp recorded. Connect the channel to perform a live sync.", "sync");
+  return res.json(updated);
 });
 
-router.post("/channels/configs/sync-all", (_req, res) => {
-  const now = new Date().toISOString();
-  configs = configs.map((c) => c.status === "CONNECTED" ? { ...c, lastSync: now } : c);
-  addEvent("system", "Sync-all triggered", "All active channels synced.", "sync");
+router.post("/channels/configs/sync-all", async (_req, res) => {
+  await db.update(channelConfigsTable)
+    .set({ lastSync: new Date(), updatedAt: new Date() })
+    .where(eq(channelConfigsTable.status, "CONNECTED"));
+  addEvent("system", "Sync-all triggered", "Active channel sync timestamps updated.", "sync");
   return res.json({ ok: true });
 });
 
-router.post("/channels/configs/:channelId/test", (req, res) => {
+router.post("/channels/configs/:channelId/test", async (req, res) => {
   const channelId = req.params.channelId as string;
-  const creds = credentials[channelId] ?? {};
-  const hasCreds = Object.keys(creds).length > 0 && Object.values(creds).some((v) => v.trim());
-  const latency = hasCreds ? Math.floor(Math.random() * 120) + 40 : 0;
-  const pass = hasCreds;
-  configs = configs.map((c) => c.channelId === channelId ? { ...c, latency } : c);
-  addEvent(channelId, hasCreds ? `Connection test passed (${latency}ms)` : "Connection test failed — no credentials", hasCreds ? "All systems operational." : "Add API credentials to connect.", hasCreds ? "sync" : "error");
-  return res.json({ pass, latency });
+  const saved = credentials[channelId] ?? {};
+  const missing = Object.keys(saved).length === 0;
+  const detail = missing
+    ? "No credentials saved for this channel."
+    : "Credentials are saved. Use the channel-specific live test to verify the external API.";
+  addEvent(channelId, "Connection test unavailable", detail, missing ? "error" : "warning");
+  return res.json({ pass: false, latency: 0, missing: missing ? ["credentials"] : [], detail });
 });
 
-router.get("/channels/events", (_req, res) => {
-  return res.json(events);
+router.get("/channels/events", async (_req, res) => {
+  return res.json(await db.select().from(channelEventLogsTable).orderBy(desc(channelEventLogsTable.createdAt)).limit(200));
 });
 
-router.delete("/channels/events", (_req, res) => {
-  events = [];
+router.delete("/channels/events", async (_req, res) => {
+  await db.delete(channelEventLogsTable);
   return res.json({ ok: true });
 });
 
-router.get("/channels/webhooks", (_req, res) => {
-  return res.json(webhooks);
+router.get("/channels/webhooks", async (_req, res) => {
+  await ensureDefaults();
+  return res.json(await db.select().from(channelWebhooksTable));
 });
 
-router.put("/channels/webhooks/:webhookId", (req, res) => {
-  const webhookId = req.params.webhookId as string;
-  const { active } = req.body as { active: boolean };
-  webhooks = webhooks.map((w) => w.webhookId === webhookId ? { ...w, active } : w);
-  return res.json(webhooks.find((w) => w.webhookId === webhookId));
+router.put("/channels/webhooks/:webhookId", async (req, res) => {
+  const [updated] = await db.update(channelWebhooksTable)
+    .set({ active: Boolean(req.body.active), updatedAt: new Date() })
+    .where(eq(channelWebhooksTable.webhookId, req.params.webhookId as string))
+    .returning();
+  if (!updated) return res.status(404).json({ error: "Webhook not found" });
+  return res.json(updated);
 });
 
-router.get("/channels/credentials/:channel", requireAdmin, (req, res) => {
-  const channel = req.params.channel as string;
-  res.json(credentials[channel] ?? {});
+router.get("/channels/credentials/:channel", (req, res) => {
+  return res.json(credentials[req.params.channel as string] ?? {});
 });
 
-router.put("/channels/credentials/:channel", requireAdmin, async (req, res) => {
+router.put("/channels/credentials/:channel", async (req, res) => {
   const channel = req.params.channel as string;
   credentials[channel] = { ...(credentials[channel] ?? {}), ...req.body };
   await persistCredentials(channel);
@@ -163,7 +148,7 @@ router.put("/channels/credentials/:channel", requireAdmin, async (req, res) => {
   return res.json({ ok: true });
 });
 
-router.delete("/channels/credentials/:channel", requireAdmin, async (req, res) => {
+router.delete("/channels/credentials/:channel", async (req, res) => {
   const channel = req.params.channel as string;
   credentials[channel] = {};
   await persistCredentials(channel);
