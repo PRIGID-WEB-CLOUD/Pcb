@@ -37,7 +37,7 @@ interface BlogPost   { id: string; title: string; slug: string; content: string;
 const productVariants = new Map<string, Variant[]>();
 let mediaItems: MediaItem[] = [
   { id: randomUUID(), filename: "hero-overcoat.jpg",    url: "https://images.unsplash.com/photo-1490481651871-ab68de25d43d?w=800", mimeType: "image/jpeg", size: 248000, createdAt: new Date().toISOString() },
-  { id: randomUUID(), filename: "accessories-edit.jpg", url: "https://images.unsplash.com/photo-1548036328-c9fa89d128fa?w=800",   mimeType: "image/jpeg", size: 195000, createdAt: new Date().toISOString() },
+  { id: randomUUID(), filename: "accessories-edit.jpg", url: "https://images.unsplash.com/photo-1548036328-c9fa89d128fa?w=800",   imageType: "image/jpeg", size: 195000, createdAt: new Date().toISOString() } as unknown as MediaItem,
 ];
 let customers: Customer[] = [
   { id: "c1", name: "Audrey Chen",    email: "audrey@example.com",   totalOrders: 3, totalSpent: 7420,  createdAt: new Date(Date.now() - 86400000 * 30).toISOString() },
@@ -98,15 +98,19 @@ router.post("/products", requireAdmin, validate(productSchema), async (req, res)
 
 router.get("/products/:id", async (req, res) => {
   const rows = await db.select().from(productsTable).where(eq(productsTable.id, req.params.id as string)).limit(1);
+  const productId = req.params.id as string;
+  const rows = await db.select().from(productsTable).where(eq(productsTable.id, productId)).limit(1);
   if (!rows[0]) return res.status(404).json({ error: "Product not found" });
   return res.json(await enrichProduct(rows[0]));
 });
 
 router.put("/products/:id", requireAdmin, async (req, res) => {
+  const productId = req.params.id as string;
   const allowed = ["name", "price", "categoryId", "stock", "trackQuantity", "status", "imageUrl", "description", "tags"];
   const updates: Record<string, unknown> = {};
   for (const k of allowed) if (k in req.body) updates[k] = req.body[k];
   const rows = await db.update(productsTable).set(updates).where(eq(productsTable.id, req.params.id as string)).returning();
+  const rows = await db.update(productsTable).set(updates).where(eq(productsTable.id, productId)).returning();
   if (!rows[0]) return res.status(404).json({ error: "Product not found" });
   return res.json(await enrichProduct(rows[0]));
 });
@@ -115,11 +119,17 @@ router.delete("/products/:id", requireAdmin, async (req, res) => {
   productVariants.delete(req.params.id as string);
   await db.delete(productsTable).where(eq(productsTable.id, req.params.id as string));
   return res.json({ ok: true });
+  const productId = req.params.id as string;
+  productVariants.delete(productId);
+  await db.delete(productsTable).where(eq(productsTable.id, productId));
+  res.json({ ok: true });
 });
 
 // ── Manual sync (stamp updatedAt to mark as manually synced) ──────────────────
 router.post("/products/:id/sync", requireAdmin, async (req, res) => {
   const rows = await db.select().from(productsTable).where(eq(productsTable.id, req.params.id as string)).limit(1);
+  const productId = req.params.id as string;
+  const rows = await db.select().from(productsTable).where(eq(productsTable.id, productId)).limit(1);
   if (!rows[0]) return res.status(404).json({ error: "Product not found" });
   const updates = req.body as Partial<typeof productsTable.$inferInsert>;
   const allowed = ["name", "price", "stock", "status", "imageUrl", "description", "tags"];
@@ -127,6 +137,8 @@ router.post("/products/:id/sync", requireAdmin, async (req, res) => {
   for (const k of allowed) if (k in updates) patch[k] = (updates as Record<string, unknown>)[k];
   const [updated] = await db.update(productsTable).set(patch).where(eq(productsTable.id, req.params.id as string)).returning();
   return res.json({ ok: true, product: updated, syncedAt: new Date().toISOString() });
+  const [updated] = await db.update(productsTable).set(patch).where(eq(productsTable.id, productId)).returning();
+  res.json({ ok: true, product: updated, syncedAt: new Date().toISOString() });
 });
 
 // ── Product Variants (in-memory) ──────────────────────────────────────────────
@@ -149,6 +161,26 @@ router.post("/products/:id/variants", requireAdmin, async (req, res) => {
 router.put("/products/:id/variants/:variantId", requireAdmin, (req, res) => {
   const { id, variantId } = req.params;
   const variants = productVariants.get(id as string);
+  const productId = req.params.id as string;
+  const rows = await db.select().from(productsTable).where(eq(productsTable.id, productId)).limit(1);
+  if (!rows[0]) return res.status(404).json({ error: "Product not found" });
+  res.json(productVariants.get(productId) ?? []);
+});
+
+router.post("/products/:id/variants", requireAdmin, async (req, res) => {
+  const productId = req.params.id as string;
+  const rows = await db.select().from(productsTable).where(eq(productsTable.id, productId)).limit(1);
+  if (!rows[0]) return res.status(404).json({ error: "Product not found" });
+  const variant: Variant = { id: randomUUID(), size: req.body.size ?? "", color: req.body.color ?? "", stock: req.body.stock ?? 0, price: req.body.price ?? null, sku: req.body.sku ?? "" };
+  const existing = productVariants.get(productId) ?? [];
+  productVariants.set(productId, [...existing, variant]);
+  res.status(201).json(variant);
+});
+
+router.put("/products/:id/variants/:variantId", requireAdmin, (req, res) => {
+  const id = req.params.id as string;
+  const variantId = req.params.variantId as string;
+  const variants = productVariants.get(id);
   if (!variants) return res.status(404).json({ error: "Product not found" });
   const idx = variants.findIndex((v) => v.id === variantId);
   if (idx === -1) return res.status(404).json({ error: "Variant not found" });
@@ -162,9 +194,16 @@ router.delete("/products/:id/variants/:variantId", requireAdmin, (req, res) => {
   const variants = productVariants.get(id as string) ?? [];
   productVariants.set(id as string, variants.filter((v) => v.id !== variantId));
   return res.json({ ok: true });
+  const id = req.params.id as string;
+  const variantId = req.params.variantId as string;
+  const variants = productVariants.get(id) ?? [];
+  productVariants.set(id, variants.filter((v) => v.id !== variantId));
+  res.json({ ok: true });
 });
 
 // ── Orders ────────────────────────────────────────────────────────────────────
+
+type OrderItem = { name: string; qty: number; price: number };
 
 router.get("/orders", requireAdmin, async (_req, res) => {
   const rows = await db.select().from(ordersTable).orderBy(desc(ordersTable.createdAt));
@@ -173,6 +212,8 @@ router.get("/orders", requireAdmin, async (_req, res) => {
 
 router.get("/orders/:id", requireAdmin, async (req, res) => {
   const rows = await db.select().from(ordersTable).where(eq(ordersTable.id, req.params.id as string)).limit(1);
+  const orderId = req.params.id as string;
+  const rows = await db.select().from(ordersTable).where(eq(ordersTable.id, orderId)).limit(1);
   if (!rows[0]) return res.status(404).json({ error: "Order not found" });
   return res.json(rows[0]);
 });
@@ -238,6 +279,7 @@ router.post("/orders", async (req, res) => {
     total: Math.round(total),
     status: "PENDING",
     items: (items as any) ?? [],
+    items: (items ?? []) as OrderItem[],
   }).returning();
   eventBus.publish({ type: "new_order", payload: {
     id: order.id,
@@ -255,10 +297,12 @@ router.post("/orders", async (req, res) => {
 });
 
 router.put("/orders/:id", requireAdmin, async (req, res) => {
+  const orderId = req.params.id as string;
   const allowed = ["status"];
   const updates: Record<string, unknown> = {};
   for (const k of allowed) if (k in req.body) updates[k] = req.body[k];
   const rows = await db.update(ordersTable).set(updates).where(eq(ordersTable.id, req.params.id as string)).returning();
+  const rows = await db.update(ordersTable).set(updates).where(eq(ordersTable.id, orderId)).returning();
   if (!rows[0]) return res.status(404).json({ error: "Order not found" });
   eventBus.publish({ type: "order_updated", payload: { id: rows[0].id, status: rows[0].status } });
   return res.json(rows[0]);
@@ -283,11 +327,13 @@ router.post("/categories", requireAdmin, async (req, res) => {
 });
 
 router.put("/categories/:id", requireAdmin, async (req, res) => {
+  const categoryId = req.params.id as string;
   const allowed = ["name", "description"];
   const updates: Record<string, unknown> = {};
   for (const k of allowed) if (k in req.body) updates[k] = req.body[k];
   if (req.body.name) updates["slug"] = String(req.body.name).toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
   const rows = await db.update(categoriesTable).set(updates).where(eq(categoriesTable.id, req.params.id as string)).returning();
+  const rows = await db.update(categoriesTable).set(updates).where(eq(categoriesTable.id, categoryId)).returning();
   if (!rows[0]) return res.status(404).json({ error: "Category not found" });
   return res.json(rows[0]);
 });
@@ -295,6 +341,9 @@ router.put("/categories/:id", requireAdmin, async (req, res) => {
 router.delete("/categories/:id", requireAdmin, async (req, res) => {
   await db.delete(categoriesTable).where(eq(categoriesTable.id, req.params.id as string));
   return res.json({ ok: true });
+  const categoryId = req.params.id as string;
+  await db.delete(categoriesTable).where(eq(categoriesTable.id, categoryId));
+  res.json({ ok: true });
 });
 
 // ── Blog Posts ────────────────────────────────────────────────────────────────

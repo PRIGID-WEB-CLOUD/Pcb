@@ -152,7 +152,7 @@ router.put("/channels/webhooks/:webhookId", (req, res) => {
 
 router.get("/channels/credentials/:channel", requireAdmin, (req, res) => {
   const channel = req.params.channel as string;
-  return res.json(credentials[channel] ?? {});
+  res.json(credentials[channel] ?? {});
 });
 
 router.put("/channels/credentials/:channel", requireAdmin, async (req, res) => {

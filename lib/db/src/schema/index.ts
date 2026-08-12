@@ -5,17 +5,34 @@ import { z } from "zod/v4";
 // ── Users ─────────────────────────────────────────────────────────────────────
 
 export const usersTable = pgTable("users", {
-  id:           text("id").primaryKey(),
-  name:         text("name").notNull(),
-  email:        text("email").notNull().unique(),
-  role:         text("role").notNull().default("CUSTOMER"),
-  passwordHash: text("password_hash").notNull().default(""),
-  createdAt:    timestamp("created_at").notNull().defaultNow(),
+  id:                  text("id").primaryKey(),
+  name:                text("name").notNull(),
+  email:               text("email").notNull().unique(),
+  role:                text("role").notNull().default("CUSTOMER"),
+  passwordHash:        text("password_hash").notNull().default(""),
+  passwordResetToken:  text("password_reset_token"),
+  passwordResetExpiry: timestamp("password_reset_expiry"),
+  createdAt:           timestamp("created_at").notNull().defaultNow(),
 });
 
 export const insertUserSchema = createInsertSchema(usersTable).omit({ createdAt: true });
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof usersTable.$inferSelect;
+
+export const users = usersTable;
+
+// ── Admin OTP codes ────────────────────────────────────────────────────────────
+
+export const adminOtpCodesTable = pgTable("admin_otp_codes", {
+  id:        text("id").primaryKey(),
+  email:     text("email").notNull(),
+  code:      text("code").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  used:      boolean("used").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const adminOtpCodes = adminOtpCodesTable;
 
 // ── Sessions ──────────────────────────────────────────────────────────────────
 

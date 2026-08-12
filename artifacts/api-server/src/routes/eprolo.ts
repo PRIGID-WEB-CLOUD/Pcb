@@ -36,6 +36,7 @@ router.get("/eprolo/products", requireAdmin, async (req, res) => {
 // ── Get product detail ────────────────────────────────────────────────────────
 router.get("/eprolo/products/:id", requireAdmin, async (req, res) => {
   if (!requireConfig(res)) return res.status(400);
+  if (!requireConfig(res)) return;
   const id = req.params.id as string;
   const { product_id = id } = req.query as { product_id?: string };
   try {
@@ -129,9 +130,10 @@ router.get("/eprolo/staged", requireAdmin, async (_req, res) => {
 // ── Publish a staged product (DRAFT → ACTIVE) ─────────────────────────────────
 router.post("/eprolo/staged/:id/publish", requireAdmin, async (req, res) => {
   try {
+    const id = req.params.id as string;
     const rows = await db.update(productsTable)
       .set({ status: "ACTIVE" })
-      .where(and(eq(productsTable.id, req.params.id as string), like(productsTable.tags, "%eprolo%")))
+      .where(and(eq(productsTable.id, id), like(productsTable.tags, "%eprolo%")))
       .returning();
     if (!rows[0]) return res.status(404).json({ error: "Staged product not found" });
     return res.json({ ok: true, product: rows[0] });
@@ -143,9 +145,10 @@ router.post("/eprolo/staged/:id/publish", requireAdmin, async (req, res) => {
 // ── Reject (delete) a staged product ─────────────────────────────────────────
 router.delete("/eprolo/staged/:id", requireAdmin, async (req, res) => {
   try {
+    const id = req.params.id as string;
     await db.delete(productsTable)
-      .where(and(eq(productsTable.id, req.params.id as string), like(productsTable.tags, "%eprolo%")));
-    return res.json({ ok: true });
+      .where(and(eq(productsTable.id, id), like(productsTable.tags, "%eprolo%")));
+    res.json({ ok: true });
   } catch (err: unknown) {
     return res.status(500).json({ error: err instanceof Error ? err.message : "Reject failed" });
   }
