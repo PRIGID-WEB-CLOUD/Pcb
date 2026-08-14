@@ -2,44 +2,11 @@ import { Router } from "express";
 import { randomUUID, createHmac } from "crypto";
 import { addEvent, credentials } from "./channels";
 import { requireAdmin } from "../middleware/requireAdmin";
+import { db, twitterHashtagsTable, twitterAutoRulesTable, twitterTweetQueueTable, twitterContentTemplatesTable, twitterSchedulerSettingsTable } from "@workspace/db";
+import { desc, eq } from "drizzle-orm";
 
 const router = Router();
 router.use(requireAdmin);
-
-// ── In-memory store ──────────────────────────────────────────────────────────
-
-interface Hashtag         { id: string; tag: string; }
-interface AutoRule        { id: string; trigger: string; action: string; template: string; active: boolean; }
-interface QueuedTweet     { id: string; text: string; scheduledFor: string; status: string; imageStyle: string; }
-interface ContentTemplate { id: string; name: string; body: string; usageCount: number; }
-interface Scheduler       { id: string; schedulerOn: boolean; dropFrequency: string; imageStyle: string; }
-
-let hashtags: Hashtag[] = [
-  { id: randomUUID(), tag: "#LuxeBoutique" },
-  { id: randomUUID(), tag: "#NewArrival" },
-  { id: randomUUID(), tag: "#SustainableLuxury" },
-];
-
-let rules: AutoRule[] = [
-  { id: randomUUID(), trigger: "New Product Published", action: "Post immediately", template: "new_arrival", active: true  },
-  { id: randomUUID(), trigger: "Collection Launch",     action: "Post immediately", template: "collection",  active: true  },
-  { id: randomUUID(), trigger: "Flash Sale Started",    action: "Post immediately", template: "promotion",   active: false },
-];
-
-let queue: QueuedTweet[] = [];
-
-let templates: ContentTemplate[] = [
-  { id: randomUUID(), name: "New Arrival",       body: "✨ Now available: {product_name} — crafted for the discerning few. Shop now. #LuxeBoutique #NewArrival",         usageCount: 12 },
-  { id: randomUUID(), name: "Collection Launch", body: "Introducing The {collection_name} Collection. Where precision meets quiet luxury. Available now. #LuxeBoutique", usageCount: 5  },
-  { id: randomUUID(), name: "Sale Announcement", body: "Limited time: {discount}% off select pieces. Because effortless style shouldn't be out of reach. #LuxeBoutique",usageCount: 3  },
-];
-
-let scheduler: Scheduler = {
-  id: randomUUID(),
-  schedulerOn: false,
-  dropFrequency: "Daily Digest (6 PM)",
-  imageStyle: "Product Photo",
-};
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -62,85 +29,116 @@ function oauthSign(
 
 // ── Hashtag Routes ────────────────────────────────────────────────────────────
 
-router.get("/twitter/hashtags", (_req, res) => { res.json(hashtags); });
-
-router.post("/twitter/hashtags", (req, res) => {
-  const { tag } = req.body as { tag: string };
-  const ht: Hashtag = { id: randomUUID(), tag };
-  hashtags = [...hashtags, ht];
-  res.status(201).json(ht);
+router.get("/twitter/hashtags", async (_req, res) => {
+  return res.json(await db.select().from(twitterHashtagsTable).orderBy(desc(twitterHashtagsTable.createdAt)));
 });
 
-router.delete("/twitter/hashtags/:id", (req, res) => {
-  hashtags = hashtags.filter((h) => h.id !== req.params.id);
-  res.json({ ok: true });
+router.post("/twitter/hashtags", async (req, res) => {
+  const { tag } = req.body as { tag: string };
+  const [ht] = await db.insert(twitterHashtagsTable).values({ id: randomUUID(), tag }).returning();
+  return res.status(201).json(ht);
+});
+
+router.delete("/twitter/hashtags/:id", async (req, res) => {
+  await db.delete(twitterHashtagsTable).where(eq(twitterHashtagsTable.id, req.params.id as string));
+  return res.json({ ok: true });
 });
 
 // ── Auto-rule Routes ──────────────────────────────────────────────────────────
 
-router.get("/twitter/rules", (_req, res) => { res.json(rules); });
-
-router.post("/twitter/rules", (req, res) => {
-  const { trigger, action, template, active } = req.body as AutoRule;
-  const rule: AutoRule = { id: randomUUID(), trigger, action, template: template ?? "default", active: active ?? true };
-  rules = [...rules, rule];
-  res.status(201).json(rule);
+router.get("/twitter/rules", async (_req, res) => {
+  return res.json(await db.select().from(twitterAutoRulesTable).orderBy(desc(twitterAutoRulesTable.createdAt)));
 });
 
-router.put("/twitter/rules/:id", (req, res) => {
-  const { id } = req.params;
-  const { active } = req.body as { active: boolean };
-  rules = rules.map((r) => (r.id === id ? { ...r, active } : r));
-  res.json(rules.find((r) => r.id === id));
+router.post("/twitter/rules", async (req, res) => {
+  const { trigger, action, template, active } = req.body as { trigger: string; action: string; template?: string; active?: boolean };
+  const [rule] = await db.insert(twitterAutoRulesTable).values({
+    id: randomUUID(), trigger, action, template: template ?? "default", active: active ?? true,
+  }).returning();
+  return res.status(201).json(rule);
+});
+
+router.put("/twitter/rules/:id", async (req, res) => {
+  const [rule] = await db.update(twitterAutoRulesTable)
+    .set({ active: Boolean(req.body.active) })
+    .where(eq(twitterAutoRulesTable.id, req.params.id as string)).returning();
+  if (!rule) return res.status(404).json({ error: "Rule not found" });
+  return res.json(rule);
 });
 
 // ── Queue Routes ──────────────────────────────────────────────────────────────
 
-router.get("/twitter/queue", (_req, res) => { res.json(queue); });
-
-router.post("/twitter/queue", (req, res) => {
-  const { text, scheduledFor, status, imageStyle } = req.body as QueuedTweet;
-  const tweet: QueuedTweet = { id: randomUUID(), text, scheduledFor: scheduledFor ?? "", status: status ?? "Queued", imageStyle: imageStyle ?? "None" };
-  queue = [tweet, ...queue];
-  res.status(201).json(tweet);
+router.get("/twitter/queue", async (_req, res) => {
+  return res.json(await db.select().from(twitterTweetQueueTable).orderBy(desc(twitterTweetQueueTable.createdAt)));
 });
 
-router.put("/twitter/queue/:id", (req, res) => {
-  const { id } = req.params;
-  const { status } = req.body as { status: string };
-  queue = queue.map((t) => (t.id === id ? { ...t, status } : t));
-  res.json(queue.find((t) => t.id === id));
+router.post("/twitter/queue", async (req, res) => {
+  const { text, scheduledFor, status, imageStyle } = req.body as { text: string; scheduledFor?: string; status?: string; imageStyle?: string };
+  const [tweet] = await db.insert(twitterTweetQueueTable).values({
+    id: randomUUID(), text, scheduledFor: scheduledFor ?? "", status: status ?? "Queued", imageStyle: imageStyle ?? "None",
+  }).returning();
+  return res.status(201).json(tweet);
 });
 
-router.delete("/twitter/queue/:id", (req, res) => {
-  queue = queue.filter((t) => t.id !== req.params.id);
-  res.json({ ok: true });
+router.put("/twitter/queue/:id", async (req, res) => {
+  const [tweet] = await db.update(twitterTweetQueueTable)
+    .set({ status: String(req.body.status) })
+    .where(eq(twitterTweetQueueTable.id, req.params.id as string)).returning();
+  if (!tweet) return res.status(404).json({ error: "Tweet not found" });
+  return res.json(tweet);
+});
+
+router.delete("/twitter/queue/:id", async (req, res) => {
+  await db.delete(twitterTweetQueueTable).where(eq(twitterTweetQueueTable.id, req.params.id as string));
+  return res.json({ ok: true });
 });
 
 // ── Template Routes ───────────────────────────────────────────────────────────
 
-router.get("/twitter/templates", (_req, res) => { res.json(templates); });
-
-router.post("/twitter/templates", (req, res) => {
-  const { name, body } = req.body as { name: string; body: string };
-  const tpl: ContentTemplate = { id: randomUUID(), name, body, usageCount: 0 };
-  templates = [tpl, ...templates];
-  res.status(201).json(tpl);
+router.get("/twitter/templates", async (_req, res) => {
+  return res.json(await db.select().from(twitterContentTemplatesTable).orderBy(desc(twitterContentTemplatesTable.createdAt)));
 });
 
-router.put("/twitter/templates/:id/use", (req, res) => {
-  const { id } = req.params;
-  templates = templates.map((t) => (t.id === id ? { ...t, usageCount: t.usageCount + 1 } : t));
-  res.json(templates.find((t) => t.id === id));
+router.post("/twitter/templates", async (req, res) => {
+  const { name, body } = req.body as { name: string; body: string };
+  const [tpl] = await db.insert(twitterContentTemplatesTable).values({ id: randomUUID(), name, body }).returning();
+  return res.status(201).json(tpl);
+});
+
+router.put("/twitter/templates/:id/use", async (req, res) => {
+  const [tpl] = await db.select().from(twitterContentTemplatesTable)
+    .where(eq(twitterContentTemplatesTable.id, req.params.id as string)).limit(1);
+  if (!tpl) return res.status(404).json({ error: "Template not found" });
+  const [updated] = await db.update(twitterContentTemplatesTable)
+    .set({ usageCount: tpl.usageCount + 1 })
+    .where(eq(twitterContentTemplatesTable.id, tpl.id)).returning();
+  return res.json(updated);
 });
 
 // ── Scheduler Routes ──────────────────────────────────────────────────────────
 
-router.get("/twitter/scheduler", (_req, res) => { res.json(scheduler); });
+router.get("/twitter/scheduler", async (_req, res) => {
+  const [scheduler] = await db.select().from(twitterSchedulerSettingsTable)
+    .where(eq(twitterSchedulerSettingsTable.id, "default")).limit(1);
+  return res.json(scheduler ?? { id: "default", schedulerOn: false, dropFrequency: "Daily Digest (6 PM)", imageStyle: "Product Photo" });
+});
 
-router.put("/twitter/scheduler", (req, res) => {
-  scheduler = { ...scheduler, ...req.body };
-  res.json(scheduler);
+router.put("/twitter/scheduler", async (req, res) => {
+  const [scheduler] = await db.insert(twitterSchedulerSettingsTable).values({
+    id: "default",
+    schedulerOn: Boolean(req.body.schedulerOn ?? false),
+    dropFrequency: String(req.body.dropFrequency ?? "Daily Digest (6 PM)"),
+    imageStyle: String(req.body.imageStyle ?? "Product Photo"),
+  }).onConflictDoUpdate({
+    target: twitterSchedulerSettingsTable.id,
+    set: {
+      schedulerOn: Boolean(req.body.schedulerOn ?? false),
+      dropFrequency: String(req.body.dropFrequency ?? "Daily Digest (6 PM)"),
+      imageStyle: String(req.body.imageStyle ?? "Product Photo"),
+      updatedAt: new Date(),
+    },
+  }).returning();
+  return res.json(scheduler);
 });
 
 // ── Live: Twitter/X Me ────────────────────────────────────────────────────────
@@ -211,12 +209,11 @@ router.post("/twitter/posts/publish", async (req, res) => {
     }
 
     addEvent("twitter", "Tweet published", `"${text.slice(0, 60)}${text.length > 60 ? "…" : ""}"`, "sync");
-    const queued: QueuedTweet = {
+    const [queued] = await db.insert(twitterTweetQueueTable).values({
       id: randomUUID(), text,
       scheduledFor: new Date().toISOString(),
       status: "Published", imageStyle: "None",
-    };
-    queue = [queued, ...queue];
+    }).returning();
     return res.json({ tweet: (data["data"] as Record<string, unknown>), queued });
   } catch (err) {
     return res.status(500).json({ error: String(err) });

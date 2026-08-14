@@ -5,3 +5,4 @@
 - [Admin role guard](admin-role-guard.md) — frontend admin access must allow both ADMIN and SUPER_ADMIN, matching the backend middleware.
 - [Coupon API contract](coupon-api-contract.md) — admin coupons use discountType/discountValue/usedCount fields; normalize legacy payloads at the client boundary.
 - [Live product preview](live-product-preview.md) — admin product previews must load the actual storefront route by saved product ID, not a simulated search card.
+- [Admin persistence boundary](admin-persistence-boundary.md) — admin/channel collections belong in PostgreSQL; empty DB states must remain empty instead of being filled with demo rows.

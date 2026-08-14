@@ -2,63 +2,38 @@ import { Router } from "express";
 import { randomUUID } from "crypto";
 import { addEvent, credentials } from "./channels";
 import { requireAdmin } from "../middleware/requireAdmin";
+import { db, whatsappTemplatesTable, whatsappJourneysTable, whatsappOptinSettingsTable } from "@workspace/db";
+import { desc, eq } from "drizzle-orm";
 
 const router = Router();
 router.use(requireAdmin);
-
-// ── In-memory store ──────────────────────────────────────────────────────────
-
-interface Template { id: string; name: string; category: string; body: string; status: string; language: string; sentCount: number; }
-interface Journey  { id: string; journeyId: string; icon: string; title: string; description: string; active: boolean; sentCount: string; steps: number; convRate: string; }
-interface OptinSettings { id: string; optinKeyword: string; optoutKeyword: string; doubleOptin: boolean; }
-
-let templates: Template[] = [
-  { id: randomUUID(), name: "order_confirmation",  category: "Utility",        body: "Hi {{1}}, your order {{2}} has been confirmed. Estimated delivery: {{3}}. Thank you for shopping with LUXE BOUTIQUE.",                          status: "Approved", language: "en", sentCount: 1240 },
-  { id: randomUUID(), name: "shipping_update",     category: "Utility",        body: "Good news, {{1}}! Your order {{2}} is on its way. Track your delivery here: {{3}}",                                                            status: "Approved", language: "en", sentCount: 980  },
-  { id: randomUUID(), name: "new_collection_drop", category: "Marketing",      body: "✨ {{1}}, the {{2}} Collection has arrived. Crafted for the discerning few — shop before it sells out: {{3}} #LuxeBoutique",                   status: "Approved", language: "en", sentCount: 3200 },
-  { id: randomUUID(), name: "cart_abandoned",      category: "Marketing",      body: "Hi {{1}}, you left something special behind 🖤 Your cart is waiting: {{2}} — complete your order before stock runs out.",                     status: "Pending",  language: "en", sentCount: 0    },
-  { id: randomUUID(), name: "otp_verification",    category: "Authentication", body: "Your LUXE BOUTIQUE verification code is {{1}}. Valid for 10 minutes. Do not share this code.",                                               status: "Approved", language: "en", sentCount: 450  },
-];
-
-let journeys: Journey[] = [
-  { id: randomUUID(), journeyId: "welcome_series",      icon: "waving_hand",    title: "Welcome Series",          description: "Onboard new subscribers with 3 messages over 7 days.",                active: true,  sentCount: "12.4K", steps: 3, convRate: "18.2%" },
-  { id: randomUUID(), journeyId: "order_lifecycle",     icon: "local_shipping", title: "Order Lifecycle",         description: "Confirm → ship → deliver → review, fully automated.",                active: true,  sentCount: "8.1K",  steps: 4, convRate: "94.1%" },
-  { id: randomUUID(), journeyId: "cart_recovery",       icon: "shopping_cart",  title: "Cart Recovery",           description: "3-step abandoned cart recovery with personalised offer.",             active: false, sentCount: "2.3K",  steps: 3, convRate: "11.7%" },
-  { id: randomUUID(), journeyId: "reengagement",        icon: "refresh",        title: "Re-engagement",          description: "Win-back customers inactive for 60+ days with an exclusive offer.",   active: false, sentCount: "4.7K",  steps: 2, convRate: "6.4%"  },
-  { id: randomUUID(), journeyId: "vip_loyalty",         icon: "star",           title: "VIP Loyalty",             description: "Surprise and delight top spenders with early access and gifts.",     active: true,  sentCount: "890",   steps: 5, convRate: "32.1%" },
-];
-
-let optinSettings: OptinSettings = {
-  id: randomUUID(),
-  optinKeyword: "JOIN",
-  optoutKeyword: "STOP",
-  doubleOptin: true,
-};
 
 function getWaCreds() { return credentials["whatsapp"] ?? {}; }
 
 // ── Routes ───────────────────────────────────────────────────────────────────
 
-router.get("/whatsapp/templates", (_req, res) => {
-  res.json(templates);
+router.get("/whatsapp/templates", async (_req, res) => {
+  return res.json(await db.select().from(whatsappTemplatesTable).orderBy(desc(whatsappTemplatesTable.createdAt)));
 });
 
-router.post("/whatsapp/templates", (req, res) => {
+router.post("/whatsapp/templates", async (req, res) => {
   const { name, category, body } = req.body as { name: string; category: string; body: string };
-  const tpl: Template = { id: randomUUID(), name, category: category ?? "Marketing", body, status: "Pending", language: "en", sentCount: 0 };
-  templates = [...templates, tpl];
+  const [tpl] = await db.insert(whatsappTemplatesTable).values({
+    id: randomUUID(), name, category: category ?? "Marketing", body, status: "Pending", language: "en",
+  }).returning();
   addEvent("whatsapp", `Template submitted: ${name}`, "Pending Meta approval (usually 24h).", "info");
-  res.status(201).json(tpl);
+  return res.status(201).json(tpl);
 });
 
-router.delete("/whatsapp/templates/:id", (req, res) => {
-  templates = templates.filter((t) => t.id !== req.params.id);
-  res.json({ ok: true });
+router.delete("/whatsapp/templates/:id", async (req, res) => {
+  await db.delete(whatsappTemplatesTable).where(eq(whatsappTemplatesTable.id, req.params.id as string));
+  return res.json({ ok: true });
 });
 
 router.post("/whatsapp/templates/:id/submit", async (req, res) => {
   const { id } = req.params;
-  const template = templates.find((t) => t.id === id);
+  const [template] = await db.select().from(whatsappTemplatesTable)
+    .where(eq(whatsappTemplatesTable.id, id as string)).limit(1);
   if (!template) return res.status(404).json({ error: "Template not found" });
 
   const creds = getWaCreds();
@@ -79,7 +54,8 @@ router.post("/whatsapp/templates/:id/submit", async (req, res) => {
     });
     const data = await r.json() as Record<string, unknown>;
     if (!r.ok || data["error"]) return res.status(400).json({ error: (data["error"] as Record<string, string>)?.message ?? `HTTP ${r.status}` });
-    templates = templates.map((t) => t.id === id ? { ...t, status: "Pending" } : t);
+    await db.update(whatsappTemplatesTable).set({ status: "Pending" })
+      .where(eq(whatsappTemplatesTable.id, id as string));
     addEvent("whatsapp", `Template "${template.name}" submitted to Meta`, "Awaiting approval.", "info");
     return res.json({ ok: true, status: "Pending" });
   } catch (err) {
@@ -87,26 +63,43 @@ router.post("/whatsapp/templates/:id/submit", async (req, res) => {
   }
 });
 
-router.get("/whatsapp/journeys", (_req, res) => {
-  res.json(journeys);
+router.get("/whatsapp/journeys", async (_req, res) => {
+  return res.json(await db.select().from(whatsappJourneysTable).orderBy(desc(whatsappJourneysTable.updatedAt)));
 });
 
-router.put("/whatsapp/journeys/:journeyId", (req, res) => {
+router.put("/whatsapp/journeys/:journeyId", async (req, res) => {
   const { journeyId } = req.params;
   const { active } = req.body as { active: boolean };
-  journeys = journeys.map((j) => j.journeyId === journeyId ? { ...j, active } : j);
-  const j = journeys.find((j) => j.journeyId === journeyId);
+  const [j] = await db.update(whatsappJourneysTable)
+    .set({ active: Boolean(active), updatedAt: new Date() })
+    .where(eq(whatsappJourneysTable.journeyId, journeyId as string)).returning();
+  if (!j) return res.status(404).json({ error: "Journey not found" });
   addEvent("whatsapp", `Journey "${j?.title}" ${active ? "activated" : "paused"}`, active ? "Journey is now live." : "Journey paused.", active ? "sync" : "warning");
-  res.json(j);
+  return res.json(j);
 });
 
-router.get("/whatsapp/optin", (_req, res) => {
-  res.json(optinSettings);
+router.get("/whatsapp/optin", async (_req, res) => {
+  const [settings] = await db.select().from(whatsappOptinSettingsTable)
+    .where(eq(whatsappOptinSettingsTable.id, "default")).limit(1);
+  return res.json(settings ?? { id: "default", optinKeyword: "JOIN", optoutKeyword: "STOP", doubleOptin: true });
 });
 
-router.put("/whatsapp/optin", (req, res) => {
-  optinSettings = { ...optinSettings, ...req.body };
-  res.json(optinSettings);
+router.put("/whatsapp/optin", async (req, res) => {
+  const [settings] = await db.insert(whatsappOptinSettingsTable).values({
+    id: "default",
+    optinKeyword: String(req.body.optinKeyword ?? "JOIN"),
+    optoutKeyword: String(req.body.optoutKeyword ?? "STOP"),
+    doubleOptin: Boolean(req.body.doubleOptin ?? true),
+  }).onConflictDoUpdate({
+    target: whatsappOptinSettingsTable.id,
+    set: {
+      optinKeyword: String(req.body.optinKeyword ?? "JOIN"),
+      optoutKeyword: String(req.body.optoutKeyword ?? "STOP"),
+      doubleOptin: Boolean(req.body.doubleOptin ?? true),
+      updatedAt: new Date(),
+    },
+  }).returning();
+  return res.json(settings);
 });
 
 // ── Live: WhatsApp Phone Info ─────────────────────────────────────────────────

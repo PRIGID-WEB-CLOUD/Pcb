@@ -2,61 +2,15 @@ import { Router } from "express";
 import { randomUUID } from "crypto";
 import { addEvent, credentials } from "./channels";
 import { requireAdmin } from "../middleware/requireAdmin";
-import { db, productsTable, categoriesTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import {
+  db, productsTable, categoriesTable,
+  facebookConnectionsTable, facebookCatalogSettingsTable, facebookPixelEventsTable,
+  facebookAudiencesTable, facebookPagePostsTable, facebookPostTemplatesTable,
+} from "@workspace/db";
+import { desc, eq } from "drizzle-orm";
 
 const router = Router();
 router.use(requireAdmin);
-
-// ── In-memory store ──────────────────────────────────────────────────────────
-
-interface Connection      { id: string; connectionKey: string; active: boolean; }
-interface CatalogSettings { id: string; includedCategories: string[]; minPrice: number; maxPrice: number; }
-interface PixelEvent      { id: string; storeEvent: string; fbEvent: string; enabled: boolean; }
-interface Audience        { id: string; name: string; size: string; type: string; status: string; }
-interface PagePost {
-  id: string; caption: string; imageUrl: string | null; link: string | null;
-  postType: string; scheduledFor: string | null; status: string;
-  likes: number; comments: number; shares: number; reach: number; createdAt: string;
-}
-interface PostTemplate { id: string; name: string; body: string; postType: string; usageCount: number; }
-
-let connections: Connection[] = [
-  { id: randomUUID(), connectionKey: "facebook",  active: false },
-  { id: randomUUID(), connectionKey: "instagram", active: false },
-  { id: randomUUID(), connectionKey: "pixel",     active: false },
-  { id: randomUUID(), connectionKey: "messenger", active: false },
-];
-
-let catalog: CatalogSettings = {
-  id: randomUUID(),
-  includedCategories: ["Ready-to-Wear", "Accessories", "Footwear"],
-  minPrice: 0,
-  maxPrice: 10000,
-};
-
-let pixelEvents: PixelEvent[] = [
-  { id: randomUUID(), storeEvent: "Page View",        fbEvent: "PageView",        enabled: true  },
-  { id: randomUUID(), storeEvent: "Product Viewed",   fbEvent: "ViewContent",     enabled: true  },
-  { id: randomUUID(), storeEvent: "Add to Cart",      fbEvent: "AddToCart",       enabled: true  },
-  { id: randomUUID(), storeEvent: "Begin Checkout",   fbEvent: "InitiateCheckout",enabled: true  },
-  { id: randomUUID(), storeEvent: "Purchase",         fbEvent: "Purchase",        enabled: true  },
-  { id: randomUUID(), storeEvent: "Search",           fbEvent: "Search",          enabled: false },
-  { id: randomUUID(), storeEvent: "Wishlist Add",     fbEvent: "AddToWishlist",   enabled: false },
-];
-
-let audiences: Audience[] = [
-  { id: randomUUID(), name: "Past Customers (180d)", size: "12.4K", type: "Custom",    status: "Active"   },
-  { id: randomUUID(), name: "High-Value Lookalike",  size: "2.1M",  type: "Lookalike", status: "Active"   },
-  { id: randomUUID(), name: "Cart Abandoners",       size: "3.8K",  type: "Retargeting",status: "Building" },
-];
-
-let posts: PagePost[] = [];
-let postTemplates: PostTemplate[] = [
-  { id: randomUUID(), name: "New Arrival Drop", body: "✨ Just arrived — {product_name}. Crafted for the discerning few. Shop now via our link in bio. #LuxeBoutique #NewArrival", postType: "Product Spotlight", usageCount: 7 },
-  { id: randomUUID(), name: "Collection Launch", body: "Introducing The {collection_name} Collection — where precision meets quiet luxury. Available now. #LuxeBoutique", postType: "Collection Launch", usageCount: 3 },
-  { id: randomUUID(), name: "Brand Story",       body: "Every thread tells a story. At LUXE BOUTIQUE, we believe in garments that last beyond seasons. Discover our heritage. 🖤", postType: "Brand Story", usageCount: 2 },
-];
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -81,25 +35,54 @@ async function fbGraphGet(path: string, params: Record<string, string> = {}): Pr
 
 // ── Connections ───────────────────────────────────────────────────────────────
 
-router.get("/facebook/connections", (_req, res) => {
-  res.json(connections);
+router.get("/facebook/connections", async (_req, res) => {
+  const keys = ["facebook", "instagram", "pixel", "messenger"];
+  const rows = await Promise.all(keys.map(async (connectionKey) => {
+    const [row] = await db.select().from(facebookConnectionsTable)
+      .where(eq(facebookConnectionsTable.connectionKey, connectionKey)).limit(1);
+    if (row) return row;
+    const [created] = await db.insert(facebookConnectionsTable)
+      .values({ id: randomUUID(), connectionKey, active: false }).returning();
+    return created;
+  }));
+  return res.json(rows);
 });
 
-router.put("/facebook/connections/:connectionKey", (req, res) => {
+router.put("/facebook/connections/:connectionKey", async (req, res) => {
   const connectionKey = req.params.connectionKey as string;
   const { active } = req.body as { active: boolean };
-  connections = connections.map((c) => c.connectionKey === connectionKey ? { ...c, active } : c);
-  return res.json(connections.find((c) => c.connectionKey === connectionKey));
+  const [updated] = await db.insert(facebookConnectionsTable)
+    .values({ id: randomUUID(), connectionKey, active: Boolean(active) })
+    .onConflictDoUpdate({
+      target: facebookConnectionsTable.connectionKey,
+      set: { active: Boolean(active), updatedAt: new Date() },
+    }).returning();
+  return res.json(updated);
 });
 
 // ── Catalog ───────────────────────────────────────────────────────────────────
 
-router.get("/facebook/catalog", (_req, res) => {
-  return res.json(catalog);
+router.get("/facebook/catalog", async (_req, res) => {
+  const [catalog] = await db.select().from(facebookCatalogSettingsTable)
+    .where(eq(facebookCatalogSettingsTable.id, "default")).limit(1);
+  return res.json(catalog ?? { id: "default", includedCategories: [], minPrice: 0, maxPrice: 10000 });
 });
 
-router.put("/facebook/catalog", (req, res) => {
-  catalog = { ...catalog, ...req.body };
+router.put("/facebook/catalog", async (req, res) => {
+  const [catalog] = await db.insert(facebookCatalogSettingsTable).values({
+    id: "default",
+    includedCategories: Array.isArray(req.body.includedCategories) ? req.body.includedCategories : [],
+    minPrice: Number(req.body.minPrice ?? 0),
+    maxPrice: Number(req.body.maxPrice ?? 10000),
+  }).onConflictDoUpdate({
+    target: facebookCatalogSettingsTable.id,
+    set: {
+      includedCategories: Array.isArray(req.body.includedCategories) ? req.body.includedCategories : [],
+      minPrice: Number(req.body.minPrice ?? 0),
+      maxPrice: Number(req.body.maxPrice ?? 10000),
+      updatedAt: new Date(),
+    },
+  }).returning();
   return res.json(catalog);
 });
 
@@ -225,63 +208,63 @@ router.post("/facebook/catalog/sync", async (req, res) => {
 
 // ── Pixel Events ───────────────────────────────────────────────────────────────
 
-router.get("/facebook/pixel-events", (_req, res) => {
-  return res.json(pixelEvents);
+router.get("/facebook/pixel-events", async (_req, res) => {
+  return res.json(await db.select().from(facebookPixelEventsTable).orderBy(desc(facebookPixelEventsTable.updatedAt)));
 });
 
-router.put("/facebook/pixel-events/:id", (req, res) => {
-  const id = req.params.id as string;
+router.put("/facebook/pixel-events/:id", async (req, res) => {
   const { enabled } = req.body as { enabled: boolean };
-  pixelEvents = pixelEvents.map((e) => e.id === id ? { ...e, enabled } : e);
-  return res.json(pixelEvents.find((e) => e.id === id));
+  const [updated] = await db.update(facebookPixelEventsTable)
+    .set({ enabled: Boolean(enabled), updatedAt: new Date() })
+    .where(eq(facebookPixelEventsTable.id, req.params.id as string)).returning();
+  if (!updated) return res.status(404).json({ error: "Pixel event not found" });
+  return res.json(updated);
 });
 
 // ── Audiences ─────────────────────────────────────────────────────────────────
 
-router.get("/facebook/audiences", (_req, res) => {
-  return res.json(audiences);
+router.get("/facebook/audiences", async (_req, res) => {
+  return res.json(await db.select().from(facebookAudiencesTable).orderBy(desc(facebookAudiencesTable.createdAt)));
 });
 
-router.post("/facebook/audiences", (req, res) => {
+router.post("/facebook/audiences", async (req, res) => {
   const { name, type } = req.body as { name: string; type: string };
-  const aud: Audience = { id: randomUUID(), name, size: "Building…", type, status: "Building" };
-  audiences = [aud, ...audiences];
+  const [aud] = await db.insert(facebookAudiencesTable)
+    .values({ id: randomUUID(), name, type, size: "Building…", status: "Building" }).returning();
   addEvent("facebook", `Audience created: ${name}`, "Building audience — this may take 24-48 hours.", "info");
   return res.status(201).json(aud);
 });
 
-router.put("/facebook/audiences/:id", (req, res) => {
-  const id = req.params.id as string;
+router.put("/facebook/audiences/:id", async (req, res) => {
   const { status } = req.body as { status: string };
-  audiences = audiences.map((a) => a.id === id ? { ...a, status } : a);
-  return res.json(audiences.find((a) => a.id === id));
+  const [updated] = await db.update(facebookAudiencesTable).set({ status })
+    .where(eq(facebookAudiencesTable.id, req.params.id as string)).returning();
+  if (!updated) return res.status(404).json({ error: "Audience not found" });
+  return res.json(updated);
 });
 
-router.delete("/facebook/audiences/:id", (req, res) => {
-  audiences = audiences.filter((a) => a.id !== (req.params.id as string));
+router.delete("/facebook/audiences/:id", async (req, res) => {
+  await db.delete(facebookAudiencesTable).where(eq(facebookAudiencesTable.id, req.params.id as string));
   return res.json({ ok: true });
 });
 
 // ── Page Posts ────────────────────────────────────────────────────────────────
 
-router.get("/facebook/posts", (_req, res) => {
-  return res.json(posts);
+router.get("/facebook/posts", async (_req, res) => {
+  return res.json(await db.select().from(facebookPagePostsTable).orderBy(desc(facebookPagePostsTable.createdAt)));
 });
 
-router.post("/facebook/posts", (req, res) => {
-  const { caption, imageUrl, link, postType, scheduledFor, status } = req.body as Partial<PagePost>;
-  const post: PagePost = {
+router.post("/facebook/posts", async (req, res) => {
+  const { caption, imageUrl, link, postType, scheduledFor, status } = req.body as { caption?: string; imageUrl?: string; link?: string; postType?: string; scheduledFor?: string; status?: string };
+  const [post] = await db.insert(facebookPagePostsTable).values({
     id: randomUUID(),
     caption: caption ?? "",
     imageUrl: imageUrl ?? null,
     link: link ?? null,
     postType: postType ?? "Standard",
-    scheduledFor: scheduledFor ?? null,
+    scheduledFor: scheduledFor ? new Date(scheduledFor) : null,
     status: status ?? "Draft",
-    likes: 0, comments: 0, shares: 0, reach: 0,
-    createdAt: new Date().toISOString(),
-  };
-  posts = [post, ...posts];
+  }).returning();
   addEvent("facebook", `Post ${post.status.toLowerCase()}: ${post.caption.slice(0, 60)}…`, post.status === "Published" ? "Post is live on your Facebook Page." : `Saved as ${post.status.toLowerCase()}.`, "sync");
   return res.status(201).json(post);
 });
@@ -289,7 +272,8 @@ router.post("/facebook/posts", (req, res) => {
 router.post("/facebook/posts/:id/publish", async (req, res) => {
   const id = req.params.id as string;
   const { pageId, pageAccessToken } = req.body as { pageId?: string; pageAccessToken?: string };
-  const post = posts.find((p) => p.id === id);
+  const [post] = await db.select().from(facebookPagePostsTable)
+    .where(eq(facebookPagePostsTable.id, id)).limit(1);
   if (!post) return res.status(404).json({ error: "Post not found" });
 
   if (!pageId || !pageAccessToken) {
@@ -310,8 +294,8 @@ router.post("/facebook/posts/:id/publish", async (req, res) => {
       const errMsg = (data["error"] as Record<string, string>)?.message ?? `HTTP ${r.status}`;
       return res.status(400).json({ error: errMsg });
     }
-    const updated: PagePost = { ...post, status: "Published" };
-    posts = posts.map((p) => p.id === id ? updated : p);
+    const [updated] = await db.update(facebookPagePostsTable).set({ status: "Published" })
+      .where(eq(facebookPagePostsTable.id, id)).returning();
     addEvent("facebook", "Post published to Facebook Page", `Post ID: ${String(data["id"] ?? id)}`, "sync");
     return res.json(updated);
   } catch (err) {
@@ -319,28 +303,32 @@ router.post("/facebook/posts/:id/publish", async (req, res) => {
   }
 });
 
-router.delete("/facebook/posts/:id", (req, res) => {
-  posts = posts.filter((p) => p.id !== (req.params.id as string));
+router.delete("/facebook/posts/:id", async (req, res) => {
+  await db.delete(facebookPagePostsTable).where(eq(facebookPagePostsTable.id, req.params.id as string));
   return res.json({ ok: true });
 });
 
 // ── Post Templates ────────────────────────────────────────────────────────────
 
-router.get("/facebook/post-templates", (_req, res) => {
-  return res.json(postTemplates);
+router.get("/facebook/post-templates", async (_req, res) => {
+  return res.json(await db.select().from(facebookPostTemplatesTable).orderBy(desc(facebookPostTemplatesTable.createdAt)));
 });
 
-router.post("/facebook/post-templates", (req, res) => {
+router.post("/facebook/post-templates", async (req, res) => {
   const { name, body, postType } = req.body as { name: string; body: string; postType: string };
-  const tpl: PostTemplate = { id: randomUUID(), name, body, postType: postType ?? "Standard", usageCount: 0 };
-  postTemplates = [tpl, ...postTemplates];
+  const [tpl] = await db.insert(facebookPostTemplatesTable)
+    .values({ id: randomUUID(), name, body, postType: postType ?? "Standard" }).returning();
   return res.status(201).json(tpl);
 });
 
-router.put("/facebook/post-templates/:id/use", (req, res) => {
-  const id = req.params.id as string;
-  postTemplates = postTemplates.map((t) => t.id === id ? { ...t, usageCount: t.usageCount + 1 } : t);
-  return res.json(postTemplates.find((t) => t.id === id));
+router.put("/facebook/post-templates/:id/use", async (req, res) => {
+  const [tpl] = await db.select().from(facebookPostTemplatesTable)
+    .where(eq(facebookPostTemplatesTable.id, req.params.id as string)).limit(1);
+  if (!tpl) return res.status(404).json({ error: "Template not found" });
+  const [updated] = await db.update(facebookPostTemplatesTable)
+    .set({ usageCount: tpl.usageCount + 1 })
+    .where(eq(facebookPostTemplatesTable.id, tpl.id)).returning();
+  return res.json(updated);
 });
 
 // ── Live: Page Info ────────────────────────────────────────────────────────────
