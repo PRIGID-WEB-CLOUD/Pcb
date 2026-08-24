@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { randomUUID } from "crypto";
-import { addEvent, credentials } from "./channels";
+import { addEvent, getChannelCredentials } from "./channels";
 import { requireAdmin } from "../middleware/requireAdmin";
 import {
   db, productsTable, categoriesTable,
@@ -14,10 +14,10 @@ router.use(requireAdmin);
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-function getFbCreds() { return credentials["facebook"] ?? {}; }
+function getFbCreds() { return getChannelCredentials("facebook"); }
 
 async function fbGraphGet(path: string, params: Record<string, string> = {}): Promise<{ ok: boolean; data?: unknown; error?: string }> {
-  const creds = getFbCreds();
+  const creds = await getFbCreds();
   const token = creds["page_access_token"];
   if (!token) return { ok: false, error: "Missing Facebook credentials — add Page Access Token in channel settings." };
   const url = new URL(`https://graph.facebook.com/v21.0${path}`);
@@ -87,8 +87,8 @@ router.put("/facebook/catalog", async (req, res) => {
 });
 
 router.get("/facebook/catalog/info", async (_req, res) => {
-  const creds = credentials["commerce"] ?? {};
-  const fbCreds = getFbCreds();
+  const creds = await getChannelCredentials("commerce");
+  const fbCreds = await getFbCreds();
   const catalogId = creds["catalog_id"] || fbCreds["catalog_id"];
   const token = creds["page_access_token"] || fbCreds["page_access_token"];
   if (!catalogId || !token) return res.status(400).json({ error: "Missing Commerce credentials — add Catalog ID and Page Access Token." });
@@ -106,8 +106,8 @@ router.get("/facebook/catalog/info", async (_req, res) => {
 });
 
 router.get("/facebook/catalog/products", async (_req, res) => {
-  const creds = credentials["commerce"] ?? {};
-  const fbCreds = getFbCreds();
+  const creds = await getChannelCredentials("commerce");
+  const fbCreds = await getFbCreds();
   const catalogId = creds["catalog_id"] || fbCreds["catalog_id"];
   const token = creds["page_access_token"] || fbCreds["page_access_token"];
   if (!catalogId || !token) return res.status(400).json({ error: "Missing Commerce credentials — add Catalog ID and Page Access Token." });
@@ -126,8 +126,8 @@ router.get("/facebook/catalog/products", async (_req, res) => {
 });
 
 router.post("/facebook/catalog/sync", async (req, res) => {
-  const commerceCreds = credentials["commerce"] ?? {};
-  const fbCreds = getFbCreds();
+  const commerceCreds = await getChannelCredentials("commerce");
+  const fbCreds = await getFbCreds();
   const catalogId = commerceCreds["catalog_id"] || fbCreds["catalog_id"];
   const token = commerceCreds["page_access_token"] || fbCreds["page_access_token"];
   const storeDomain = (req.body as { storeDomain?: string }).storeDomain ?? process.env["REPLIT_DEV_DOMAIN"] ?? "luxeboutique.com";
@@ -334,7 +334,7 @@ router.put("/facebook/post-templates/:id/use", async (req, res) => {
 // ── Live: Page Info ────────────────────────────────────────────────────────────
 
 router.get("/facebook/page-info", async (_req, res) => {
-  const creds = getFbCreds();
+  const creds = await getFbCreds();
   const pageId = creds["page_id"];
   if (!pageId) return res.status(400).json({ error: "Missing Facebook Page ID — add credentials in channel settings." });
   const result = await fbGraphGet(`/${pageId}`, { fields: "name,fan_count,followers_count,link,picture" });
@@ -345,8 +345,8 @@ router.get("/facebook/page-info", async (_req, res) => {
 // ── Live: Instagram ────────────────────────────────────────────────────────────
 
 router.get("/facebook/instagram/account", async (_req, res) => {
-  const igCreds = credentials["instagram"] ?? {};
-  const fbCreds = getFbCreds();
+  const igCreds = await getChannelCredentials("instagram");
+  const fbCreds = await getFbCreds();
   const igUserId = igCreds["ig_user_id"];
   const token = igCreds["page_access_token"] || fbCreds["page_access_token"];
   if (!igUserId || !token) return res.status(400).json({ error: "Missing Instagram credentials — add IG Business Account ID and Page Access Token." });
@@ -364,8 +364,8 @@ router.get("/facebook/instagram/account", async (_req, res) => {
 });
 
 router.get("/facebook/instagram/media", async (_req, res) => {
-  const igCreds = credentials["instagram"] ?? {};
-  const fbCreds = getFbCreds();
+  const igCreds = await getChannelCredentials("instagram");
+  const fbCreds = await getFbCreds();
   const igUserId = igCreds["ig_user_id"];
   const token = igCreds["page_access_token"] || fbCreds["page_access_token"];
   if (!igUserId || !token) return res.status(400).json({ error: "Missing Instagram credentials." });
@@ -384,8 +384,8 @@ router.get("/facebook/instagram/media", async (_req, res) => {
 });
 
 router.post("/facebook/instagram/publish", async (req, res) => {
-  const igCreds = credentials["instagram"] ?? {};
-  const fbCreds = getFbCreds();
+  const igCreds = await getChannelCredentials("instagram");
+  const fbCreds = await getFbCreds();
   const igUserId = igCreds["ig_user_id"];
   const token = igCreds["page_access_token"] || fbCreds["page_access_token"];
   const { imageUrl, caption } = req.body as { imageUrl: string; caption?: string };
@@ -420,8 +420,8 @@ router.post("/facebook/instagram/publish", async (req, res) => {
 // ── Live: Meta Ads ─────────────────────────────────────────────────────────────
 
 router.get("/facebook/ads/account", async (_req, res) => {
-  const adsCreds = credentials["ads"] ?? {};
-  const fbCreds = getFbCreds();
+  const adsCreds = await getChannelCredentials("ads");
+  const fbCreds = await getFbCreds();
   const adAccountId = adsCreds["ad_account_id"] || fbCreds["ad_account_id"];
   const token = adsCreds["page_access_token"] || fbCreds["page_access_token"];
   if (!adAccountId || !token) return res.status(400).json({ error: "Missing ad account credentials — add Ad Account ID and Page Access Token." });
@@ -440,8 +440,8 @@ router.get("/facebook/ads/account", async (_req, res) => {
 });
 
 router.get("/facebook/ads/insights", async (req, res) => {
-  const adsCreds = credentials["ads"] ?? {};
-  const fbCreds = getFbCreds();
+  const adsCreds = await getChannelCredentials("ads");
+  const fbCreds = await getFbCreds();
   const adAccountId = adsCreds["ad_account_id"] || fbCreds["ad_account_id"];
   const token = adsCreds["page_access_token"] || fbCreds["page_access_token"];
   if (!adAccountId || !token) return res.status(400).json({ error: "Missing ad account credentials." });
@@ -462,8 +462,8 @@ router.get("/facebook/ads/insights", async (req, res) => {
 });
 
 router.get("/facebook/ads/campaigns", async (_req, res) => {
-  const adsCreds = credentials["ads"] ?? {};
-  const fbCreds = getFbCreds();
+  const adsCreds = await getChannelCredentials("ads");
+  const fbCreds = await getFbCreds();
   const adAccountId = adsCreds["ad_account_id"] || fbCreds["ad_account_id"];
   const token = adsCreds["page_access_token"] || fbCreds["page_access_token"];
   if (!adAccountId || !token) return res.status(400).json({ error: "Missing ad account credentials." });

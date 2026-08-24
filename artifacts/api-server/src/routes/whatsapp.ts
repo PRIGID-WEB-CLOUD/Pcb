@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { randomUUID } from "crypto";
-import { addEvent, credentials } from "./channels";
+import { addEvent, getChannelCredentials } from "./channels";
 import { requireAdmin } from "../middleware/requireAdmin";
 import { db, whatsappTemplatesTable, whatsappJourneysTable, whatsappOptinSettingsTable } from "@workspace/db";
 import { desc, eq } from "drizzle-orm";
@@ -8,7 +8,7 @@ import { desc, eq } from "drizzle-orm";
 const router = Router();
 router.use(requireAdmin);
 
-function getWaCreds() { return credentials["whatsapp"] ?? {}; }
+function getWaCreds() { return getChannelCredentials("whatsapp"); }
 
 // ── Routes ───────────────────────────────────────────────────────────────────
 
@@ -36,7 +36,7 @@ router.post("/whatsapp/templates/:id/submit", async (req, res) => {
     .where(eq(whatsappTemplatesTable.id, id as string)).limit(1);
   if (!template) return res.status(404).json({ error: "Template not found" });
 
-  const creds = getWaCreds();
+  const creds = await getWaCreds();
   const wabaId = creds["waba_id"];
   const token = creds["system_access_token"];
   if (!wabaId || !token) return res.status(400).json({ error: "Missing WhatsApp WABA ID or System Access Token." });
@@ -105,7 +105,7 @@ router.put("/whatsapp/optin", async (req, res) => {
 // ── Live: WhatsApp Phone Info ─────────────────────────────────────────────────
 
 router.get("/whatsapp/phone-info", async (_req, res) => {
-  const creds = getWaCreds();
+  const creds = await getWaCreds();
   const phoneNumberId = creds["phone_number_id"];
   const token = creds["system_access_token"];
   if (!phoneNumberId || !token) return res.status(400).json({ error: "Missing WhatsApp credentials — add Phone Number ID and System Access Token." });
@@ -124,7 +124,7 @@ router.get("/whatsapp/phone-info", async (_req, res) => {
 // ── Live: Send Message ────────────────────────────────────────────────────────
 
 router.post("/whatsapp/messages/send", async (req, res) => {
-  const creds = getWaCreds();
+  const creds = await getWaCreds();
   const phoneNumberId = creds["phone_number_id"];
   const token = creds["system_access_token"];
   const { to, text } = req.body as { to: string; text: string };

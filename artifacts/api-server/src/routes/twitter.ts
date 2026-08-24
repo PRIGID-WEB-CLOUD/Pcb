@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { randomUUID, createHmac } from "crypto";
-import { addEvent, credentials } from "./channels";
+import { addEvent, getChannelCredentials } from "./channels";
 import { requireAdmin } from "../middleware/requireAdmin";
 import { db, twitterHashtagsTable, twitterAutoRulesTable, twitterTweetQueueTable, twitterContentTemplatesTable, twitterSchedulerSettingsTable } from "@workspace/db";
 import { desc, eq } from "drizzle-orm";
@@ -10,7 +10,7 @@ router.use(requireAdmin);
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function getTwCreds() { return credentials["twitter"] ?? {}; }
+function getTwCreds() { return getChannelCredentials("twitter"); }
 
 function oauthSign(
   method: string,
@@ -144,7 +144,7 @@ router.put("/twitter/scheduler", async (req, res) => {
 // ── Live: Twitter/X Me ────────────────────────────────────────────────────────
 
 router.get("/twitter/me", async (_req, res) => {
-  const creds = getTwCreds();
+  const creds = await getTwCreds();
   const bearerToken = creds["bearer_token"];
   if (!bearerToken) {
     return res.status(400).json({ error: "Missing Twitter Bearer Token — add credentials in channel settings." });
@@ -167,7 +167,7 @@ router.get("/twitter/me", async (_req, res) => {
 // ── Live: Publish Tweet ───────────────────────────────────────────────────────
 
 router.post("/twitter/posts/publish", async (req, res) => {
-  const creds = getTwCreds();
+  const creds = await getTwCreds();
   const { text } = req.body as { text: string };
   if (!text?.trim()) return res.status(400).json({ error: "Tweet text is required." });
 
@@ -223,7 +223,7 @@ router.post("/twitter/posts/publish", async (req, res) => {
 // ── Verify credentials ────────────────────────────────────────────────────────
 
 router.get("/twitter/verify", async (_req, res) => {
-  const creds = getTwCreds();
+  const creds = await getTwCreds();
   const bearerToken = creds["bearer_token"];
   if (!bearerToken) {
     return res.status(400).json({ ok: false, error: "Missing Twitter Bearer Token — add credentials in channel settings." });

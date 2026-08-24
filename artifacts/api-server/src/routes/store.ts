@@ -153,7 +153,7 @@ router.get("/orders/:id", requireAdmin, async (req, res) => {
 
 // ── Eprolo auto-fulfillment helper ───────────────────────────────────────────
 async function tryAutoForwardToEprolo(order: typeof ordersTable.$inferSelect, shippingAddress: Record<string, string>) {
-  const cfg = getEproloConfig();
+  const cfg = await getEproloConfig();
   if (!cfg) return;
 
   const items = Array.isArray(order.items) ? order.items as Array<{ productId?: string; id?: string; quantity?: number }> : [];

@@ -73,9 +73,9 @@ Required env: `DATABASE_URL` — PostgreSQL connection string (auto-provided by 
 
 - **Two separate Vite apps, no cross-links**: The storefront (`luxe-boutique`) and admin portal (`luxe-boutique-admin`) are fully independent apps with separate auth. Admin links were deliberately removed from the storefront.
 - **SSE for real-time admin events**: Order arrivals, order status updates, and low-stock alerts all flow to the admin via a single `/api/events` SSE stream rather than polling or WebSockets — lightweight and proxy-friendly.
-- **In-memory credential store for channels**: Channel API credentials (Facebook, Twitter, WhatsApp) are stored in a DB-backed in-memory object to keep handler code synchronous. Do NOT make credential reads async.
+- **Database-backed channel credentials**: Channel API credentials (Facebook, Twitter, WhatsApp) are read from and written to PostgreSQL on each operation so they remain available across restarts and API instances.
 - **Orval codegen over hand-written hooks**: All API client code is generated from the OpenAPI spec. Run `codegen` after any spec change — never edit generated files directly.
-- **Low-stock threshold in memory**: The alert threshold defaults to 5, is adjusted via `PUT /api/admin/low-stock/settings`, and resets `lastAlertedIds` on change so newly-threshold-crossing products surface immediately.
+- **Database-backed low-stock settings**: The alert threshold defaults to 5 and is persisted through `PUT /api/admin/low-stock/settings`, along with the last check timestamp.
 
 ---
 
@@ -101,10 +101,10 @@ _Populate as you build — explicit user instructions worth remembering across s
 ## Gotchas
 
 - **Port conflicts on restart**: Vite apps (admin, storefront) can fail on restart if the old process hasn't released the port yet. Restart the workflow a second time if you see `Port X is already in use`.
-- **Credential store is synchronous**: `channels.ts` uses a plain in-memory object backed by DB on startup. Never make credential reads async — route handlers depend on synchronous access.
+- **Credential reads are asynchronous**: Channel and provider credentials are loaded from PostgreSQL when needed; callers must await credential reads.
 - **Run codegen after spec changes**: `pnpm --filter @workspace/api-spec run codegen` must run before building if `openapi.yaml` was modified.
 - **Admin login is OTP-only**: No passwords. Use `admin@luxeboutique.com` → receive 6-digit OTP → enter it. OTP expires in 10 minutes.
-- **Low-stock SSE fires only for newly detected items**: `lastAlertedIds` tracks which products were already surfaced. Only net-new low-stock products trigger an SSE push.
+- **Low-stock checks are database-backed**: Threshold and last-check metadata survive API restarts; each explicit or scheduled check publishes the current low-stock result.
 
 ---
 

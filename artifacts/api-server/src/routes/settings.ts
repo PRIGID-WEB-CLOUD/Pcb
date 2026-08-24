@@ -3,7 +3,6 @@ import { randomUUID } from "crypto";
 import { desc, eq } from "drizzle-orm";
 import { requireAdmin } from "../middleware/requireAdmin";
 import { eprolo } from "../services/eprolo";
-import { setEproloConfig } from "./eprolo";
 import { db, apiKeysTable, appSettingsTable, providerPluginsTable } from "@workspace/db";
 
 const router = Router();
@@ -132,9 +131,6 @@ router.put("/providers/:name", async (req, res) => {
   }
   const [updated] = await db.update(providerPluginsTable).set(updates)
     .where(eq(providerPluginsTable.id, provider.id)).returning();
-  if (req.params.name === "eprolo" && updated.apiKey && updated.apiSecret) {
-    setEproloConfig({ apiKey: updated.apiKey, apiSecret: updated.apiSecret });
-  }
   return res.json(safeProvider(updated));
 });
 
@@ -150,7 +146,6 @@ router.post("/providers/:name/connect", async (req, res) => {
       connected: result.ok, lastError: result.ok ? null : result.message,
       lastSyncAt: result.ok ? new Date() : provider.lastSyncAt, updatedAt: new Date(),
     }).where(eq(providerPluginsTable.id, provider.id));
-    if (result.ok) setEproloConfig({ apiKey: provider.apiKey, apiSecret: provider.apiSecret });
     return res.json({ connected: result.ok, message: result.message });
   }
 

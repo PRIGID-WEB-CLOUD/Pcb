@@ -24,26 +24,18 @@ const DEFAULT_WEBHOOKS = [
   { webhookId: "customer_signup", label: "Customer Sign-up", url: "/webhooks/customer-signup", active: true },
 ];
 
-export const credentials: Record<string, Record<string, string>> = {
-  facebook: {}, instagram: {}, twitter: {}, whatsapp: {}, ads: {}, commerce: {},
-};
-
-async function loadCredentialsFromDb() {
-  try {
-    const rows = await db.select().from(channelCredentialsTable);
-    for (const row of rows) credentials[row.channel] = row.data;
-  } catch {
-    // The API can still boot before the database is available.
-  }
+export async function getChannelCredentials(channel: string): Promise<Record<string, string>> {
+  const [row] = await db.select().from(channelCredentialsTable)
+    .where(eq(channelCredentialsTable.channel, channel)).limit(1);
+  return row?.data ?? {};
 }
-void loadCredentialsFromDb();
 
-async function persistCredentials(channel: string) {
+async function persistCredentials(channel: string, data: Record<string, string>) {
   await db.insert(channelCredentialsTable)
-    .values({ channel, data: credentials[channel] ?? {}, updatedAt: new Date() })
+    .values({ channel, data, updatedAt: new Date() })
     .onConflictDoUpdate({
       target: channelCredentialsTable.channel,
-      set: { data: credentials[channel] ?? {}, updatedAt: new Date() },
+      set: { data, updatedAt: new Date() },
     });
 }
 
@@ -104,7 +96,7 @@ router.post("/channels/configs/sync-all", async (_req, res) => {
 
 router.post("/channels/configs/:channelId/test", async (req, res) => {
   const channelId = req.params.channelId as string;
-  const saved = credentials[channelId] ?? {};
+  const saved = await getChannelCredentials(channelId);
   const missing = Object.keys(saved).length === 0;
   const detail = missing
     ? "No credentials saved for this channel."
@@ -136,22 +128,21 @@ router.put("/channels/webhooks/:webhookId", async (req, res) => {
   return res.json(updated);
 });
 
-router.get("/channels/credentials/:channel", (req, res) => {
-  return res.json(credentials[req.params.channel as string] ?? {});
+router.get("/channels/credentials/:channel", async (req, res) => {
+  return res.json(await getChannelCredentials(req.params.channel as string));
 });
 
 router.put("/channels/credentials/:channel", async (req, res) => {
   const channel = req.params.channel as string;
-  credentials[channel] = { ...(credentials[channel] ?? {}), ...req.body };
-  await persistCredentials(channel);
+  const data = { ...(await getChannelCredentials(channel)), ...req.body };
+  await persistCredentials(channel, data);
   addEvent(channel, "API credentials updated", "Credentials saved to database.", "info");
   return res.json({ ok: true });
 });
 
 router.delete("/channels/credentials/:channel", async (req, res) => {
   const channel = req.params.channel as string;
-  credentials[channel] = {};
-  await persistCredentials(channel);
+  await persistCredentials(channel, {});
   addEvent(channel, "API credentials cleared", "All credentials removed.", "warning");
   return res.json({ ok: true });
 });
