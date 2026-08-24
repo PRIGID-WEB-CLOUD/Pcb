@@ -32,12 +32,12 @@ interface Webhook {
 }
 
 const channelMeta: Record<string, { icon: string; title: string; desc: string; href: string }> = {
-  facebook: { icon: "thumb_up",      title: "Facebook Pages", desc: "Page posts, pixel tracking, and audience management.",  href: "/admin/channels/facebook"      },
-  instagram:{ icon: "photo_camera",  title: "Instagram",      desc: "Publish posts and track media performance.",             href: "/admin/channels/instagram"     },
-  commerce: { icon: "storefront",    title: "Meta Commerce",  desc: "Sync product catalog to Facebook Shop and Instagram.",   href: "/admin/channels/meta-commerce" },
-  ads:      { icon: "campaign",      title: "Meta Ads",       desc: "View ad campaigns, spend, and real-time insights.",      href: "/admin/channels/meta-ads"      },
-  whatsapp: { icon: "chat",          title: "WhatsApp API",   desc: "Automated customer journeys and order notifications.",   href: "/admin/channels/whatsapp"      },
-  twitter:  { icon: "share",         title: "X / Twitter",   desc: "Automated product drops and hashtag management.",         href: "/admin/channels/twitter"       },
+  facebook: { icon: "thumb_up",      title: "Facebook Pages", desc: "Page posts, pixel tracking, and audience management.",  href: "/channels/facebook"      },
+  instagram:{ icon: "photo_camera",  title: "Instagram",      desc: "Publish posts and track media performance.",             href: "/channels/instagram"     },
+  commerce: { icon: "storefront",    title: "Meta Commerce",  desc: "Sync product catalog to Facebook Shop and Instagram.",   href: "/channels/meta-commerce" },
+  ads:      { icon: "campaign",      title: "Meta Ads",       desc: "View ad campaigns, spend, and real-time insights.",      href: "/channels/meta-ads"      },
+  whatsapp: { icon: "chat",          title: "WhatsApp API",   desc: "Automated customer journeys and order notifications.",   href: "/channels/whatsapp"      },
+  twitter:  { icon: "share",         title: "X / Twitter",   desc: "Automated product drops and hashtag management.",         href: "/channels/twitter"       },
 };
 
 const statusConfig: Record<ChannelStatus, { label: string; cls: string }> = {
