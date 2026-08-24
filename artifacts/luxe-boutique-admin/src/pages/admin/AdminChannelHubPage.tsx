@@ -48,6 +48,14 @@ const statusConfig: Record<ChannelStatus, { label: string; cls: string }> = {
 const nextStatus: Record<ChannelStatus, ChannelStatus> = {
   CONNECTED: "PAUSED", PAUSED: "CONNECTED", DISCONNECTED: "CONNECTED",
 };
+const channelTestEndpoints: Record<string, string> = {
+  facebook: "/api/facebook/page-info",
+  instagram: "/api/facebook/instagram/account",
+  commerce: "/api/facebook/catalog/info",
+  ads: "/api/facebook/ads/account",
+  whatsapp: "/api/whatsapp/phone-info",
+  twitter: "/api/twitter/verify",
+};
 const logTypeStyle: Record<string, { icon: string; cls: string }> = {
   sync:    { icon: "sync",    cls: "text-[#006c49] bg-emerald-50" },
   info:    { icon: "info",    cls: "text-blue-600 bg-blue-50"     },
@@ -127,14 +135,23 @@ export default function AdminChannelHubPage() {
 
   const testConnection = async (channelId: string) => {
     setTestResults((p) => ({ ...p, [channelId]: "testing" }));
-    const res = await fetch(`/api/channels/configs/${channelId}/test`, { method: "POST" });
-    if (res.ok) {
-      const { pass, latency } = await res.json();
+    const startedAt = performance.now();
+    const endpoint = channelTestEndpoints[channelId];
+    try {
+      const res = await fetch(endpoint, { credentials: "include" });
+      const latency = Math.round(performance.now() - startedAt);
+      const data = await res.json().catch(() => ({})) as { ok?: boolean; error?: string };
+      const pass = res.ok && data.ok !== false;
       setTestResults((p) => ({ ...p, [channelId]: pass ? "pass" : "fail" }));
       setConfigs((p) => p.map((c) => c.channelId === channelId ? { ...c, latency } : c));
-      showToast(pass ? `${channelMeta[channelId]?.title} — ${latency}ms` : `${channelMeta[channelId]?.title} connection failed.`);
+      showToast(pass
+        ? `${channelMeta[channelId]?.title} — ${latency}ms`
+        : `${channelMeta[channelId]?.title} connection failed${data.error ? `: ${data.error}` : "."}`);
       loadAll();
       setTimeout(() => setTestResults((p) => ({ ...p, [channelId]: "idle" })), 4000);
+    } catch {
+      setTestResults((p) => ({ ...p, [channelId]: "fail" }));
+      showToast(`${channelMeta[channelId]?.title} connection request failed.`);
     }
   };
 
