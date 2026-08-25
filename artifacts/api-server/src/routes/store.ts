@@ -35,7 +35,7 @@ const productSchema = z.object({
   categoryId:    z.string().optional().nullable(),
   stock:         z.number().int().min(0).optional().default(0),
   trackQuantity: z.boolean().optional().default(true),
-  status:        z.string().optional().default("ACTIVE"),
+  status:        z.enum(["ACTIVE", "DRAFT", "ARCHIVED"]).optional().default("ACTIVE"),
   imageUrl:      z.string().optional().nullable(),
   description:   z.string().optional().default(""),
   tags:          z.string().optional().nullable(),
@@ -63,6 +63,8 @@ router.get("/products/:id", async (req, res) => {
 router.put("/products/:id", requireAdmin, async (req, res) => {
   const productId = req.params.id as string;
   const allowed = ["name", "price", "categoryId", "stock", "trackQuantity", "status", "imageUrl", "description", "tags"];
+  const parsed = productSchema.partial().safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "Invalid product fields.", details: parsed.error.flatten() });
   const updates: Record<string, unknown> = {};
   for (const k of allowed) if (k in req.body) updates[k] = req.body[k];
   const rows = await db.update(productsTable).set(updates).where(eq(productsTable.id, productId)).returning();
@@ -230,9 +232,9 @@ router.post("/orders", async (req, res) => {
 
 router.put("/orders/:id", requireAdmin, async (req, res) => {
   const orderId = req.params.id as string;
-  const allowed = ["status"];
-  const updates: Record<string, unknown> = {};
-  for (const k of allowed) if (k in req.body) updates[k] = req.body[k];
+  const parsed = z.object({ status: z.enum(["PENDING", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED", "REFUNDED"]) }).strict().safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "Invalid order status.", details: parsed.error.flatten() });
+  const updates: Record<string, unknown> = parsed.data;
   const rows = await db.update(ordersTable).set(updates).where(eq(ordersTable.id, orderId)).returning();
   if (!rows[0]) return res.status(404).json({ error: "Order not found" });
   eventBus.publish({ type: "order_updated", payload: { id: rows[0].id, status: rows[0].status } });

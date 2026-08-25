@@ -1,6 +1,7 @@
-import { Router } from "express";
+import { Router, type Request } from "express";
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from "crypto";
-import { requireAdmin } from "../middleware/requireAdmin";
+import { getSessionUser, requireAdmin } from "../middleware/requireAdmin";
+import { logger } from "../lib/logger";
 import {
   db,
   channelCredentialsTable,
@@ -166,10 +167,41 @@ async function ensureDefaults() {
   }
 }
 
-export function addEvent(channel: string, event: string, detail: string, type: EventType = "info") {
-  void db.insert(channelEventLogsTable).values({
-    id: randomUUID(), channel, event, detail, type,
-  }).catch(() => {});
+type AuditActor = {
+  adminUserId?: string;
+  adminEmail?: string;
+  ip?: string;
+  userAgent?: string;
+};
+
+export async function addEvent(
+  channel: string,
+  event: string,
+  detail: string,
+  type: EventType = "info",
+  actor: AuditActor = {},
+) {
+  try {
+    await db.insert(channelEventLogsTable).values({
+      id: randomUUID(), channel, event, detail, type,
+      adminUserId: actor.adminUserId ?? null,
+      adminEmail: actor.adminEmail ?? null,
+      ip: actor.ip ?? null,
+      userAgent: actor.userAgent ?? null,
+    });
+  } catch (error) {
+    logger.error({ err: error, channel, event }, "Failed to write channel event");
+  }
+}
+
+async function auditActor(req: Request): Promise<AuditActor> {
+  const user = await getSessionUser(req);
+  return {
+    adminUserId: user?.id,
+    adminEmail: user?.email,
+    ip: req.ip,
+    userAgent: req.get("user-agent") ?? undefined,
+  };
 }
 
 router.get("/channels/configs", async (_req, res) => {
@@ -310,7 +342,7 @@ router.put("/channels/credentials/:channel", async (req, res) => {
     else data[key] = value;
   }
   await persistCredentials(channel, data);
-  addEvent(channel, "API credentials updated", "Credentials saved to database.", "info");
+  await addEvent(channel, "API credentials updated", "Credentials saved to database.", "info", await auditActor(req));
   return res.json({ ok: true, credentials: publicCredentials(data) });
 });
 
@@ -318,7 +350,7 @@ router.delete("/channels/credentials/:channel", async (req, res) => {
   const channel = req.params.channel as string;
   if (!CHANNELS.includes(channel as typeof CHANNELS[number])) return res.status(404).json({ error: "Unknown channel." });
   await persistCredentials(channel, {});
-  addEvent(channel, "API credentials cleared", "All credentials removed.", "warning");
+  await addEvent(channel, "API credentials cleared", "All credentials removed.", "warning", await auditActor(req));
   return res.json({ ok: true });
 });
 

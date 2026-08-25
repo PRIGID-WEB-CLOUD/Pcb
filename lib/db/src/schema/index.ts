@@ -1,4 +1,5 @@
-import { pgTable, text, timestamp, integer, boolean, jsonb, real } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, integer, boolean, jsonb, real, check } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -13,7 +14,9 @@ export const usersTable = pgTable("users", {
   passwordResetToken:  text("password_reset_token"),
   passwordResetExpiry: timestamp("password_reset_expiry"),
   createdAt:           timestamp("created_at").notNull().defaultNow(),
-});
+}, (table) => [
+  check("users_role_check", sql`${table.role} in ('CUSTOMER', 'ADMIN', 'SUPER_ADMIN')`),
+]);
 
 export const insertUserSchema = createInsertSchema(usersTable).omit({ createdAt: true });
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -71,7 +74,9 @@ export const productsTable = pgTable("products", {
   description:   text("description").notNull().default(""),
   tags:          text("tags"),
   createdAt:     timestamp("created_at").notNull().defaultNow(),
-});
+}, (table) => [
+  check("products_status_check", sql`${table.status} in ('ACTIVE', 'DRAFT', 'ARCHIVED')`),
+]);
 
 export type Product = typeof productsTable.$inferSelect;
 
@@ -88,7 +93,9 @@ export const ordersTable = pgTable("orders", {
   total:         real("total").notNull().default(0),
   items:         jsonb("items").notNull().$type<OrderItem[]>().default([]),
   createdAt:     timestamp("created_at").notNull().defaultNow(),
-});
+}, (table) => [
+  check("orders_status_check", sql`${table.status} in ('PENDING', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED', 'REFUNDED')`),
+]);
 
 export type Order = typeof ordersTable.$inferSelect;
 
@@ -193,7 +200,9 @@ export const channelConfigsTable = pgTable("channel_configs", {
   lastSync:  timestamp("last_sync"),
   latency:   integer("latency").notNull().default(0),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
-});
+}, (table) => [
+  check("channel_configs_status_check", sql`${table.status} in ('CONNECTED', 'PAUSED', 'DISCONNECTED')`),
+]);
 
 export const channelEventLogsTable = pgTable("channel_event_logs", {
   id:        text("id").primaryKey(),
@@ -201,8 +210,14 @@ export const channelEventLogsTable = pgTable("channel_event_logs", {
   event:     text("event").notNull(),
   detail:    text("detail").notNull(),
   type:      text("type").notNull().default("info"),
+  adminUserId: text("admin_user_id"),
+  adminEmail:  text("admin_email"),
+  ip:          text("ip"),
+  userAgent:   text("user_agent"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
-});
+}, (table) => [
+  check("channel_event_logs_type_check", sql`${table.type} in ('sync', 'error', 'warning', 'info')`),
+]);
 
 export const channelWebhooksTable = pgTable("channel_webhooks", {
   id:        text("id").primaryKey(),

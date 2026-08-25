@@ -1,5 +1,5 @@
 import { Router, type Request, type Response } from "express";
-import { randomUUID } from "crypto";
+import { randomBytes, randomUUID } from "crypto";
 import { db, usersTable, sessionsTable, adminOtpCodesTable } from "@workspace/db";
 import { eq, or, and, gt, lt } from "drizzle-orm";
 import { SESSION_COOKIE, getSessionUser, requireAdmin } from "../middleware/requireAdmin";
@@ -12,7 +12,7 @@ const router = Router();
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 async function setSession(res: Response, userId: string) {
-  const token     = randomUUID();
+  const token     = randomBytes(32).toString("base64url");
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
   await db.insert(sessionsTable).values({ token, userId, expiresAt });
   res.cookie(SESSION_COOKIE, token, { httpOnly: true, sameSite: "lax", maxAge: 7 * 24 * 60 * 60 * 1000 });

@@ -25,14 +25,12 @@ export async function getSessionUser(req: Request): Promise<StoredUser | null> {
     .limit(1);
   const row = rows[0];
   if (!row) return null;
-  if (new Date() > new Date(row.user.createdAt)) {
-    const sess = await db
-      .select({ expiresAt: sessionsTable.expiresAt })
-      .from(sessionsTable)
-      .where(eq(sessionsTable.token, token))
-      .limit(1);
-    if (sess[0] && new Date() > sess[0].expiresAt) return null;
-  }
+  const session = await db
+    .select({ expiresAt: sessionsTable.expiresAt })
+    .from(sessionsTable)
+    .where(eq(sessionsTable.token, token))
+    .limit(1);
+  if (!session[0] || new Date() > session[0].expiresAt) return null;
   return {
     id:           row.user.id,
     name:         row.user.name,
