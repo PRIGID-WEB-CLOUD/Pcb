@@ -254,7 +254,7 @@ export default function AdminChannelHubPage() {
                       className="py-1.5 text-[10px] font-[Manrope] font-bold tracking-wider uppercase border border-slate-200 hover:border-blue-400 hover:text-blue-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-0.5 rounded">
                       <span className="material-symbols-outlined text-xs">network_ping</span> Test
                     </button>
-                    <button onClick={() => toggleStatus(cfg.channelId)}
+                    <button onClick={() => cfg.status === "CONNECTED" ? toggleStatus(cfg.channelId) : testConnection(cfg.channelId)}
                       className={`py-1.5 text-[10px] font-[Manrope] font-bold tracking-wider uppercase transition-colors rounded ${cfg.status === "CONNECTED" ? "bg-slate-100 hover:bg-red-50 hover:text-red-600 text-slate-600" : "bg-[#6cf8bb] text-[#006c49] hover:bg-emerald-200"}`}>
                       {cfg.status === "CONNECTED" ? "Pause" : cfg.status === "PAUSED" ? "Resume" : "Connect"}
                     </button>

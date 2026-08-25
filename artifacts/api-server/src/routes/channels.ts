@@ -18,6 +18,7 @@ type ChannelStatus = "CONNECTED" | "PAUSED" | "DISCONNECTED";
 type EventType = "sync" | "error" | "warning" | "info";
 
 const CHANNELS = ["facebook", "instagram", "commerce", "ads", "whatsapp", "twitter"] as const;
+const META_API_VERSION = process.env.META_API_VERSION ?? "v21.0";
 const SECRET_FIELDS = new Set([
   "app_secret", "page_access_token", "bearer_token", "api_secret",
   "access_token", "access_token_secret", "system_access_token", "webhook_verify_token",
@@ -67,6 +68,59 @@ function publicCredentials(data: Record<string, string>) {
     key,
     SECRET_FIELDS.has(key) ? maskSecret(value) : value,
   ]));
+}
+
+type LiveCheck = { pass: boolean; detail: string; account?: Record<string, unknown> };
+
+async function metaGraphGet(path: string, token: string, fields: string) {
+  const url = new URL(`https://graph.facebook.com/${META_API_VERSION}${path}`);
+  url.searchParams.set("fields", fields);
+  const response = await fetch(url.toString(), { headers: { Authorization: `Bearer ${token}` } });
+  const data = await response.json() as Record<string, unknown>;
+  const providerError = data.error as Record<string, string> | undefined;
+  return {
+    ok: response.ok && !providerError,
+    data,
+    error: providerError?.message ?? `Provider returned HTTP ${response.status}`,
+  };
+}
+
+async function checkProvider(channelId: string, creds: Record<string, string>): Promise<LiveCheck> {
+  if (channelId === "facebook") {
+    if (!creds.page_id || !creds.page_access_token) throw new Error("Missing Facebook Page ID or Page Access Token.");
+    const r = await metaGraphGet(`/${creds.page_id}`, creds.page_access_token, "id,name,fan_count,followers_count");
+    return r.ok ? { pass: true, detail: "Facebook Page API responded successfully.", account: { id: r.data.id, name: r.data.name, followers: r.data.followers_count } } : { pass: false, detail: r.error };
+  }
+  if (channelId === "instagram") {
+    if (!creds.ig_user_id || !creds.page_access_token) throw new Error("Missing Instagram Business Account ID or Page Access Token.");
+    const r = await metaGraphGet(`/${creds.ig_user_id}`, creds.page_access_token, "id,name,username,followers_count,media_count");
+    return r.ok ? { pass: true, detail: "Instagram Graph API responded successfully.", account: { id: r.data.id, name: r.data.name, username: r.data.username, followers: r.data.followers_count, mediaCount: r.data.media_count } } : { pass: false, detail: r.error };
+  }
+  if (channelId === "commerce") {
+    if (!creds.catalog_id || !creds.page_access_token) throw new Error("Missing Meta Catalog ID or Page Access Token.");
+    const r = await metaGraphGet(`/${creds.catalog_id}`, creds.page_access_token, "id,name,product_count,vertical");
+    return r.ok ? { pass: true, detail: "Meta Commerce catalog API responded successfully.", account: { id: r.data.id, name: r.data.name, productCount: r.data.product_count, vertical: r.data.vertical } } : { pass: false, detail: r.error };
+  }
+  if (channelId === "ads") {
+    if (!creds.ad_account_id || !creds.page_access_token) throw new Error("Missing Meta Ad Account ID or Page Access Token.");
+    const id = creds.ad_account_id.startsWith("act_") ? creds.ad_account_id : `act_${creds.ad_account_id}`;
+    const r = await metaGraphGet(`/${id}`, creds.page_access_token, "id,name,currency,account_status");
+    return r.ok ? { pass: true, detail: "Meta Ads API responded successfully.", account: { id: r.data.id, name: r.data.name, currency: r.data.currency, status: r.data.account_status } } : { pass: false, detail: r.error };
+  }
+  if (channelId === "whatsapp") {
+    if (!creds.phone_number_id || !creds.system_access_token) throw new Error("Missing WhatsApp Phone Number ID or System Access Token.");
+    const r = await metaGraphGet(`/${creds.phone_number_id}`, creds.system_access_token, "display_phone_number,quality_rating,status,verified_name");
+    return r.ok ? { pass: true, detail: "WhatsApp Business API responded successfully.", account: { phoneNumber: r.data.display_phone_number, quality: r.data.quality_rating, status: r.data.status, verifiedName: r.data.verified_name } } : { pass: false, detail: r.error };
+  }
+  if (channelId === "twitter") {
+    if (!creds.bearer_token) throw new Error("Missing X/Twitter Bearer Token.");
+    const response = await fetch("https://api.twitter.com/2/users/me?user.fields=name,username", { headers: { Authorization: `Bearer ${creds.bearer_token}` } });
+    const data = await response.json() as Record<string, unknown>;
+    return response.ok
+      ? { pass: true, detail: "X/Twitter API responded successfully.", account: (data.data as Record<string, unknown> | undefined) }
+      : { pass: false, detail: (data.detail as string) ?? (data.title as string) ?? `Provider returned HTTP ${response.status}` };
+  }
+  return { pass: false, detail: `Unsupported channel: ${channelId}.` };
 }
 const DEFAULT_WEBHOOKS = [
   { webhookId: "order_created", label: "Order Created", url: "/webhooks/order-created", active: true },
@@ -128,113 +182,75 @@ router.put("/channels/configs/:channelId/status", async (req, res) => {
   const parsedStatus = z.enum(["CONNECTED", "PAUSED", "DISCONNECTED"]).safeParse(req.body.status);
   if (!parsedStatus.success) return res.status(400).json({ error: "Invalid channel status." });
   const status: ChannelStatus = parsedStatus.data;
+  if (status === "CONNECTED") {
+    return res.status(400).json({ error: "A channel can only become CONNECTED after a successful live test or sync." });
+  }
   const [updated] = await db.update(channelConfigsTable)
     .set({ status, updatedAt: new Date() })
     .where(eq(channelConfigsTable.channelId, channelId))
     .returning();
   if (!updated) return res.status(404).json({ error: "Channel not found" });
-  addEvent(channelId, `Status changed to ${status}`, `Channel is now ${status.toLowerCase()}.`, status === "CONNECTED" ? "sync" : "warning");
+  addEvent(channelId, `Status changed to ${status}`, `Channel is now ${status.toLowerCase()}.`, "warning");
   return res.json(updated);
 });
 
 router.post("/channels/configs/:channelId/sync", async (req, res) => {
   const channelId = req.params.channelId as string;
-  const [updated] = await db.update(channelConfigsTable)
-    .set({ lastSync: new Date(), updatedAt: new Date() })
-    .where(eq(channelConfigsTable.channelId, channelId))
-    .returning();
-  if (!updated) return res.status(404).json({ error: "Channel not found" });
-  addEvent(channelId, "Manual sync triggered", "Sync timestamp recorded. Connect the channel to perform a live sync.", "sync");
-  return res.json(updated);
+  const [config] = await db.select().from(channelConfigsTable).where(eq(channelConfigsTable.channelId, channelId)).limit(1);
+  if (!config) return res.status(404).json({ error: "Channel not found" });
+  if (config.status !== "CONNECTED") return res.status(409).json({ error: "Only connected channels can be synchronized." });
+  const startedAt = performance.now();
+  try {
+    const result = await checkProvider(channelId, await getChannelCredentials(channelId));
+    const latency = Math.round(performance.now() - startedAt);
+    if (!result.pass) throw new Error(result.detail);
+    const [updated] = await db.update(channelConfigsTable)
+      .set({ lastSync: new Date(), latency, status: "CONNECTED", updatedAt: new Date() })
+      .where(eq(channelConfigsTable.channelId, channelId)).returning();
+    addEvent(channelId, "Live synchronization completed", `${result.detail} (${latency}ms)`, "sync");
+    return res.json({ ...updated, account: result.account });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    const latency = Math.round(performance.now() - startedAt);
+    await db.update(channelConfigsTable).set({ status: "DISCONNECTED", latency, updatedAt: new Date() })
+      .where(eq(channelConfigsTable.channelId, channelId));
+    addEvent(channelId, "Live synchronization failed", `${detail} (${latency}ms)`, "error");
+    return res.status(502).json({ error: detail, latency });
+  }
 });
 
 router.post("/channels/configs/sync-all", async (_req, res) => {
-  await db.update(channelConfigsTable)
-    .set({ lastSync: new Date(), updatedAt: new Date() })
-    .where(eq(channelConfigsTable.status, "CONNECTED"));
-  addEvent("system", "Sync-all triggered", "Active channel sync timestamps updated.", "sync");
-  return res.json({ ok: true });
+  const connected = await db.select().from(channelConfigsTable).where(eq(channelConfigsTable.status, "CONNECTED"));
+  const results = await Promise.all(connected.map(async (config) => {
+    const startedAt = performance.now();
+    try {
+      const result = await checkProvider(config.channelId, await getChannelCredentials(config.channelId));
+      const latency = Math.round(performance.now() - startedAt);
+      if (!result.pass) throw new Error(result.detail);
+      await db.update(channelConfigsTable).set({ lastSync: new Date(), latency, status: "CONNECTED", updatedAt: new Date() })
+        .where(eq(channelConfigsTable.channelId, config.channelId));
+      addEvent(config.channelId, "Live synchronization completed", `${result.detail} (${latency}ms)`, "sync");
+      return { channelId: config.channelId, ok: true, latency, account: result.account };
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      const latency = Math.round(performance.now() - startedAt);
+      await db.update(channelConfigsTable).set({ status: "DISCONNECTED", latency, updatedAt: new Date() })
+        .where(eq(channelConfigsTable.channelId, config.channelId));
+      addEvent(config.channelId, "Live synchronization failed", `${detail} (${latency}ms)`, "error");
+      return { channelId: config.channelId, ok: false, latency, error: detail };
+    }
+  }));
+  const failed = results.filter((result) => !result.ok).length;
+  addEvent("system", failed ? "Live sync-all completed with failures" : "Live sync-all completed", `${results.length - failed}/${results.length} channels synchronized.`, failed ? "warning" : "sync");
+  return res.status(failed ? 207 : 200).json({ ok: failed === 0, results });
 });
 
 router.post("/channels/configs/:channelId/test", async (req, res) => {
   const channelId = req.params.channelId as string;
   const startedAt = performance.now();
-  const creds = await getChannelCredentials(channelId);
-  let result: { pass: boolean; detail: string; providerData?: unknown };
-
-  const graphGet = async (path: string, token: string, fields: string) => {
-    const url = new URL(`https://graph.facebook.com/v21.0${path}`);
-    url.searchParams.set("fields", fields);
-    url.searchParams.set("access_token", token);
-    const response = await fetch(url.toString());
-    const data = await response.json() as Record<string, unknown>;
-    const providerError = data.error as Record<string, string> | undefined;
-    return {
-      ok: response.ok && !providerError,
-      data,
-      error: providerError?.message ?? `Provider returned HTTP ${response.status}`,
-    };
-  };
-
+  let result: LiveCheck;
   try {
-    if (channelId === "facebook") {
-      const pageId = creds.page_id;
-      const token = creds.page_access_token;
-      if (!pageId || !token) throw new Error("Missing Facebook Page ID or Page Access Token.");
-      const response = await graphGet(`/${pageId}`, token, "id,name,fan_count,followers_count");
-      result = response.ok
-        ? { pass: true, detail: "Facebook Page API responded successfully.", providerData: response.data }
-        : { pass: false, detail: response.error };
-    } else if (channelId === "instagram") {
-      const accountId = creds.ig_user_id;
-      const token = creds.page_access_token;
-      if (!accountId || !token) throw new Error("Missing Instagram Business Account ID or Page Access Token.");
-      const response = await graphGet(`/${accountId}`, token, "id,name,username,followers_count,media_count");
-      result = response.ok
-        ? { pass: true, detail: "Instagram Graph API responded successfully.", providerData: response.data }
-        : { pass: false, detail: response.error };
-    } else if (channelId === "commerce") {
-      const catalogId = creds.catalog_id;
-      const token = creds.page_access_token;
-      if (!catalogId || !token) throw new Error("Missing Meta Catalog ID or Page Access Token.");
-      const response = await graphGet(`/${catalogId}`, token, "id,name,product_count,vertical");
-      result = response.ok
-        ? { pass: true, detail: "Meta Commerce catalog API responded successfully.", providerData: response.data }
-        : { pass: false, detail: response.error };
-    } else if (channelId === "ads") {
-      const accountId = creds.ad_account_id;
-      const token = creds.page_access_token;
-      if (!accountId || !token) throw new Error("Missing Meta Ad Account ID or Page Access Token.");
-      const normalizedId = accountId.startsWith("act_") ? accountId : `act_${accountId}`;
-      const response = await graphGet(`/${normalizedId}`, token, "id,name,currency,account_status");
-      result = response.ok
-        ? { pass: true, detail: "Meta Ads API responded successfully.", providerData: response.data }
-        : { pass: false, detail: response.error };
-    } else if (channelId === "whatsapp") {
-      const phoneNumberId = creds.phone_number_id;
-      const token = creds.system_access_token;
-      if (!phoneNumberId || !token) throw new Error("Missing WhatsApp Phone Number ID or System Access Token.");
-      const response = await fetch(`https://graph.facebook.com/v21.0/${phoneNumberId}?fields=display_phone_number,quality_rating,status,verified_name`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await response.json() as Record<string, unknown>;
-      const providerError = data.error as Record<string, string> | undefined;
-      result = response.ok && !providerError
-        ? { pass: true, detail: "WhatsApp Business API responded successfully.", providerData: data }
-        : { pass: false, detail: providerError?.message ?? `Provider returned HTTP ${response.status}` };
-    } else if (channelId === "twitter") {
-      const token = creds.bearer_token;
-      if (!token) throw new Error("Missing X/Twitter Bearer Token.");
-      const response = await fetch("https://api.twitter.com/2/users/me?user.fields=name,username", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await response.json() as Record<string, unknown>;
-      result = response.ok
-        ? { pass: true, detail: "X/Twitter API responded successfully.", providerData: data.data }
-        : { pass: false, detail: (data.detail as string) ?? (data.title as string) ?? `Provider returned HTTP ${response.status}` };
-    } else {
-      result = { pass: false, detail: `Unsupported channel: ${channelId}.` };
-    }
+    result = await checkProvider(channelId, await getChannelCredentials(channelId));
   } catch (error) {
     result = { pass: false, detail: error instanceof Error ? error.message : String(error) };
   }
@@ -249,7 +265,7 @@ router.post("/channels/configs/:channelId/test", async (req, res) => {
     `${result.detail} (${latency}ms)`,
     result.pass ? "sync" : "error",
   );
-  return res.json({ pass: result.pass, ok: result.pass, latency, detail: result.detail, providerData: result.providerData });
+  return res.json({ pass: result.pass, ok: result.pass, latency, detail: result.detail, account: result.account });
 });
 
 router.get("/channels/events", async (_req, res) => {
