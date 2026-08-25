@@ -154,7 +154,7 @@ async function persistCredentials(channel: string, data: Record<string, string>)
     });
 }
 
-async function ensureDefaults() {
+export async function ensureDefaults() {
   for (const channelId of CHANNELS) {
     await db.insert(channelConfigsTable)
       .values({ id: randomUUID(), channelId, status: "DISCONNECTED", latency: 0 })
@@ -205,7 +205,6 @@ async function auditActor(req: Request): Promise<AuditActor> {
 }
 
 router.get("/channels/configs", async (_req, res) => {
-  await ensureDefaults();
   return res.json(await db.select().from(channelConfigsTable));
 });
 
@@ -253,6 +252,13 @@ router.post("/channels/configs/:channelId/sync", async (req, res) => {
 
 router.post("/channels/configs/sync-all", async (_req, res) => {
   const connected = await db.select().from(channelConfigsTable).where(eq(channelConfigsTable.status, "CONNECTED"));
+  if (connected.length === 0) {
+    return res.status(409).json({
+      ok: false,
+      error: "No connected channels are available to synchronize.",
+      results: [],
+    });
+  }
   const results = await Promise.all(connected.map(async (config) => {
     const startedAt = performance.now();
     try {
@@ -274,7 +280,7 @@ router.post("/channels/configs/sync-all", async (_req, res) => {
   }));
   const failed = results.filter((result) => !result.ok).length;
   addEvent("system", failed ? "Live sync-all completed with failures" : "Live sync-all completed", `${results.length - failed}/${results.length} channels synchronized.`, failed ? "warning" : "sync");
-  return res.status(failed ? 207 : 200).json({ ok: failed === 0, results });
+  return res.status(failed ? 207 : 200).json({ ok: failed === 0 && results.length > 0, results });
 });
 
 router.post("/channels/configs/:channelId/test", async (req, res) => {
@@ -310,7 +316,6 @@ router.delete("/channels/events", async (_req, res) => {
 });
 
 router.get("/channels/webhooks", async (_req, res) => {
-  await ensureDefaults();
   return res.json(await db.select().from(channelWebhooksTable));
 });
 
