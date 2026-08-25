@@ -14,30 +14,37 @@ export interface StoredUser {
   passwordHash: string;
 }
 
+declare global {
+  namespace Express {
+    interface Request {
+      adminUser?: StoredUser;
+    }
+  }
+}
+
+function toStoredUser(user: typeof usersTable.$inferSelect): StoredUser {
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role as UserRole,
+    passwordHash: user.passwordHash,
+  };
+}
+
 export async function getSessionUser(req: Request): Promise<StoredUser | null> {
   const token = req.cookies?.[SESSION_COOKIE] as string | undefined;
   if (!token) return null;
   const rows = await db
-    .select({ user: usersTable })
+    .select({ user: usersTable, session: sessionsTable })
     .from(sessionsTable)
     .innerJoin(usersTable, eq(sessionsTable.userId, usersTable.id))
     .where(eq(sessionsTable.token, token))
     .limit(1);
   const row = rows[0];
   if (!row) return null;
-  const session = await db
-    .select({ expiresAt: sessionsTable.expiresAt })
-    .from(sessionsTable)
-    .where(eq(sessionsTable.token, token))
-    .limit(1);
-  if (!session[0] || new Date() > session[0].expiresAt) return null;
-  return {
-    id:           row.user.id,
-    name:         row.user.name,
-    email:        row.user.email,
-    role:         row.user.role as UserRole,
-    passwordHash: row.user.passwordHash,
-  };
+  if (new Date() > row.session.expiresAt) return null;
+  return toStoredUser(row.user);
 }
 
 export async function requireAdmin(req: Request, res: Response, next: NextFunction) {
@@ -59,6 +66,7 @@ export async function requireAdmin(req: Request, res: Response, next: NextFuncti
   if (role !== "ADMIN" && role !== "SUPER_ADMIN") {
     return res.status(403).json({ error: "Admin access required." });
   }
+  req.adminUser = toStoredUser(row.user);
   return next();
 }
 
@@ -80,5 +88,6 @@ export async function requireSuperAdmin(req: Request, res: Response, next: NextF
   if (row.user.role !== "SUPER_ADMIN") {
     return res.status(403).json({ error: "Super admin access required." });
   }
+  req.adminUser = toStoredUser(row.user);
   return next();
 }

@@ -1,6 +1,6 @@
 import { Router, type Request } from "express";
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from "crypto";
-import { getSessionUser, requireAdmin } from "../middleware/requireAdmin";
+import { requireAdmin } from "../middleware/requireAdmin";
 import { logger } from "../lib/logger";
 import {
   db,
@@ -40,8 +40,8 @@ const credentialSchemas = Object.fromEntries(
 ) as unknown as Record<typeof CHANNELS[number], z.ZodType<Record<string, string | undefined>>>;
 
 function encryptionKey() {
-  const secret = process.env.SESSION_SECRET;
-  if (!secret) throw new Error("SESSION_SECRET is required to encrypt channel credentials.");
+  const secret = process.env.CREDENTIAL_ENCRYPTION_KEY ?? process.env.SESSION_SECRET;
+  if (!secret) throw new Error("CREDENTIAL_ENCRYPTION_KEY is required to encrypt channel credentials.");
   return createHash("sha256").update(secret).digest();
 }
 
@@ -86,7 +86,7 @@ async function metaGraphGet(path: string, token: string, fields: string) {
   };
 }
 
-async function checkProvider(channelId: string, creds: Record<string, string>): Promise<LiveCheck> {
+async function verifyConnection(channelId: string, creds: Record<string, string>): Promise<LiveCheck> {
   if (channelId === "facebook") {
     if (!creds.page_id || !creds.page_access_token) throw new Error("Missing Facebook Page ID or Page Access Token.");
     const r = await metaGraphGet(`/${creds.page_id}`, creds.page_access_token, "id,name,fan_count,followers_count");
@@ -114,7 +114,9 @@ async function checkProvider(channelId: string, creds: Record<string, string>): 
     return r.ok ? { pass: true, detail: "WhatsApp Business API responded successfully.", account: { phoneNumber: r.data.display_phone_number, quality: r.data.quality_rating, status: r.data.status, verifiedName: r.data.verified_name } } : { pass: false, detail: r.error };
   }
   if (channelId === "twitter") {
-    if (!creds.bearer_token) throw new Error("Missing X/Twitter Bearer Token.");
+    const requiredKeys = ["bearer_token", "api_key", "api_secret", "access_token", "access_token_secret"];
+    const missing = requiredKeys.filter((key) => !creds[key]?.trim());
+    if (missing.length) throw new Error(`Missing X/Twitter publishing credentials: ${missing.join(", ")}.`);
     const response = await fetch("https://api.twitter.com/2/users/me?user.fields=name,username", { headers: { Authorization: `Bearer ${creds.bearer_token}` } });
     const data = await response.json() as Record<string, unknown>;
     return response.ok
@@ -135,9 +137,6 @@ export async function getChannelCredentials(channel: string): Promise<Record<str
     .where(eq(channelCredentialsTable.channel, channel)).limit(1);
   const stored = row?.data ?? {};
   const decrypted = Object.fromEntries(Object.entries(stored).map(([key, value]) => [key, decryptSecret(value)]));
-  if (row && Object.entries(stored).some(([key, value]) => SECRET_FIELDS.has(key) && !value.startsWith("enc:v1:"))) {
-    await persistCredentials(channel, decrypted);
-  }
   return decrypted;
 }
 
@@ -195,10 +194,9 @@ export async function addEvent(
 }
 
 async function auditActor(req: Request): Promise<AuditActor> {
-  const user = await getSessionUser(req);
   return {
-    adminUserId: user?.id,
-    adminEmail: user?.email,
+    adminUserId: req.adminUser?.id,
+    adminEmail: req.adminUser?.email,
     ip: req.ip,
     userAgent: req.get("user-agent") ?? undefined,
   };
@@ -232,7 +230,7 @@ router.post("/channels/configs/:channelId/sync", async (req, res) => {
   if (config.status !== "CONNECTED") return res.status(409).json({ error: "Only connected channels can be synchronized." });
   const startedAt = performance.now();
   try {
-    const result = await checkProvider(channelId, await getChannelCredentials(channelId));
+    const result = await verifyConnection(channelId, await getChannelCredentials(channelId));
     const latency = Math.round(performance.now() - startedAt);
     if (!result.pass) throw new Error(result.detail);
     const [updated] = await db.update(channelConfigsTable)
@@ -262,7 +260,7 @@ router.post("/channels/configs/sync-all", async (_req, res) => {
   const results = await Promise.all(connected.map(async (config) => {
     const startedAt = performance.now();
     try {
-      const result = await checkProvider(config.channelId, await getChannelCredentials(config.channelId));
+      const result = await verifyConnection(config.channelId, await getChannelCredentials(config.channelId));
       const latency = Math.round(performance.now() - startedAt);
       if (!result.pass) throw new Error(result.detail);
       await db.update(channelConfigsTable).set({ lastSync: new Date(), latency, status: "CONNECTED", updatedAt: new Date() })
@@ -285,10 +283,13 @@ router.post("/channels/configs/sync-all", async (_req, res) => {
 
 router.post("/channels/configs/:channelId/test", async (req, res) => {
   const channelId = req.params.channelId as string;
+  const [config] = await db.select().from(channelConfigsTable)
+    .where(eq(channelConfigsTable.channelId, channelId)).limit(1);
+  if (!config) return res.status(404).json({ error: "Channel not found" });
   const startedAt = performance.now();
   let result: LiveCheck;
   try {
-    result = await checkProvider(channelId, await getChannelCredentials(channelId));
+    result = await verifyConnection(channelId, await getChannelCredentials(channelId));
   } catch (error) {
     result = { pass: false, detail: error instanceof Error ? error.message : String(error) };
   }
