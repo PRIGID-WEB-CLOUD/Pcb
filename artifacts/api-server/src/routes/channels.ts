@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { randomUUID } from "crypto";
+import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from "crypto";
 import { requireAdmin } from "../middleware/requireAdmin";
 import {
   db,
@@ -9,6 +9,7 @@ import {
   channelWebhooksTable,
 } from "@workspace/db";
 import { desc, eq } from "drizzle-orm";
+import { z } from "zod";
 
 const router = Router();
 router.use(requireAdmin);
@@ -17,6 +18,56 @@ type ChannelStatus = "CONNECTED" | "PAUSED" | "DISCONNECTED";
 type EventType = "sync" | "error" | "warning" | "info";
 
 const CHANNELS = ["facebook", "instagram", "commerce", "ads", "whatsapp", "twitter"] as const;
+const SECRET_FIELDS = new Set([
+  "app_secret", "page_access_token", "bearer_token", "api_secret",
+  "access_token", "access_token_secret", "system_access_token", "webhook_verify_token",
+]);
+const CREDENTIAL_FIELDS: Record<typeof CHANNELS[number], string[]> = {
+  facebook: ["page_id", "catalog_id", "app_id", "app_secret", "page_access_token", "pixel_id", "ad_account_id"],
+  instagram: ["ig_user_id", "page_access_token"],
+  commerce: ["catalog_id", "page_access_token"],
+  ads: ["ad_account_id", "page_access_token"],
+  whatsapp: ["phone_number_id", "waba_id", "system_access_token", "webhook_verify_token"],
+  twitter: ["api_key", "api_secret", "access_token", "access_token_secret", "bearer_token"],
+};
+const credentialSchemas = Object.fromEntries(
+  CHANNELS.map((channel) => [
+    channel,
+    z.object(Object.fromEntries(CREDENTIAL_FIELDS[channel].map((field) => [field, z.string().max(4096).optional()]))).strict(),
+  ]),
+) as unknown as Record<typeof CHANNELS[number], z.ZodType<Record<string, string | undefined>>>;
+
+function encryptionKey() {
+  const secret = process.env.SESSION_SECRET;
+  if (!secret) throw new Error("SESSION_SECRET is required to encrypt channel credentials.");
+  return createHash("sha256").update(secret).digest();
+}
+
+function encryptSecret(value: string) {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", encryptionKey(), iv);
+  const ciphertext = Buffer.concat([cipher.update(value, "utf8"), cipher.final()]);
+  return `enc:v1:${iv.toString("base64url")}:${cipher.getAuthTag().toString("base64url")}:${ciphertext.toString("base64url")}`;
+}
+
+function decryptSecret(value: string) {
+  if (!value.startsWith("enc:v1:")) return value;
+  const [, , ivText, tagText, ciphertextText] = value.split(":");
+  const decipher = createDecipheriv("aes-256-gcm", encryptionKey(), Buffer.from(ivText, "base64url"));
+  decipher.setAuthTag(Buffer.from(tagText, "base64url"));
+  return Buffer.concat([decipher.update(Buffer.from(ciphertextText, "base64url")), decipher.final()]).toString("utf8");
+}
+
+function maskSecret(value: string) {
+  return `••••••••••••${value.slice(-4)}`;
+}
+
+function publicCredentials(data: Record<string, string>) {
+  return Object.fromEntries(Object.entries(data).map(([key, value]) => [
+    key,
+    SECRET_FIELDS.has(key) ? maskSecret(value) : value,
+  ]));
+}
 const DEFAULT_WEBHOOKS = [
   { webhookId: "order_created", label: "Order Created", url: "/webhooks/order-created", active: true },
   { webhookId: "product_updated", label: "Product Updated", url: "/webhooks/product-updated", active: true },
@@ -27,15 +78,24 @@ const DEFAULT_WEBHOOKS = [
 export async function getChannelCredentials(channel: string): Promise<Record<string, string>> {
   const [row] = await db.select().from(channelCredentialsTable)
     .where(eq(channelCredentialsTable.channel, channel)).limit(1);
-  return row?.data ?? {};
+  const stored = row?.data ?? {};
+  const decrypted = Object.fromEntries(Object.entries(stored).map(([key, value]) => [key, decryptSecret(value)]));
+  if (row && Object.entries(stored).some(([key, value]) => SECRET_FIELDS.has(key) && !value.startsWith("enc:v1:"))) {
+    await persistCredentials(channel, decrypted);
+  }
+  return decrypted;
 }
 
 async function persistCredentials(channel: string, data: Record<string, string>) {
+  const encrypted = Object.fromEntries(Object.entries(data).map(([key, value]) => [
+    key,
+    SECRET_FIELDS.has(key) && value ? encryptSecret(value) : value,
+  ]));
   await db.insert(channelCredentialsTable)
-    .values({ channel, data, updatedAt: new Date() })
+    .values({ channel, data: encrypted, updatedAt: new Date() })
     .onConflictDoUpdate({
       target: channelCredentialsTable.channel,
-      set: { data, updatedAt: new Date() },
+      set: { data: encrypted, updatedAt: new Date() },
     });
 }
 
@@ -65,7 +125,9 @@ router.get("/channels/configs", async (_req, res) => {
 
 router.put("/channels/configs/:channelId/status", async (req, res) => {
   const channelId = req.params.channelId as string;
-  const status = req.body.status as ChannelStatus;
+  const parsedStatus = z.enum(["CONNECTED", "PAUSED", "DISCONNECTED"]).safeParse(req.body.status);
+  if (!parsedStatus.success) return res.status(400).json({ error: "Invalid channel status." });
+  const status: ChannelStatus = parsedStatus.data;
   const [updated] = await db.update(channelConfigsTable)
     .set({ status, updatedAt: new Date() })
     .where(eq(channelConfigsTable.channelId, channelId))
@@ -214,19 +276,31 @@ router.put("/channels/webhooks/:webhookId", async (req, res) => {
 });
 
 router.get("/channels/credentials/:channel", async (req, res) => {
-  return res.json(await getChannelCredentials(req.params.channel as string));
+  const channel = req.params.channel as string;
+  if (!CHANNELS.includes(channel as typeof CHANNELS[number])) return res.status(404).json({ error: "Unknown channel." });
+  return res.json(publicCredentials(await getChannelCredentials(channel)));
 });
 
 router.put("/channels/credentials/:channel", async (req, res) => {
   const channel = req.params.channel as string;
-  const data = { ...(await getChannelCredentials(channel)), ...req.body };
+  if (!CHANNELS.includes(channel as typeof CHANNELS[number])) return res.status(404).json({ error: "Unknown channel." });
+  const parsed = credentialSchemas[channel as typeof CHANNELS[number]].safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "Invalid credential fields.", details: parsed.error.flatten() });
+  const existing = await getChannelCredentials(channel);
+  const data = { ...existing };
+  for (const [key, value] of Object.entries(parsed.data)) {
+    if (value === undefined || (SECRET_FIELDS.has(key) && value.startsWith("••••"))) continue;
+    if (value === "") delete data[key];
+    else data[key] = value;
+  }
   await persistCredentials(channel, data);
   addEvent(channel, "API credentials updated", "Credentials saved to database.", "info");
-  return res.json({ ok: true });
+  return res.json({ ok: true, credentials: publicCredentials(data) });
 });
 
 router.delete("/channels/credentials/:channel", async (req, res) => {
   const channel = req.params.channel as string;
+  if (!CHANNELS.includes(channel as typeof CHANNELS[number])) return res.status(404).json({ error: "Unknown channel." });
   await persistCredentials(channel, {});
   addEvent(channel, "API credentials cleared", "All credentials removed.", "warning");
   return res.json({ ok: true });

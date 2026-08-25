@@ -236,7 +236,6 @@ export default function AdminFacebookPage() {
     const res = await fetch(`/api/facebook/posts/${post.id}/publish`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pageId: fbCreds.page_id, pageAccessToken: fbCreds.page_access_token }),
     });
     if (res.ok) { const updated = await res.json(); setPosts((p) => p.map((x) => x.id === post.id ? updated : x)); showToast("Post published to Facebook Page."); }
     else { const err = await res.json().catch(() => ({})); showToast(err.error || "Facebook publish failed."); }
