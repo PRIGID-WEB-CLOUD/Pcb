@@ -29,13 +29,21 @@ export const users = usersTable;
 export const adminOtpCodesTable = pgTable("admin_otp_codes", {
   id:        text("id").primaryKey(),
   email:     text("email").notNull(),
-  code:      text("code").notNull(),
+  code:      text("code").notNull(), // HMAC digest; never stores the plaintext OTP
   expiresAt: timestamp("expires_at").notNull(),
   used:      boolean("used").default(false).notNull(),
+  attempts:  integer("attempts").default(0).notNull(),
+  lockedUntil: timestamp("locked_until"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 export const adminOtpCodes = adminOtpCodesTable;
+
+export const authRateLimitsTable = pgTable("auth_rate_limits", {
+  key:         text("key").primaryKey(),
+  windowStart: timestamp("window_start").notNull(),
+  count:       integer("count").notNull().default(0),
+});
 
 // ── Sessions ──────────────────────────────────────────────────────────────────
 

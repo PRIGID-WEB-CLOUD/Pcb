@@ -11,7 +11,6 @@ export interface StoredUser {
   name: string;
   email: string;
   role: UserRole;
-  passwordHash: string;
 }
 
 declare global {
@@ -28,7 +27,6 @@ function toStoredUser(user: typeof usersTable.$inferSelect): StoredUser {
     name: user.name,
     email: user.email,
     role: user.role as UserRole,
-    passwordHash: user.passwordHash,
   };
 }
 

@@ -9,6 +9,7 @@ export default function AdminLoginPage() {
   const [email, setEmail]                 = useState("");
   const [bootstrapName, setBootstrapName] = useState("");
   const [bootstrapEmail, setBootstrapEmail] = useState("");
+  const [bootstrapSecret, setBootstrapSecret] = useState("");
   const [otp, setOtp]                     = useState(["", "", "", "", "", ""]);
   const [error, setError]                 = useState("");
   const [info, setInfo]                   = useState("");
@@ -131,7 +132,7 @@ export default function AdminLoginPage() {
     try {
       const res = await fetch("/api/auth/admin/bootstrap", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-Admin-Bootstrap-Secret": bootstrapSecret },
         body: JSON.stringify({ name: bootstrapName, email: bootstrapEmail.trim() }),
       });
       const data = await res.json();
@@ -146,6 +147,7 @@ export default function AdminLoginPage() {
       setError("");
       setInfo("Admin account created! Enter your email below to sign in.");
       setBootstrapName(""); setBootstrapEmail("");
+      setBootstrapSecret("");
     } catch {
       setError("Network error. Please check your connection and try again.");
     } finally {
@@ -285,6 +287,16 @@ export default function AdminLoginPage() {
                     placeholder="admin@luxeboutique.com"
                     className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3.5 text-sm outline-none focus:border-[#006c49] focus:ring-2 focus:ring-[#006c49]/10 transition-all placeholder:text-slate-300"
                   />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-bold uppercase tracking-widest text-[#45464d]">Setup Secret</label>
+                  <input
+                    type="password" required autoComplete="off"
+                    value={bootstrapSecret} onChange={(e) => setBootstrapSecret(e.target.value)}
+                    placeholder="Enter the server setup secret"
+                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3.5 text-sm outline-none focus:border-[#006c49] focus:ring-2 focus:ring-[#006c49]/10 transition-all placeholder:text-slate-300"
+                  />
+                  <p className="text-[11px] text-slate-500">This is the one-time secret configured by the server administrator.</p>
                 </div>
                 <button type="submit" disabled={loading || !email.trim()}
                   className="w-full bg-[#0a0f0d] text-white py-4 rounded-xl font-bold text-[12px] tracking-[0.18em] uppercase hover:bg-[#006c49] transition-all active:scale-[0.98] disabled:opacity-60 flex items-center justify-center gap-2.5 shadow-lg shadow-black/10">
