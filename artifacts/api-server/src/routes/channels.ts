@@ -40,7 +40,7 @@ const credentialSchemas = Object.fromEntries(
 ) as unknown as Record<typeof CHANNELS[number], z.ZodType<Record<string, string | undefined>>>;
 
 function encryptionKey() {
-  const secret = process.env.CREDENTIAL_ENCRYPTION_KEY ?? process.env.SESSION_SECRET;
+  const secret = process.env.CREDENTIAL_ENCRYPTION_KEY;
   if (!secret) throw new Error("CREDENTIAL_ENCRYPTION_KEY is required to encrypt channel credentials.");
   return createHash("sha256").update(secret).digest();
 }
@@ -223,32 +223,31 @@ router.put("/channels/configs/:channelId/status", async (req, res) => {
   return res.json(updated);
 });
 
-router.post("/channels/configs/:channelId/sync", async (req, res) => {
+router.post("/channels/configs/:channelId/verify", async (req, res) => {
   const channelId = req.params.channelId as string;
   const [config] = await db.select().from(channelConfigsTable).where(eq(channelConfigsTable.channelId, channelId)).limit(1);
   if (!config) return res.status(404).json({ error: "Channel not found" });
-  if (config.status !== "CONNECTED") return res.status(409).json({ error: "Only connected channels can be synchronized." });
   const startedAt = performance.now();
   try {
     const result = await verifyConnection(channelId, await getChannelCredentials(channelId));
     const latency = Math.round(performance.now() - startedAt);
     if (!result.pass) throw new Error(result.detail);
     const [updated] = await db.update(channelConfigsTable)
-      .set({ lastSync: new Date(), latency, status: "CONNECTED", updatedAt: new Date() })
+      .set({ latency, status: "CONNECTED", updatedAt: new Date() })
       .where(eq(channelConfigsTable.channelId, channelId)).returning();
-    addEvent(channelId, "Live synchronization completed", `${result.detail} (${latency}ms)`, "sync");
-    return res.json({ ...updated, account: result.account });
+    addEvent(channelId, "Connection verification passed", `${result.detail} (${latency}ms)`, "sync");
+    return res.json({ ...updated, account: result.account, operation: "connection_verification" });
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     const latency = Math.round(performance.now() - startedAt);
     await db.update(channelConfigsTable).set({ status: "DISCONNECTED", latency, updatedAt: new Date() })
       .where(eq(channelConfigsTable.channelId, channelId));
-    addEvent(channelId, "Live synchronization failed", `${detail} (${latency}ms)`, "error");
+    addEvent(channelId, "Connection verification failed", `${detail} (${latency}ms)`, "error");
     return res.status(502).json({ error: detail, latency });
   }
 });
 
-router.post("/channels/configs/sync-all", async (_req, res) => {
+router.post("/channels/configs/verify-all", async (_req, res) => {
   const connected = await db.select().from(channelConfigsTable).where(eq(channelConfigsTable.status, "CONNECTED"));
   if (connected.length === 0) {
     return res.status(409).json({
@@ -263,21 +262,21 @@ router.post("/channels/configs/sync-all", async (_req, res) => {
       const result = await verifyConnection(config.channelId, await getChannelCredentials(config.channelId));
       const latency = Math.round(performance.now() - startedAt);
       if (!result.pass) throw new Error(result.detail);
-      await db.update(channelConfigsTable).set({ lastSync: new Date(), latency, status: "CONNECTED", updatedAt: new Date() })
+      await db.update(channelConfigsTable).set({ latency, status: "CONNECTED", updatedAt: new Date() })
         .where(eq(channelConfigsTable.channelId, config.channelId));
-      addEvent(config.channelId, "Live synchronization completed", `${result.detail} (${latency}ms)`, "sync");
-      return { channelId: config.channelId, ok: true, latency, account: result.account };
+      addEvent(config.channelId, "Connection verification passed", `${result.detail} (${latency}ms)`, "sync");
+      return { channelId: config.channelId, ok: true, latency, account: result.account, operation: "connection_verification" };
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       const latency = Math.round(performance.now() - startedAt);
       await db.update(channelConfigsTable).set({ status: "DISCONNECTED", latency, updatedAt: new Date() })
         .where(eq(channelConfigsTable.channelId, config.channelId));
-      addEvent(config.channelId, "Live synchronization failed", `${detail} (${latency}ms)`, "error");
+      addEvent(config.channelId, "Connection verification failed", `${detail} (${latency}ms)`, "error");
       return { channelId: config.channelId, ok: false, latency, error: detail };
     }
   }));
   const failed = results.filter((result) => !result.ok).length;
-  addEvent("system", failed ? "Live sync-all completed with failures" : "Live sync-all completed", `${results.length - failed}/${results.length} channels synchronized.`, failed ? "warning" : "sync");
+  addEvent("system", failed ? "Connection verification completed with failures" : "Connection verification completed", `${results.length - failed}/${results.length} channels verified.`, failed ? "warning" : "sync");
   return res.status(failed ? 207 : 200).json({ ok: failed === 0 && results.length > 0, results });
 });
 

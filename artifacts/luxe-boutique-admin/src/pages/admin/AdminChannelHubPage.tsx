@@ -114,7 +114,7 @@ export default function AdminChannelHubPage() {
 
   const syncChannel = async (channelId: string) => {
     setSyncing((p) => ({ ...p, [channelId]: true }));
-    const res = await fetch(`/api/channels/configs/${channelId}/sync`, { method: "POST" });
+    const res = await fetch(`/api/channels/configs/${channelId}/verify`, { method: "POST" });
     if (res.ok) {
       const updated = await res.json();
       setConfigs((p) => p.map((c) => c.channelId === channelId ? { ...c, ...updated } : c));
@@ -127,7 +127,7 @@ export default function AdminChannelHubPage() {
   const syncAll = async () => {
     const keys = configs.filter((c) => c.status === "CONNECTED").map((c) => c.channelId);
     keys.forEach((k) => setSyncing((p) => ({ ...p, [k]: true })));
-    await fetch("/api/channels/configs/sync-all", { method: "POST" });
+    await fetch("/api/channels/configs/verify-all", { method: "POST" });
     keys.forEach((k) => setSyncing((p) => ({ ...p, [k]: false })));
     showToast("All active channels synced.");
     loadAll();
