@@ -12,6 +12,7 @@ export default function CheckoutPage() {
   const [cart, setCart]           = useState<any>(null);
   const [loading, setLoading]     = useState(true);
   const [shippingAddress, setShippingAddress] = useState("");
+  const [customerEmail, setCustomerEmail] = useState("");
   const [processing, setProcessing]   = useState(false);
   const [provider, setProvider]       = useState<"paystack" | "flutterwave">("paystack");
   const { formatPrice } = useCurrency();
@@ -93,6 +94,7 @@ export default function CheckoutPage() {
     setProcessing(true);
     try {
       sessionStorage.setItem("checkout_shipping", shippingAddress);
+      sessionStorage.setItem("checkout_email", customerEmail.trim());
       if (coupon) {
         sessionStorage.setItem("checkout_coupon", coupon.code);
         sessionStorage.setItem("checkout_discount", String(coupon.discount));
@@ -166,6 +168,17 @@ export default function CheckoutPage() {
                   rows={4}
                   placeholder="Street, city, state, postcode, country…"
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl p-5 text-sm focus:ring-1 focus:ring-slate-900 transition-all outline-none resize-none"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] uppercase tracking-widest font-bold text-slate-500">Email for Order Updates</label>
+                <input
+                  type="email"
+                  required
+                  value={customerEmail}
+                  onChange={e => setCustomerEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm focus:ring-1 focus:ring-slate-900 transition-all outline-none"
                 />
               </div>
             </section>

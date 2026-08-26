@@ -4,7 +4,7 @@ import {
   db, productsTable, categoriesTable, ordersTable, productVariantsTable,
   mediaItemsTable, blogPostsTable, couponsTable, usersTable, teamMembersTable,
 } from "@workspace/db";
-import { eq, desc, sql, like } from "drizzle-orm";
+import { and, eq, desc, sql, like, gte, gt, isNull, lt, or } from "drizzle-orm";
 import { eprolo } from "../services/eprolo";
 import { getEproloConfig } from "./eprolo";
 import { requireAdmin } from "../middleware/requireAdmin";
@@ -200,21 +200,76 @@ async function tryAutoForwardToEprolo(order: typeof ordersTable.$inferSelect, sh
   }
 }
 
-// Public checkout endpoint — no auth required (called by storefront)
+const checkoutItemSchema = z.object({
+  productId: z.string().min(1),
+  quantity: z.number().int().min(1).max(100),
+});
+const checkoutSchema = z.object({
+  customerName: z.string().trim().min(1).max(120).default("Guest"),
+  customerEmail: z.string().trim().toLowerCase().email(),
+  items: z.array(checkoutItemSchema).min(1).max(100),
+  couponCode: z.string().trim().max(64).optional(),
+  shippingAddress: z.record(z.string()).optional(),
+  paystackRef: z.string().max(200).optional(),
+});
+
+// Public checkout endpoint — no auth required (called by storefront).
+// Prices, totals, coupon discounts, and stock are always calculated here.
 router.post("/orders", async (req, res) => {
-  const { customerName, customerEmail, total, items, shippingAddress } = req.body as {
-    customerName?: string; customerEmail?: string; total?: number;
-    items?: unknown[]; shippingAddress?: Record<string, string>;
-  };
-  if (!customerEmail || !total) return res.status(400).json({ error: "customerEmail and total are required" });
-  const [order] = await db.insert(ordersTable).values({
-    id: randomUUID(),
-    customerName: customerName ?? "Guest",
-    customerEmail,
-    total: Math.round(total),
-    status: "PENDING",
-    items: (items ?? []) as OrderItem[],
-  }).returning();
+  const parsed = checkoutSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "Invalid checkout details.", details: parsed.error.flatten() });
+  const { customerName, customerEmail, items, couponCode } = parsed.data;
+
+  const order = await db.transaction(async (tx) => {
+    const authoritativeItems: Array<OrderItem & { productId: string }> = [];
+    let subtotal = 0;
+    for (const item of items) {
+      const [product] = await tx.select().from(productsTable).where(eq(productsTable.id, item.productId)).limit(1);
+      if (!product || product.status !== "ACTIVE") throw new Error(`Product ${item.productId} is unavailable.`);
+      const stockCondition = or(eq(productsTable.trackQuantity, false), gte(productsTable.stock, item.quantity));
+      const [reserved] = await tx.update(productsTable)
+        .set({ stock: product.trackQuantity ? sql`${productsTable.stock} - ${item.quantity}` : product.stock })
+        .where(and(eq(productsTable.id, product.id), stockCondition))
+        .returning();
+      if (!reserved) throw new Error(`${product.name} is out of stock or has insufficient stock.`);
+      subtotal += product.price * item.quantity;
+      authoritativeItems.push({ productId: product.id, name: product.name, qty: item.quantity, price: product.price });
+    }
+
+    let discount = 0;
+    if (couponCode) {
+      const [coupon] = await tx.select().from(couponsTable)
+        .where(eq(couponsTable.code, couponCode.toUpperCase())).limit(1);
+      if (!coupon || !coupon.active || (coupon.expiresAt && coupon.expiresAt <= new Date())) throw new Error("Coupon code not found or expired.");
+      if (coupon.maxUses != null && coupon.usedCount >= coupon.maxUses) throw new Error("Coupon usage limit reached.");
+      if (subtotal < Number(coupon.minOrderAmount)) throw new Error(`Minimum order amount is ${coupon.minOrderAmount}.`);
+      discount = coupon.discountType === "PERCENTAGE"
+        ? Math.min(subtotal, Math.floor((subtotal * Number(coupon.discountValue)) / 100))
+        : Math.min(subtotal, Number(coupon.discountValue));
+      const [redeemed] = await tx.update(couponsTable)
+        .set({ usedCount: sql`${couponsTable.usedCount} + 1`, updatedAt: new Date() })
+        .where(and(
+          eq(couponsTable.id, coupon.id),
+          eq(couponsTable.active, true),
+          or(isNull(couponsTable.expiresAt), gt(couponsTable.expiresAt, new Date())),
+          or(isNull(couponsTable.maxUses), lt(couponsTable.usedCount, couponsTable.maxUses)),
+        )).returning();
+      if (!redeemed) throw new Error("Coupon is no longer available.");
+    }
+
+    const [created] = await tx.insert(ordersTable).values({
+      id: randomUUID(),
+      customerName,
+      customerEmail,
+      total: Math.max(0, subtotal - discount),
+      status: "PENDING",
+      items: authoritativeItems,
+    }).returning();
+    return created;
+  }).catch((error) => {
+    const message = error instanceof Error ? error.message : "Unable to create order.";
+    throw Object.assign(new Error(message), { statusCode: 400 });
+  });
   eventBus.publish({ type: "new_order", payload: {
     id: order.id,
     customerName: order.customerName ?? "Guest",
@@ -225,7 +280,7 @@ router.post("/orders", async (req, res) => {
   }});
 
   // Fire-and-forget Eprolo fulfillment for dropship items
-  tryAutoForwardToEprolo(order, shippingAddress ?? {}).catch(() => {});
+  tryAutoForwardToEprolo(order, parsed.data.shippingAddress ?? {}).catch(() => {});
 
   return res.status(201).json(order);
 });

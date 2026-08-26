@@ -14,8 +14,8 @@ export default function CheckoutVerifyPage() {
     if (!reference) { setStatus("failed"); return; }
 
     const shippingAddress = sessionStorage.getItem("checkout_shipping") || "";
+    const customerEmail   = sessionStorage.getItem("checkout_email") || "";
     const couponCode      = sessionStorage.getItem("checkout_coupon") || null;
-    const discountAmount  = parseFloat(sessionStorage.getItem("checkout_discount") || "0") || 0;
 
     const run = async () => {
       try {
@@ -34,23 +34,16 @@ export default function CheckoutVerifyPage() {
         const cart    = cartRes.ok ? await cartRes.json() : null;
 
         if (cart?.items?.length) {
-          const subtotal = cart.items.reduce(
-            (acc: number, item: any) => acc + item.product.price * item.quantity,
-            0,
-          );
-          const total      = Math.max(0, subtotal - discountAmount);
           const orderItems = cart.items.map((item: any) => ({
             productId: item.productId || item.product.id,
             quantity:  item.quantity,
-            price:     item.product.price,
           }));
 
           const orderRes = await fetch("/api/orders", {
             method:  "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              total,
-              discountAmount: discountAmount || undefined,
+              customerEmail,
               couponCode:     couponCode     || undefined,
               shippingAddress,
               items: orderItems,
@@ -63,16 +56,7 @@ export default function CheckoutVerifyPage() {
             setOrderRef(order.id?.slice(0, 8).toUpperCase() ?? null);
           }
 
-          // 3. Redeem coupon (increment usedCount)
-          if (couponCode) {
-            fetch("/api/coupons/redeem", {
-              method:  "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ code: couponCode }),
-            }).catch(() => {}); // fire & forget — don't block success
-          }
-
-          // 4. Clear cart
+          // 3. Clear cart
           await fetch("/api/cart", { method: "DELETE" });
         }
 
@@ -80,6 +64,7 @@ export default function CheckoutVerifyPage() {
         sessionStorage.removeItem("checkout_shipping");
         sessionStorage.removeItem("checkout_coupon");
         sessionStorage.removeItem("checkout_discount");
+        sessionStorage.removeItem("checkout_email");
 
         setStatus("success");
       } catch {

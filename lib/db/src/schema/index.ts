@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, integer, boolean, jsonb, real, check } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, integer, boolean, jsonb, real, check, uniqueIndex } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
@@ -435,7 +435,9 @@ export const storeCartItemsTable = pgTable("store_cart_items", {
   quantity:  integer("quantity").notNull().default(1),
   product:   jsonb("product").notNull().$type<Record<string, unknown>>(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
-});
+}, (table) => [
+  uniqueIndex("store_cart_items_session_product_idx").on(table.sessionId, table.productId),
+]);
 
 export const storeWishlistItemsTable = pgTable("store_wishlist_items", {
   id:        text("id").primaryKey(),
