@@ -47,8 +47,6 @@ async function isRateLimited(key: string, limit: number, windowMs: number) {
     return false;
   }
   if (entry.count >= limit) {
-    await db.update(authRateLimitsTable).set({ count: entry.count + 1 })
-      .where(eq(authRateLimitsTable.key, key));
     return true;
   }
   await db.update(authRateLimitsTable).set({ count: entry.count + 1 })
@@ -119,6 +117,9 @@ router.get("/auth/admin/exists", async (_req, res) => {
 
 const bootstrapSchema = z.object({ name: z.string().trim().min(1).max(120), email: emailSchema });
 router.post("/auth/admin/bootstrap", validate(bootstrapSchema), async (req, res) => {
+  if (await isRateLimited(`bootstrap:ip:${req.ip}`, 5, 15 * 60 * 1000)) {
+    return res.status(429).json({ error: "Too many bootstrap attempts. Try again later." });
+  }
   const configuredSecret = process.env.ADMIN_BOOTSTRAP_SECRET;
   const providedSecret = req.get("x-admin-bootstrap-secret");
   if (!configuredSecret || !providedSecret || !safeCompare(digest(providedSecret), digest(configuredSecret))) {

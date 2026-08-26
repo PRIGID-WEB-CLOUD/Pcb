@@ -7,6 +7,24 @@ import { logger } from "./lib/logger";
 
 const app: Express = express();
 
+const configuredOrigins = (process.env.CORS_ALLOWED_ORIGINS ?? "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+const developmentOrigins = [
+  "http://localhost:3000",
+  "http://localhost:5000",
+  "http://localhost:5173",
+  process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : "",
+].filter(Boolean);
+const allowedOrigins = process.env.NODE_ENV === "production"
+  ? configuredOrigins
+  : [...new Set([...configuredOrigins, ...developmentOrigins])];
+
+if (process.env.NODE_ENV === "production" && allowedOrigins.length === 0) {
+  throw new Error("CORS_ALLOWED_ORIGINS must contain at least one HTTPS origin in production.");
+}
+
 app.use(
   pinoHttp({
     logger,
@@ -26,7 +44,13 @@ app.use(
     },
   }),
 );
-app.use(cors({ origin: true, credentials: true }));
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error("CORS origin not allowed"));
+  },
+  credentials: true,
+}));
 app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
