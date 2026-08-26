@@ -35,7 +35,7 @@ This document details all modules, packages, files, endpoints, and helpers in th
 ### Dev-Only OTP Bypass (Admin Login)
 - **Path**: `artifacts/api-server/src/routes/auth.ts`
 - **Endpoint**: `POST /api/auth/admin/request-otp`
-- **Behavior**: When running in development (not production), the response body exposes the generated OTP:
+- **Behavior**: When `NODE_ENV` is not `production` **and** `AUTH_DEV_BYPASS=true`, the response body exposes the generated OTP:
   ```typescript
   res.json({ ok: true, ...(isDev ? { devCode: code } : {}) });
   ```
@@ -44,7 +44,7 @@ This document details all modules, packages, files, endpoints, and helpers in th
 ### Dev-Only Forgot Password Token Leak
 - **Path**: `artifacts/api-server/src/routes/auth.ts`
 - **Endpoint**: `POST /api/auth/forgot-password`
-- **Behavior**: When in development, leaks the `devToken` directly to the response body:
+- **Behavior**: When `NODE_ENV` is not `production` **and** `AUTH_DEV_BYPASS=true`, leaks the `devToken` directly to the response body:
   ```typescript
   res.json({ ...ok, ...(isDev ? { devToken: token } : {}) });
   ```

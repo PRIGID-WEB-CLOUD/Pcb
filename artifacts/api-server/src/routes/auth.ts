@@ -11,6 +11,7 @@ const router = Router();
 const PASSWORD_SCHEMA = z.string().min(8).max(128);
 const emailSchema = z.string().trim().toLowerCase().email();
 const passwordSchema = z.object({ password: PASSWORD_SCHEMA });
+const devAuthBypassEnabled = process.env.NODE_ENV !== "production" && process.env.AUTH_DEV_BYPASS === "true";
 
 function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
@@ -148,7 +149,7 @@ router.post("/auth/admin/request-otp", validate(otpRequestSchema), async (req, r
     .where(and(eq(adminOtpCodesTable.email, email), eq(adminOtpCodesTable.used, false)));
   await db.delete(adminOtpCodesTable).where(lt(adminOtpCodesTable.expiresAt, new Date()));
   await db.insert(adminOtpCodesTable).values({ id: randomUUID(), email, code: otpDigest(email, code), expiresAt, used: false, attempts: 0 });
-  return res.json({ ok: true, ...(process.env.NODE_ENV !== "production" ? { devCode: code } : {}) });
+  return res.json({ ok: true, ...(devAuthBypassEnabled ? { devCode: code } : {}) });
 });
 
 const otpVerifySchema = z.object({ email: emailSchema, otp: z.string().regex(/^\d{6}$/).optional(), code: z.string().regex(/^\d{6}$/).optional() })
@@ -163,9 +164,9 @@ router.post("/auth/admin/verify-otp", validate(otpVerifySchema), async (req, res
   const valid = safeCompare(stored.code, otpDigest(email, otp));
   if (!valid) {
     const attempts = stored.attempts + 1;
-    await db.update(adminOtpCodesTable).set({ attempts, ...(attempts >= 10 ? { used: true, lockedUntil: new Date(Date.now() + 15 * 60 * 1000) } : {}) })
+    await db.update(adminOtpCodesTable).set({ attempts, ...(attempts >= 5 ? { used: true, lockedUntil: new Date(Date.now() + 15 * 60 * 1000) } : {}) })
       .where(eq(adminOtpCodesTable.id, stored.id));
-    return res.status(401).json({ error: attempts >= 10 ? "Too many failed attempts. Request a new code later." : "Invalid or expired code." });
+    return res.status(401).json({ error: attempts >= 5 ? "Too many failed attempts. Request a new code later." : "Invalid or expired code." });
   }
   await db.update(adminOtpCodesTable).set({ used: true }).where(eq(adminOtpCodesTable.id, stored.id));
   const [admin] = await db.select().from(usersTable).where(eq(usersTable.email, email)).limit(1);
@@ -184,7 +185,7 @@ router.post("/auth/forgot-password", validate(forgotSchema), async (req, res) =>
   if (!user) return res.json(ok);
   const token = randomBytes(32).toString("base64url");
   await db.update(usersTable).set({ passwordResetToken: digest(token), passwordResetExpiry: new Date(Date.now() + 60 * 60 * 1000) }).where(eq(usersTable.id, user.id));
-  return res.json({ ...ok, ...(process.env.NODE_ENV !== "production" ? { devToken: token } : {}) });
+  return res.json({ ...ok, ...(devAuthBypassEnabled ? { devToken: token } : {}) });
 });
 
 const resetSchema = z.object({ token: z.string().min(20).max(200), password: PASSWORD_SCHEMA });
