@@ -1,18 +1,17 @@
 import { Router, type Request, type Response } from "express";
 import { createHash, createHmac, randomBytes, randomInt, randomUUID, timingSafeEqual } from "crypto";
-import { db, usersTable, sessionsTable, adminOtpCodesTable, authRateLimitsTable } from "@workspace/db";
+import { db, usersTable, sessionsTable, adminOtpCodesTable, authRateLimitsTable, appSettingsTable } from "@workspace/db";
 import { eq, or, and, gt, lt, gte, count, sql } from "drizzle-orm";
 import { SESSION_COOKIE, getSessionUser, requireAdmin } from "../middleware/requireAdmin";
 import { validate } from "../middleware/validate";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
+import { sendEmail } from "../services/mailer";
 
 const router = Router();
 const PASSWORD_SCHEMA = z.string().min(8).max(128);
 const emailSchema = z.string().trim().toLowerCase().email();
 const passwordSchema = z.object({ password: PASSWORD_SCHEMA });
-const devAuthBypassEnabled = process.env.NODE_ENV !== "production" && process.env.AUTH_DEV_BYPASS === "true";
-
 function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
 }
@@ -125,12 +124,18 @@ router.post("/auth/admin/bootstrap", validate(bootstrapSchema), async (req, res)
   if (!configuredSecret || !providedSecret || !safeCompare(digest(providedSecret), digest(configuredSecret))) {
     return res.status(403).json({ error: "A valid admin bootstrap secret is required." });
   }
-  const existing = await db.select({ id: usersTable.id }).from(usersTable)
-    .where(or(eq(usersTable.role, "ADMIN"), eq(usersTable.role, "SUPER_ADMIN"))).limit(1);
-  if (existing.length) return res.status(409).json({ error: "Admin already exists." });
   const { name, email } = req.body;
-  const user = { id: randomUUID(), name, email, role: "SUPER_ADMIN", passwordHash: "" };
-  await db.insert(usersTable).values(user);
+  const user = await db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext('luxe_boutique_admin_bootstrap'))`);
+    const existing = await tx.select({ id: usersTable.id }).from(usersTable)
+      .where(or(eq(usersTable.role, "ADMIN"), eq(usersTable.role, "SUPER_ADMIN"))).limit(1);
+    if (existing.length) return null;
+    const [created] = await tx.insert(usersTable).values({
+      id: randomUUID(), name, email, role: "SUPER_ADMIN", passwordHash: "",
+    }).returning();
+    return created;
+  });
+  if (!user) return res.status(410).json({ error: "Admin bootstrap is disabled after initial setup." });
   await setSession(res, user.id);
   const { passwordHash: _, ...safe } = user;
   return res.status(201).json(safe);
@@ -150,7 +155,19 @@ router.post("/auth/admin/request-otp", validate(otpRequestSchema), async (req, r
     .where(and(eq(adminOtpCodesTable.email, email), eq(adminOtpCodesTable.used, false)));
   await db.delete(adminOtpCodesTable).where(lt(adminOtpCodesTable.expiresAt, new Date()));
   await db.insert(adminOtpCodesTable).values({ id: randomUUID(), email, code: otpDigest(email, code), expiresAt, used: false, attempts: 0 });
-  return res.json({ ok: true, ...(devAuthBypassEnabled ? { devCode: code } : {}) });
+  try {
+    await sendEmail({
+      to: email,
+      subject: "Your Luxe Boutique admin sign-in code",
+      text: `Your Luxe Boutique admin sign-in code is ${code}. It expires in 10 minutes.`,
+      html: `<p>Your Luxe Boutique admin sign-in code is:</p><p style="font-size:28px;font-weight:700;letter-spacing:8px">${code}</p><p>This code expires in 10 minutes.</p>`,
+    });
+  } catch (error) {
+    await db.update(adminOtpCodesTable).set({ used: true }).where(eq(adminOtpCodesTable.email, email));
+    console.error("[Auth] Admin OTP email failed:", error instanceof Error ? error.message : error);
+    return res.status(503).json({ error: "Unable to deliver the sign-in code. Please contact an administrator." });
+  }
+  return res.json({ ok: true });
 });
 
 const otpVerifySchema = z.object({ email: emailSchema, otp: z.string().regex(/^\d{6}$/).optional(), code: z.string().regex(/^\d{6}$/).optional() })
@@ -185,8 +202,30 @@ router.post("/auth/forgot-password", validate(forgotSchema), async (req, res) =>
   const [user] = await db.select().from(usersTable).where(eq(usersTable.email, email)).limit(1);
   if (!user) return res.json(ok);
   const token = randomBytes(32).toString("base64url");
-  await db.update(usersTable).set({ passwordResetToken: digest(token), passwordResetExpiry: new Date(Date.now() + 60 * 60 * 1000) }).where(eq(usersTable.id, user.id));
-  return res.json({ ...ok, ...(devAuthBypassEnabled ? { devToken: token } : {}) });
+  const expiry = new Date(Date.now() + 60 * 60 * 1000);
+  await db.update(usersTable).set({ passwordResetToken: digest(token), passwordResetExpiry: expiry }).where(eq(usersTable.id, user.id));
+  const [storeUrlSetting] = await db.select({ value: appSettingsTable.value })
+    .from(appSettingsTable).where(eq(appSettingsTable.key, "store_url")).limit(1);
+  const appUrl = (process.env.PUBLIC_APP_URL || process.env.APP_URL || storeUrlSetting?.value || "")
+    .split(",")[0].trim().replace(/\/$/, "");
+  if (!appUrl) {
+    await db.update(usersTable).set({ passwordResetToken: null, passwordResetExpiry: null }).where(eq(usersTable.id, user.id));
+    return res.status(503).json({ error: "Password reset email is not configured." });
+  }
+  const baseUrl = /^https?:\/\//i.test(appUrl) ? appUrl : `https://${appUrl}`;
+  try {
+    await sendEmail({
+      to: email,
+      subject: "Reset your Luxe Boutique password",
+      text: `Reset your password using this link: ${baseUrl}/reset-password?token=${token}. This link expires in one hour.`,
+      html: `<p>We received a request to reset your Luxe Boutique password.</p><p><a href="${baseUrl}/reset-password?token=${encodeURIComponent(token)}">Reset your password</a></p><p>This link expires in one hour.</p>`,
+    });
+  } catch (error) {
+    await db.update(usersTable).set({ passwordResetToken: null, passwordResetExpiry: null }).where(eq(usersTable.id, user.id));
+    console.error("[Auth] Password reset email failed:", error instanceof Error ? error.message : error);
+    return res.status(503).json({ error: "Unable to deliver the password reset email. Please try again later." });
+  }
+  return res.json(ok);
 });
 
 const resetSchema = z.object({ token: z.string().min(20).max(200), password: PASSWORD_SCHEMA });

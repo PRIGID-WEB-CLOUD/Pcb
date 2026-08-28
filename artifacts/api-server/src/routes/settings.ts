@@ -3,6 +3,7 @@ import { randomUUID } from "crypto";
 import { desc, eq } from "drizzle-orm";
 import { requireAdmin } from "../middleware/requireAdmin";
 import { eprolo } from "../services/eprolo";
+import { sendEmail } from "../services/mailer";
 import { db, apiKeysTable, appSettingsTable, providerPluginsTable } from "@workspace/db";
 
 const router = Router();
@@ -48,7 +49,19 @@ router.post("/settings/test/email", async (_req, res) => {
   if (!configured(settings).smtpConfigured) {
     return res.status(400).json({ error: "SMTP is not configured. Add SMTP credentials first." });
   }
-  return res.status(501).json({ error: "SMTP is configured, but email delivery is not enabled in this deployment." });
+  const sentTo = settings.smtp_test_email || settings.store_email || settings.smtp_user;
+  try {
+    await sendEmail({
+      to: sentTo,
+      subject: "Luxe Boutique SMTP test",
+      text: "Your Luxe Boutique SMTP settings are working.",
+      html: "<p>Your Luxe Boutique SMTP settings are working.</p>",
+    });
+    return res.json({ ok: true, sentTo });
+  } catch (error) {
+    console.error("[Settings] SMTP test failed:", error instanceof Error ? error.message : error);
+    return res.status(502).json({ error: "SMTP connection or authentication failed. Check the host, port, username, and password." });
+  }
 });
 
 router.post("/settings/test/cloudinary", async (_req, res) => {

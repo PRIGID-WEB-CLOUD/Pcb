@@ -228,7 +228,7 @@ router.post("/orders", async (req, res) => {
       if (!product || product.status !== "ACTIVE") throw new Error(`Product ${item.productId} is unavailable.`);
       const stockCondition = or(eq(productsTable.trackQuantity, false), gte(productsTable.stock, item.quantity));
       const [reserved] = await tx.update(productsTable)
-        .set({ stock: product.trackQuantity ? sql`${productsTable.stock} - ${item.quantity}` : product.stock })
+        .set({ stock: product.trackQuantity ? sql`${productsTable.stock} - ${item.quantity}` : sql`${productsTable.stock}` })
         .where(and(eq(productsTable.id, product.id), stockCondition))
         .returning();
       if (!reserved) throw new Error(`${product.name} is out of stock or has insufficient stock.`);

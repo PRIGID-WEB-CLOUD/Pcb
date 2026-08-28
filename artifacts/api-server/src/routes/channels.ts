@@ -45,11 +45,6 @@ function encryptionKey() {
   return createHash("sha256").update(secret).digest();
 }
 
-function legacyEncryptionKey() {
-  const secret = process.env.SESSION_SECRET;
-  return secret ? createHash("sha256").update(secret).digest() : null;
-}
-
 function encryptSecret(value: string) {
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", encryptionKey(), iv);
@@ -63,20 +58,13 @@ function decryptSecret(value: string) {
   const iv = Buffer.from(ivText, "base64url");
   const tag = Buffer.from(tagText, "base64url");
   const ciphertext = Buffer.from(ciphertextText, "base64url");
-  const keys = [encryptionKey()];
-  const legacyKey = legacyEncryptionKey();
-  if (legacyKey && !legacyKey.equals(keys[0])) keys.push(legacyKey);
-
-  for (const key of keys) {
-    try {
-      const decipher = createDecipheriv("aes-256-gcm", key, iv);
-      decipher.setAuthTag(tag);
-      return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
-    } catch {
-      // Try the legacy key so existing credentials survive the key separation.
-    }
+  try {
+    const decipher = createDecipheriv("aes-256-gcm", encryptionKey(), iv);
+    decipher.setAuthTag(tag);
+    return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
+  } catch {
+    throw new Error("Unable to decrypt channel credential. Verify CREDENTIAL_ENCRYPTION_KEY.");
   }
-  throw new Error("Unable to decrypt channel credential. Verify CREDENTIAL_ENCRYPTION_KEY.");
 }
 
 function maskSecret(value: string) {

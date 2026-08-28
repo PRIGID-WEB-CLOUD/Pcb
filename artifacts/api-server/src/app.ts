@@ -6,6 +6,7 @@ import router from "./routes";
 import { logger } from "./lib/logger";
 
 const app: Express = express();
+app.disable("x-powered-by");
 
 const configuredOrigins = (process.env.CORS_ALLOWED_ORIGINS ?? "")
   .split(",")
@@ -52,8 +53,8 @@ app.use(cors({
   credentials: true,
 }));
 app.use(cookieParser());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: "256kb", strict: true }));
+app.use(express.urlencoded({ extended: false, limit: "64kb", parameterLimit: 100 }));
 
 app.use("/api", router);
 

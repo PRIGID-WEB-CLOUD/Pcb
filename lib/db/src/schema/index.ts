@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, integer, boolean, jsonb, real, check, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, integer, boolean, jsonb, numeric, check, uniqueIndex, index } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
@@ -52,7 +52,10 @@ export const sessionsTable = pgTable("sessions", {
   userId:    text("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
   expiresAt: timestamp("expires_at").notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
-});
+}, (table) => [
+  index("sessions_user_id_idx").on(table.userId),
+  index("sessions_expires_at_idx").on(table.expiresAt),
+]);
 
 export type Session = typeof sessionsTable.$inferSelect;
 
@@ -98,11 +101,13 @@ export const ordersTable = pgTable("orders", {
   customerEmail: text("customer_email").notNull(),
   customerName:  text("customer_name").notNull(),
   status:        text("status").notNull().default("PENDING"),
-  total:         real("total").notNull().default(0),
+  total:         numeric("total", { precision: 12, scale: 2, mode: "number" }).notNull().default(0),
   items:         jsonb("items").notNull().$type<OrderItem[]>().default([]),
   createdAt:     timestamp("created_at").notNull().defaultNow(),
 }, (table) => [
   check("orders_status_check", sql`${table.status} in ('PENDING', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED', 'REFUNDED')`),
+  index("orders_customer_email_idx").on(table.customerEmail),
+  index("orders_status_created_at_idx").on(table.status, table.createdAt),
 ]);
 
 export type Order = typeof ordersTable.$inferSelect;
@@ -141,7 +146,10 @@ export const productVariantsTable = pgTable("product_variants", {
   price:     integer("price"),
   sku:       text("sku").notNull().default(""),
   createdAt: timestamp("created_at").notNull().defaultNow(),
-});
+}, (table) => [
+  index("product_variants_product_id_idx").on(table.productId),
+  index("product_variants_sku_idx").on(table.sku),
+]);
 
 export const reviewsTable = pgTable("reviews", {
   id:         text("id").primaryKey(),
@@ -150,7 +158,9 @@ export const reviewsTable = pgTable("reviews", {
   comment:    text("comment").notNull(),
   authorName: text("author_name").notNull(),
   createdAt:  timestamp("created_at").notNull().defaultNow(),
-});
+}, (table) => [
+  index("reviews_product_created_at_idx").on(table.productId, table.createdAt),
+]);
 
 export const mediaItemsTable = pgTable("media_items", {
   id:        text("id").primaryKey(),
@@ -178,15 +188,17 @@ export const couponsTable = pgTable("coupons", {
   code:           text("code").notNull().unique(),
   description:    text("description").notNull().default(""),
   discountType:   text("discount_type").notNull().default("PERCENTAGE"),
-  discountValue:  real("discount_value").notNull(),
-  minOrderAmount: real("min_order_amount").notNull().default(0),
+  discountValue:  numeric("discount_value", { precision: 12, scale: 2, mode: "number" }).notNull(),
+  minOrderAmount: numeric("min_order_amount", { precision: 12, scale: 2, mode: "number" }).notNull().default(0),
   maxUses:        integer("max_uses"),
   usedCount:      integer("used_count").notNull().default(0),
   active:         boolean("active").notNull().default(true),
   expiresAt:      timestamp("expires_at"),
   createdAt:      timestamp("created_at").notNull().defaultNow(),
   updatedAt:      timestamp("updated_at").notNull().defaultNow(),
-});
+}, (table) => [
+  index("coupons_active_expires_at_idx").on(table.active, table.expiresAt),
+]);
 
 export const teamMembersTable = pgTable("team_members", {
   id:             text("id").primaryKey(),
@@ -225,6 +237,7 @@ export const channelEventLogsTable = pgTable("channel_event_logs", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (table) => [
   check("channel_event_logs_type_check", sql`${table.type} in ('sync', 'error', 'warning', 'info')`),
+  index("channel_event_logs_channel_created_at_idx").on(table.channel, table.createdAt),
 ]);
 
 export const channelWebhooksTable = pgTable("channel_webhooks", {
@@ -248,8 +261,8 @@ export const facebookConnectionsTable = pgTable("facebook_connections", {
 export const facebookCatalogSettingsTable = pgTable("facebook_catalog_settings", {
   id:                 text("id").primaryKey(),
   includedCategories: jsonb("included_categories").notNull().$type<string[]>().default([]),
-  minPrice:           real("min_price").notNull().default(0),
-  maxPrice:           real("max_price").notNull().default(10000),
+  minPrice:           numeric("min_price", { precision: 12, scale: 2, mode: "number" }).notNull().default(0),
+  maxPrice:           numeric("max_price", { precision: 12, scale: 2, mode: "number" }).notNull().default(10000),
   updatedAt:          timestamp("updated_at").notNull().defaultNow(),
 });
 

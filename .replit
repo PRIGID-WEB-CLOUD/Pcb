@@ -53,7 +53,7 @@ outputType = "console"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "AUTH_DEV_BYPASS=true PORT=8000 pnpm --filter @workspace/api-server run dev"
+args = "PORT=8000 pnpm --filter @workspace/api-server run dev"
 waitForPort = 8000
 
 [[workflows.workflow]]
