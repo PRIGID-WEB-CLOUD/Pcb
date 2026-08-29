@@ -1,6 +1,0 @@
-- [Security fixes applied](security-fixes.md) — demo_ bypass removed, prices computed server-side, stock decrements on order create
-- [Background jobs](background-jobs.md) — node-cron jobs registered on server boot; logJobRun helper; GET /api/admin/jobs/runs
-- [Schema additions](schema-additions.md) — stock on products, job_runs, whatsapp_contacts, journey steps/runs, facebook_ad_metrics, tweet queue status cols
-- [Email: order confirmation](order-email.md) — sendOrderConfirmationEmail in lib/email.ts, called from orders POST (fire & forget)
-- [WhatsApp webhook opt-in](whatsapp-optin.md) — POST /whatsapp/webhook now enforces opt-in/out via whatsapp_contacts table
-- [DB tsconfig build](db-tsconfig.md) — run `pnpm exec tsc -p lib/db/tsconfig.json` before api-server tsc --noEmit; pre-existing TS7030 errors in routes are non-blocking (esbuild builds fine)
