@@ -84,6 +84,7 @@ export const productsTable = pgTable("products", {
   imageUrl:      text("image_url"),
   description:   text("description").notNull().default(""),
   tags:          text("tags"),
+  eproloProductId: text("eprolo_product_id"),
   createdAt:     timestamp("created_at").notNull().defaultNow(),
 }, (table) => [
   check("products_status_check", sql`${table.status} in ('ACTIVE', 'DRAFT', 'ARCHIVED')`),
@@ -93,19 +94,36 @@ export type Product = typeof productsTable.$inferSelect;
 
 // ── Orders ────────────────────────────────────────────────────────────────────
 
-export type OrderItem = { name: string; qty: number; price: number };
+export type AddressSnapshot = Record<string, string>;
+export type OrderItem = {
+  productId: string;
+  variantId?: string;
+  sku?: string;
+  name: string;
+  qty: number;
+  price: number;
+  eproloVariantId?: string;
+};
 
 export const ordersTable = pgTable("orders", {
   id:            text("id").primaryKey(),
-  customerId:    text("customer_id"),
+  customerId:    text("customer_id").references(() => usersTable.id, { onDelete: "set null" }),
   customerEmail: text("customer_email").notNull(),
   customerName:  text("customer_name").notNull(),
   status:        text("status").notNull().default("PENDING"),
+  paymentStatus: text("payment_status").notNull().default("PENDING"),
+  paymentProvider: text("payment_provider"),
+  paymentReference: text("payment_reference"),
+  paidAt:        timestamp("paid_at"),
   total:         numeric("total", { precision: 12, scale: 2, mode: "number" }).notNull().default(0),
   items:         jsonb("items").notNull().$type<OrderItem[]>().default([]),
+  shippingAddress: jsonb("shipping_address").$type<AddressSnapshot>(),
+  billingAddress:  jsonb("billing_address").$type<AddressSnapshot>(),
   createdAt:     timestamp("created_at").notNull().defaultNow(),
 }, (table) => [
   check("orders_status_check", sql`${table.status} in ('PENDING', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED', 'REFUNDED')`),
+  check("orders_payment_status_check", sql`${table.paymentStatus} in ('PENDING', 'PAID', 'FAILED', 'REFUNDED')`),
+  uniqueIndex("orders_payment_reference_idx").on(table.paymentReference),
   index("orders_customer_email_idx").on(table.customerEmail),
   index("orders_status_created_at_idx").on(table.status, table.createdAt),
 ]);
@@ -145,6 +163,8 @@ export const productVariantsTable = pgTable("product_variants", {
   stock:     integer("stock").notNull().default(0),
   price:     integer("price"),
   sku:       text("sku").notNull().default(""),
+  eproloProductId: text("eprolo_product_id"),
+  eproloVariantId: text("eprolo_variant_id"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (table) => [
   index("product_variants_product_id_idx").on(table.productId),
@@ -154,6 +174,7 @@ export const productVariantsTable = pgTable("product_variants", {
 export const reviewsTable = pgTable("reviews", {
   id:         text("id").primaryKey(),
   productId:  text("product_id").notNull().references(() => productsTable.id, { onDelete: "cascade" }),
+  userId:     text("user_id").references(() => usersTable.id, { onDelete: "set null" }),
   rating:     integer("rating").notNull(),
   comment:    text("comment").notNull(),
   authorName: text("author_name").notNull(),
@@ -416,7 +437,7 @@ export const apiKeysTable = pgTable("api_keys", {
   id:         text("id").primaryKey(),
   name:       text("name").notNull(),
   keyPrefix:  text("key_prefix").notNull(),
-  rawKey:     text("raw_key").notNull(),
+  keyHash:    text("key_hash").notNull(),
   createdAt:  timestamp("created_at").notNull().defaultNow(),
   lastUsed:   timestamp("last_used"),
   revokedAt:  timestamp("revoked_at"),
@@ -462,6 +483,7 @@ export const storeWishlistItemsTable = pgTable("store_wishlist_items", {
 
 export const paymentTransactionsTable = pgTable("payment_transactions", {
   id:         text("id").primaryKey(),
+  orderId:    text("order_id").references(() => ordersTable.id, { onDelete: "set null" }),
   sessionId:  text("session_id").notNull(),
   reference:  text("reference").notNull().unique(),
   status:     text("status").notNull().default("pending"),
@@ -469,6 +491,25 @@ export const paymentTransactionsTable = pgTable("payment_transactions", {
   provider:   text("provider").notNull(),
   email:      text("email").notNull(),
   callbackUrl: text("callback_url"),
+  metadata:   jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
   createdAt:  timestamp("created_at").notNull().defaultNow(),
   verifiedAt: timestamp("verified_at"),
+  updatedAt:  timestamp("updated_at").notNull().defaultNow(),
 });
+
+export const orderItemsTable = pgTable("order_items", {
+  id:              text("id").primaryKey(),
+  orderId:         text("order_id").notNull().references(() => ordersTable.id, { onDelete: "cascade" }),
+  productId:       text("product_id").notNull().references(() => productsTable.id, { onDelete: "restrict" }),
+  variantId:       text("variant_id"),
+  sku:             text("sku").notNull().default(""),
+  productName:     text("product_name").notNull(),
+  unitPrice:       integer("unit_price").notNull(),
+  quantity:        integer("quantity").notNull(),
+  total:           integer("total").notNull(),
+  eproloVariantId: text("eprolo_variant_id"),
+  createdAt:       timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("order_items_order_id_idx").on(table.orderId),
+  index("order_items_product_id_idx").on(table.productId),
+]);

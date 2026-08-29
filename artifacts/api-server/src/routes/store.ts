@@ -1,18 +1,37 @@
-import { Router } from "express";
-import { randomUUID } from "crypto";
+import { Router, type Request, type Response } from "express";
+import { createHmac, randomBytes, randomUUID, timingSafeEqual } from "crypto";
 import {
   db, productsTable, categoriesTable, ordersTable, productVariantsTable,
   mediaItemsTable, blogPostsTable, couponsTable, usersTable, teamMembersTable,
+  paymentTransactionsTable, orderItemsTable, appSettingsTable, providerPluginsTable,
+  type AddressSnapshot, type OrderItem,
 } from "@workspace/db";
 import { and, eq, desc, sql, like, gte, gt, isNull, lt, or } from "drizzle-orm";
 import { eprolo } from "../services/eprolo";
 import { getEproloConfig } from "./eprolo";
-import { requireAdmin } from "../middleware/requireAdmin";
+import { getSessionUser, requireAdmin } from "../middleware/requireAdmin";
 import { validate } from "../middleware/validate";
 import { z } from "zod";
 import { eventBus } from "../lib/eventBus";
+import { decryptCredential } from "../services/credentialVault";
 
 const router = Router();
+const CART_COOKIE = "luxe_cart";
+
+async function checkoutSessionId(req: Request, res: Response) {
+  const user = await getSessionUser(req);
+  if (user) return `user:${user.id}`;
+  const existing = req.cookies?.[CART_COOKIE] as string | undefined;
+  if (existing && /^[A-Za-z0-9_-]{40,}$/.test(existing)) return `anon:${existing}`;
+  const token = randomBytes(32).toString("base64url");
+  res.cookie(CART_COOKIE, token, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    maxAge: 180 * 24 * 60 * 60 * 1000,
+  });
+  return `anon:${token}`;
+}
 
 // ── Products ──────────────────────────────────────────────────────────────────
 
@@ -39,10 +58,25 @@ const productSchema = z.object({
   imageUrl:      z.string().optional().nullable(),
   description:   z.string().optional().default(""),
   tags:          z.string().optional().nullable(),
+  eproloProductId: z.string().trim().max(200).optional().nullable(),
+});
+
+const variantSchema = z.object({
+  size: z.string().trim().max(100).optional(),
+  color: z.string().trim().max(100).optional(),
+  stock: z.number().int().min(0).optional(),
+  price: z.number().int().min(0).nullable().optional(),
+  sku: z.string().trim().max(100).optional(),
+  eproloProductId: z.string().trim().max(200).nullable().optional(),
+  eproloVariantId: z.string().trim().max(200).nullable().optional(),
 });
 
 router.get("/products", async (_req, res) => {
-  const prods = await db.select().from(productsTable).orderBy(desc(productsTable.createdAt));
+  const user = await getSessionUser(_req);
+  const canManage = user && (user.role === "ADMIN" || user.role === "SUPER_ADMIN");
+  const prods = await db.select().from(productsTable)
+    .where(canManage ? undefined : eq(productsTable.status, "ACTIVE"))
+    .orderBy(desc(productsTable.createdAt));
   const enriched = await Promise.all(prods.map(enrichProduct));
   res.json(enriched);
 });
@@ -55,7 +89,12 @@ router.post("/products", requireAdmin, validate(productSchema), async (req, res)
 
 router.get("/products/:id", async (req, res) => {
   const productId = req.params.id as string;
-  const rows = await db.select().from(productsTable).where(eq(productsTable.id, productId)).limit(1);
+  const user = await getSessionUser(req);
+  const canManage = user && (user.role === "ADMIN" || user.role === "SUPER_ADMIN");
+  const rows = await db.select().from(productsTable).where(and(
+    eq(productsTable.id, productId),
+    ...(canManage ? [] : [eq(productsTable.status, "ACTIVE")]),
+  )).limit(1);
   if (!rows[0]) return res.status(404).json({ error: "Product not found" });
   return res.json(await enrichProduct(rows[0]));
 });
@@ -104,36 +143,41 @@ router.post("/products/:id/variants", requireAdmin, async (req, res) => {
   const productId = req.params.id as string;
   const rows = await db.select().from(productsTable).where(eq(productsTable.id, productId)).limit(1);
   if (!rows[0]) return res.status(404).json({ error: "Product not found" });
+  const parsed = variantSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "Invalid variant fields.", details: parsed.error.flatten() });
   const [variant] = await db.insert(productVariantsTable).values({
     id: randomUUID(),
     productId,
-    size: req.body.size ?? "",
-    color: req.body.color ?? "",
-    stock: Number(req.body.stock ?? 0),
-    price: req.body.price == null ? null : Number(req.body.price),
-    sku: req.body.sku ?? "",
+    size: parsed.data.size ?? "",
+    color: parsed.data.color ?? "",
+    stock: parsed.data.stock ?? 0,
+    price: parsed.data.price ?? null,
+    sku: parsed.data.sku ?? "",
+    eproloProductId: parsed.data.eproloProductId ?? null,
+    eproloVariantId: parsed.data.eproloVariantId ?? null,
   }).returning();
   return res.status(201).json(variant);
 });
 
 router.put("/products/:id/variants/:variantId", requireAdmin, async (req, res) => {
+  const productId = req.params.id as string;
   const variantId = req.params.variantId as string;
-  const updates: Record<string, unknown> = {};
-  for (const key of ["size", "color", "stock", "price", "sku"]) {
-    if (key in req.body) updates[key] = key === "stock" || key === "price"
-      ? (req.body[key] == null ? null : Number(req.body[key]))
-      : req.body[key];
-  }
+  const parsed = variantSchema.partial().safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "Invalid variant fields.", details: parsed.error.flatten() });
+  const updates: Record<string, unknown> = parsed.data;
   const [updated] = await db.update(productVariantsTable)
     .set(updates)
-    .where(eq(productVariantsTable.id, variantId))
+    .where(and(eq(productVariantsTable.id, variantId), eq(productVariantsTable.productId, productId)))
     .returning();
   if (!updated) return res.status(404).json({ error: "Variant not found" });
   return res.json(updated);
 });
 
 router.delete("/products/:id/variants/:variantId", requireAdmin, async (req, res) => {
-  await db.delete(productVariantsTable).where(eq(productVariantsTable.id, req.params.variantId as string));
+  await db.delete(productVariantsTable).where(and(
+    eq(productVariantsTable.id, req.params.variantId as string),
+    eq(productVariantsTable.productId, req.params.id as string),
+  ));
   return res.json({ ok: true });
 });
 
@@ -153,136 +197,321 @@ router.get("/orders/:id", requireAdmin, async (req, res) => {
   return res.json(rows[0]);
 });
 
-// ── Eprolo auto-fulfillment helper ───────────────────────────────────────────
-async function tryAutoForwardToEprolo(order: typeof ordersTable.$inferSelect, shippingAddress: Record<string, string>) {
-  const cfg = await getEproloConfig();
-  if (!cfg) return;
+// ── Payments and checkout lifecycle ──────────────────────────────────────────
+type CheckoutAddress = AddressSnapshot;
+type PendingCheckout = {
+  customerName: string;
+  customerEmail: string;
+  items: Array<{ productId: string; quantity: number; price: number; name: string }>;
+  couponCode?: string;
+  shippingAddress: CheckoutAddress;
+  billingAddress?: CheckoutAddress;
+};
 
-  const items = Array.isArray(order.items) ? order.items as Array<{ productId?: string; id?: string; quantity?: number }> : [];
-  const productIds = items.map(i => i.productId ?? i.id).filter(Boolean) as string[];
-  if (!productIds.length) return;
-
-  const eproloProducts = await db.select()
-    .from(productsTable)
-    .where(like(productsTable.tags, "%eprolo%"));
-
-  const eproloProductIds = new Set(eproloProducts.map(p => p.id));
-  const eproloItems = items.filter(i => eproloProductIds.has(i.productId ?? i.id ?? ""));
-
-  if (!eproloItems.length) return;
-
-  try {
-    const fulfillmentItems = eproloItems.map(i => ({
-      variantId: i.productId ?? i.id ?? "",
-      quantity: i.quantity ?? 1,
-    }));
-
-    const addr = shippingAddress;
-    const eproloOrderId = await eprolo.createOrder(cfg, {
-      orderId: order.id,
-      customer: {
-        name:         addr.name        || order.customerName || "Valued Customer",
-        phone:        addr.phone       || "0000000000",
-        address:      addr.address     || addr.line1 || "N/A",
-        city:         addr.city        || "New York",
-        province:     addr.state       || "New York",
-        provinceCode: addr.stateCode   || addr.state || "NY",
-        postCode:     addr.postalCode  || "10001",
-        country:      addr.country     || "United States",
-        countryCode:  addr.countryCode || "US",
-      },
-      items: fulfillmentItems,
-    });
-
-    console.log(`[Eprolo] Auto-forwarded order ${order.id} → Eprolo order ${eproloOrderId}`);
-  } catch (err) {
-    console.error(`[Eprolo] Auto-forward failed for order ${order.id}:`, err instanceof Error ? err.message : err);
-  }
-}
-
+const checkoutAddressSchema = z.record(z.string().trim().min(1).max(200));
 const checkoutItemSchema = z.object({
-  productId: z.string().min(1),
+  productId: z.string().trim().min(1).max(200),
   quantity: z.number().int().min(1).max(100),
 });
 const checkoutSchema = z.object({
   customerName: z.string().trim().min(1).max(120).default("Guest"),
   customerEmail: z.string().trim().toLowerCase().email(),
-  items: z.array(checkoutItemSchema).min(1).max(100),
+  items: z.array(checkoutItemSchema).min(1).max(100).optional(),
   couponCode: z.string().trim().max(64).optional(),
-  shippingAddress: z.record(z.string()).optional(),
-  paystackRef: z.string().max(200).optional(),
+  shippingAddress: z.union([z.string().trim().min(10).max(1000), checkoutAddressSchema]),
+  billingAddress: checkoutAddressSchema.optional(),
+  paystackRef: z.string().trim().max(200).optional(),
+});
+const paymentInitializeSchema = z.object({
+  customerName: z.string().trim().min(1).max(120).default("Guest"),
+  customerEmail: z.string().trim().toLowerCase().email(),
+  provider: z.literal("paystack").default("paystack"),
+  couponCode: z.string().trim().max(64).optional(),
+  shippingAddress: z.union([z.string().trim().min(10).max(1000), checkoutAddressSchema]),
+  billingAddress: checkoutAddressSchema.optional(),
+  callbackUrl: z.string().url().max(1000),
 });
 
-// Public checkout endpoint — no auth required (called by storefront).
-// Prices, totals, coupon discounts, and stock are always calculated here.
-router.post("/orders", async (req, res) => {
-  const parsed = checkoutSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: "Invalid checkout details.", details: parsed.error.flatten() });
-  const { customerName, customerEmail, items, couponCode } = parsed.data;
+function addressSnapshot(value: string | Record<string, string>): CheckoutAddress {
+  return typeof value === "string" ? { address: value.trim() } : Object.fromEntries(
+    Object.entries(value).map(([key, item]) => [key, item.trim()]).filter(([, item]) => item),
+  );
+}
 
+async function paymentSetting(key: string) {
+  const [row] = await db.select({ value: appSettingsTable.value })
+    .from(appSettingsTable).where(eq(appSettingsTable.key, key)).limit(1);
+  return row?.value ? decryptCredential(row.value) : null;
+}
+
+async function findUsableCouponForCheckout(code: string, subtotal: number) {
+  const [coupon] = await db.select().from(couponsTable)
+    .where(eq(couponsTable.code, code.trim().toUpperCase())).limit(1);
+  if (!coupon || !coupon.active || (coupon.expiresAt && coupon.expiresAt <= new Date())) {
+    return { error: "Coupon code not found or expired." } as const;
+  }
+  if (coupon.maxUses != null && coupon.usedCount >= coupon.maxUses) {
+    return { error: "Coupon usage limit reached." } as const;
+  }
+  if (subtotal < Number(coupon.minOrderAmount)) {
+    return { error: `Minimum order amount is ${coupon.minOrderAmount}.` } as const;
+  }
+  const discount = coupon.discountType === "PERCENTAGE"
+    ? Math.min(subtotal, Math.floor((subtotal * Number(coupon.discountValue)) / 100))
+    : Math.min(subtotal, Number(coupon.discountValue));
+  return { coupon, discount } as const;
+}
+
+async function paystackSecret() {
+  const configured = await paymentSetting("paystack_secret_key");
+  if (configured) return configured;
+  const [provider] = await db.select().from(providerPluginsTable)
+    .where(eq(providerPluginsTable.name, "paystack")).limit(1);
+  return provider?.apiKey ? decryptCredential(provider.apiKey) : null;
+}
+
+async function paystackCurrency() {
+  const configured = await paymentSetting("store_currency");
+  return configured && ["GHS", "NGN", "USD", "ZAR", "KES"].includes(configured.toUpperCase())
+    ? configured.toUpperCase()
+    : "USD";
+}
+
+async function paystackRequest(path: string, init: RequestInit = {}) {
+  const secret = await paystackSecret();
+  if (!secret) throw Object.assign(new Error("Paystack is not configured. Add a Paystack secret key in admin settings."), { statusCode: 503 });
+  const response = await fetch(`https://api.paystack.co${path}`, {
+    ...init,
+    headers: { Authorization: `Bearer ${secret}`, "Content-Type": "application/json", ...(init.headers ?? {}) },
+    signal: AbortSignal.timeout(15_000),
+  });
+  const body = await response.json().catch(() => ({})) as { status?: boolean; message?: string; data?: Record<string, unknown> };
+  if (!response.ok || body.status !== true) {
+    throw Object.assign(new Error(body.message || "Paystack request failed."), { statusCode: 502 });
+  }
+  return body.data ?? {};
+}
+
+function validPaystackSignature(rawBody: string, received: string, secret: string) {
+  const expected = createHmac("sha512", secret).update(rawBody).digest("hex");
+  const left = Buffer.from(expected, "hex");
+  const right = Buffer.from(received, "hex");
+  return left.length === right.length && timingSafeEqual(left, right);
+}
+
+function paymentReference(data: Record<string, unknown>) {
+  return typeof data.reference === "string" ? data.reference : null;
+}
+
+async function tryAutoForwardToEprolo(order: typeof ordersTable.$inferSelect) {
+  if (order.paymentStatus !== "PAID") return;
+  const cfg = await getEproloConfig();
+  if (!cfg) return;
+  const address = order.shippingAddress;
+  if (!address || !address.name || !address.phone || !(address.address || address.line1) || !address.city ||
+      !(address.state || address.province) || !(address.postalCode || address.postCode) ||
+      !address.country || !address.countryCode) {
+    console.warn(`[Eprolo] Skipping order ${order.id}: complete shipping address is required.`);
+    return;
+  }
+  const items = Array.isArray(order.items) ? order.items : [];
+  const fulfillmentItems = items
+    .filter((item) => item.eproloVariantId && item.qty > 0)
+    .map((item) => ({ variantId: item.eproloVariantId!, quantity: item.qty }));
+  if (!fulfillmentItems.length) return;
+
+  try {
+    const eproloOrderId = await eprolo.createOrder(cfg, {
+      orderId: order.id,
+      customer: {
+        name: address.name,
+        phone: address.phone,
+        address: address.address || address.line1,
+        city: address.city,
+        province: address.state || address.province,
+        provinceCode: address.stateCode || address.provinceCode || address.state || address.province,
+        postCode: address.postalCode || address.postCode,
+        country: address.country,
+        countryCode: address.countryCode,
+      },
+      items: fulfillmentItems,
+    });
+    console.log(`[Eprolo] Auto-forwarded paid order ${order.id} → Eprolo order ${eproloOrderId}`);
+  } catch (err) {
+    console.error(`[Eprolo] Auto-forward failed for paid order ${order.id}:`, err instanceof Error ? err.message : err);
+  }
+}
+
+async function finalizePaidTransaction(reference: string, gatewayData: Record<string, unknown>) {
   const order = await db.transaction(async (tx) => {
-    const authoritativeItems: Array<OrderItem & { productId: string }> = [];
+    const [transaction] = await tx.select().from(paymentTransactionsTable)
+      .where(eq(paymentTransactionsTable.reference, reference)).limit(1);
+    if (!transaction) throw Object.assign(new Error("Payment transaction not found."), { statusCode: 404 });
+    if (transaction.status === "failed") throw Object.assign(new Error("This payment transaction has failed."), { statusCode: 409 });
+    if (transaction.orderId) {
+      const [existingOrder] = await tx.select().from(ordersTable).where(eq(ordersTable.id, transaction.orderId)).limit(1);
+      if (existingOrder) return existingOrder;
+    }
+    if (gatewayData.status !== "success") {
+      await tx.update(paymentTransactionsTable).set({ status: "failed", updatedAt: new Date() })
+        .where(eq(paymentTransactionsTable.id, transaction.id));
+      throw Object.assign(new Error("Payment was not successful."), { statusCode: 402 });
+    }
+    if (Number(gatewayData.amount) !== transaction.amount) {
+      throw Object.assign(new Error("Payment amount does not match the checkout total."), { statusCode: 400 });
+    }
+
+    const metadata = transaction.metadata as PendingCheckout;
+    const authoritativeItems: OrderItem[] = [];
     let subtotal = 0;
-    for (const item of items) {
-      const [product] = await tx.select().from(productsTable).where(eq(productsTable.id, item.productId)).limit(1);
-      if (!product || product.status !== "ACTIVE") throw new Error(`Product ${item.productId} is unavailable.`);
+    for (const item of metadata.items) {
+      const [product] = await tx.select().from(productsTable)
+        .where(and(eq(productsTable.id, item.productId), eq(productsTable.status, "ACTIVE"))).limit(1);
+      if (!product) throw Object.assign(new Error(`Product ${item.productId} is no longer available.`), { statusCode: 409 });
       const stockCondition = or(eq(productsTable.trackQuantity, false), gte(productsTable.stock, item.quantity));
       const [reserved] = await tx.update(productsTable)
         .set({ stock: product.trackQuantity ? sql`${productsTable.stock} - ${item.quantity}` : sql`${productsTable.stock}` })
-        .where(and(eq(productsTable.id, product.id), stockCondition))
-        .returning();
-      if (!reserved) throw new Error(`${product.name} is out of stock or has insufficient stock.`);
-      subtotal += product.price * item.quantity;
-      authoritativeItems.push({ productId: product.id, name: product.name, qty: item.quantity, price: product.price });
+        .where(and(eq(productsTable.id, product.id), stockCondition)).returning();
+      if (!reserved) throw Object.assign(new Error(`${product.name} is out of stock or has insufficient stock.`), { statusCode: 409 });
+      subtotal += item.price * item.quantity;
+      authoritativeItems.push({ productId: product.id, name: product.name, qty: item.quantity, price: item.price });
     }
 
     let discount = 0;
-    if (couponCode) {
+    if (metadata.couponCode) {
       const [coupon] = await tx.select().from(couponsTable)
-        .where(eq(couponsTable.code, couponCode.toUpperCase())).limit(1);
-      if (!coupon || !coupon.active || (coupon.expiresAt && coupon.expiresAt <= new Date())) throw new Error("Coupon code not found or expired.");
-      if (coupon.maxUses != null && coupon.usedCount >= coupon.maxUses) throw new Error("Coupon usage limit reached.");
-      if (subtotal < Number(coupon.minOrderAmount)) throw new Error(`Minimum order amount is ${coupon.minOrderAmount}.`);
+        .where(eq(couponsTable.code, metadata.couponCode.toUpperCase())).limit(1);
+      if (!coupon || !coupon.active || (coupon.expiresAt && coupon.expiresAt <= new Date()) ||
+          (coupon.maxUses != null && coupon.usedCount >= coupon.maxUses) ||
+          subtotal < Number(coupon.minOrderAmount)) {
+        throw Object.assign(new Error("The paid checkout coupon is no longer valid; payment requires manual review."), { statusCode: 409 });
+      }
       discount = coupon.discountType === "PERCENTAGE"
         ? Math.min(subtotal, Math.floor((subtotal * Number(coupon.discountValue)) / 100))
         : Math.min(subtotal, Number(coupon.discountValue));
       const [redeemed] = await tx.update(couponsTable)
         .set({ usedCount: sql`${couponsTable.usedCount} + 1`, updatedAt: new Date() })
-        .where(and(
-          eq(couponsTable.id, coupon.id),
-          eq(couponsTable.active, true),
+        .where(and(eq(couponsTable.id, coupon.id), eq(couponsTable.active, true),
           or(isNull(couponsTable.expiresAt), gt(couponsTable.expiresAt, new Date())),
-          or(isNull(couponsTable.maxUses), lt(couponsTable.usedCount, couponsTable.maxUses)),
-        )).returning();
-      if (!redeemed) throw new Error("Coupon is no longer available.");
+          or(isNull(couponsTable.maxUses), lt(couponsTable.usedCount, coupon.maxUses)))).returning();
+      if (!redeemed) throw Object.assign(new Error("The paid checkout coupon is no longer available; payment requires manual review."), { statusCode: 409 });
     }
 
+    const expectedAmount = Math.max(0, subtotal - discount) * 100;
+    if (expectedAmount !== transaction.amount) {
+      throw Object.assign(new Error("The catalog total changed after payment; payment requires manual review."), { statusCode: 409 });
+    }
     const [created] = await tx.insert(ordersTable).values({
       id: randomUUID(),
-      customerName,
-      customerEmail,
+      customerName: metadata.customerName,
+      customerEmail: metadata.customerEmail,
       total: Math.max(0, subtotal - discount),
-      status: "PENDING",
+      status: "PROCESSING",
+      paymentStatus: "PAID",
+      paymentProvider: transaction.provider,
+      paymentReference: transaction.reference,
+      paidAt: new Date(),
       items: authoritativeItems,
+      shippingAddress: metadata.shippingAddress,
+      billingAddress: metadata.billingAddress,
     }).returning();
+    await tx.insert(orderItemsTable).values(authoritativeItems.map((item) => ({
+      id: randomUUID(),
+      orderId: created.id,
+      productId: item.productId,
+      variantId: item.variantId ?? null,
+      sku: item.sku ?? "",
+      productName: item.name,
+      unitPrice: item.price,
+      quantity: item.qty,
+      total: item.price * item.qty,
+      eproloVariantId: item.eproloVariantId ?? null,
+    })));
+    await tx.update(paymentTransactionsTable).set({
+      status: "paid", orderId: created.id, verifiedAt: new Date(), updatedAt: new Date(),
+    }).where(eq(paymentTransactionsTable.id, transaction.id));
     return created;
-  }).catch((error) => {
-    const message = error instanceof Error ? error.message : "Unable to create order.";
-    throw Object.assign(new Error(message), { statusCode: 400 });
   });
+
   eventBus.publish({ type: "new_order", payload: {
-    id: order.id,
-    customerName: order.customerName ?? "Guest",
-    customerEmail: order.customerEmail,
-    total: order.total,
-    status: order.status,
-    createdAt: order.createdAt.toISOString(),
+    id: order.id, customerName: order.customerName, customerEmail: order.customerEmail,
+    total: order.total, status: order.status, createdAt: order.createdAt.toISOString(),
   }});
+  void tryAutoForwardToEprolo(order);
+  return order;
+}
 
-  // Fire-and-forget Eprolo fulfillment for dropship items
-  tryAutoForwardToEprolo(order, parsed.data.shippingAddress ?? {}).catch(() => {});
+async function verifyPaystackReference(reference: string) {
+  return paystackRequest(`/transaction/verify/${encodeURIComponent(reference)}`);
+}
 
-  return res.status(201).json(order);
+router.post("/payments/initialize", async (req, res) => {
+  const parsed = paymentInitializeSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "A valid email, shipping address, and callback URL are required.", details: parsed.error.flatten() });
+  const sid = await checkoutSessionId(req, res);
+  const cart = await cartPricing(sid);
+  if ("error" in cart || !cart.items.length) return res.status(400).json({ error: "Your cart is empty or contains unavailable products." });
+  const coupon = parsed.data.couponCode ? await findUsableCouponForCheckout(parsed.data.couponCode, cart.subtotal) : null;
+  if (coupon && "error" in coupon) return res.status(400).json({ error: coupon.error });
+  const discount = coupon && !("error" in coupon) ? coupon.discount : 0;
+  const metadata: PendingCheckout = {
+    customerName: parsed.data.customerName,
+    customerEmail: parsed.data.customerEmail,
+    items: cart.items.map((item) => ({ productId: item.productId, quantity: item.quantity, price: item.price, name: item.name })),
+    couponCode: coupon && !("error" in coupon) ? coupon.coupon.code : undefined,
+    shippingAddress: addressSnapshot(parsed.data.shippingAddress),
+    billingAddress: parsed.data.billingAddress,
+  };
+  const amount = Math.max(0, cart.subtotal - discount) * 100;
+  const reference = `LUXE_${Date.now()}_${randomBytes(6).toString("hex")}`;
+  await db.insert(paymentTransactionsTable).values({
+    id: randomUUID(), sessionId: sid, reference, status: "pending", amount,
+    provider: "paystack", email: parsed.data.customerEmail, callbackUrl: parsed.data.callbackUrl, metadata,
+  });
+  try {
+    const data = await paystackRequest("/transaction/initialize", {
+      method: "POST",
+      body: JSON.stringify({ email: parsed.data.customerEmail, amount, currency: await paystackCurrency(), reference, callback_url: parsed.data.callbackUrl }),
+    });
+    return res.status(201).json({ status: true, data: { ...data, reference } });
+  } catch (error) {
+    await db.update(paymentTransactionsTable).set({ status: "failed", updatedAt: new Date() }).where(eq(paymentTransactionsTable.reference, reference));
+    throw error;
+  }
+});
+
+router.get("/payments/verify/:reference", async (req, res) => {
+  const reference = z.string().trim().min(1).max(200).safeParse(req.params.reference);
+  if (!reference.success) return res.status(400).json({ error: "Invalid payment reference." });
+  const data = await verifyPaystackReference(reference.data);
+  const order = await finalizePaidTransaction(reference.data, data);
+  return res.json({ status: true, data, order });
+});
+
+router.post("/payments/webhook/paystack", async (req, res) => {
+  const secret = await paystackSecret();
+  const signature = req.get("x-paystack-signature");
+  const rawBody = (req as typeof req & { rawBody?: string }).rawBody ?? JSON.stringify(req.body);
+  if (!secret || !signature || !validPaystackSignature(rawBody, signature, secret)) {
+    return res.status(401).json({ error: "Invalid webhook signature." });
+  }
+  const event = req.body as { event?: string; data?: Record<string, unknown> };
+  const reference = event.event === "charge.success" ? paymentReference(event.data ?? {}) : null;
+  if (!reference) return res.json({ received: true });
+  const order = await finalizePaidTransaction(reference, event.data ?? {});
+  return res.json({ received: true, orderId: order.id });
+});
+
+// Order creation is payment-gated. Legacy clients may call this after redirect;
+// the payment reference is verified again and the idempotent finalizer is used.
+router.post("/orders", async (req, res) => {
+  const parsed = checkoutSchema.safeParse(req.body);
+  if (!parsed.success || !parsed.data.paystackRef) {
+    return res.status(402).json({ error: "Complete payment before creating an order." });
+  }
+  const data = await verifyPaystackReference(parsed.data.paystackRef);
+  const order = await finalizePaidTransaction(parsed.data.paystackRef, data);
+  return res.status(200).json(order);
 });
 
 router.put("/orders/:id", requireAdmin, async (req, res) => {
