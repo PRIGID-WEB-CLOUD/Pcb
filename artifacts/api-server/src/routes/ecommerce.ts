@@ -209,9 +209,6 @@ router.post("/coupons/redeem", async (req, res) => {
   return res.json({ ok: true, code: redeemed.code, discount });
 });
 
-router.post("/payments/initialize", (_req, res) => res.status(501).json({ error: "Payment provider is not configured. Connect Paystack, Flutterwave, or Stripe in admin settings." }));
-router.get("/payments/verify/:reference", (_req, res) => res.status(501).json({ error: "Payment provider is not configured." }));
-
 router.get("/reviews", async (req, res) => {
   const productId = req.query.productId as string | undefined;
   const rows = productId
@@ -227,8 +224,15 @@ router.post("/reviews", async (req, res) => {
   if (!parsed.success) return res.status(400).json({ error: "Product, rating, and a review of 1–2000 characters are required." });
   const product = await productSnapshot(parsed.data.productId);
   if (!product) return res.status(404).json({ error: "Product not found" });
+  const [purchased] = await db.select({ id: ordersTable.id }).from(ordersTable)
+    .where(and(
+      eq(ordersTable.paymentStatus, "PAID"),
+      or(eq(ordersTable.customerId, user.id), eq(ordersTable.customerEmail, user.email)),
+      sql`${ordersTable.items} @> ${JSON.stringify([{ productId: parsed.data.productId }])}::jsonb`,
+    )).limit(1);
+  if (!purchased) return res.status(403).json({ error: "You can review products only after a verified purchase." });
   const [review] = await db.insert(reviewsTable).values({
-    id: randomUUID(), productId: parsed.data.productId, rating: parsed.data.rating,
+    id: randomUUID(), productId: parsed.data.productId, userId: user.id, rating: parsed.data.rating,
     comment: parsed.data.comment, authorName: user.name,
   }).returning();
   return res.status(201).json(review);

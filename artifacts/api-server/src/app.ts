@@ -53,7 +53,13 @@ app.use(cors({
   credentials: true,
 }));
 app.use(cookieParser());
-app.use(express.json({ limit: "256kb", strict: true }));
+app.use(express.json({
+  limit: "256kb",
+  strict: true,
+  verify: (req, _res, buffer) => {
+    (req as express.Request & { rawBody?: string }).rawBody = buffer.toString("utf8");
+  },
+}));
 app.use(express.urlencoded({ extended: false, limit: "64kb", parameterLimit: 100 }));
 
 app.use("/api", router);

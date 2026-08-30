@@ -4,6 +4,7 @@ import { requireAdmin } from "../middleware/requireAdmin";
 import { eprolo, type EproloConfig } from "../services/eprolo";
 import { db, productsTable, categoriesTable, providerPluginsTable } from "@workspace/db";
 import { eq, like, and } from "drizzle-orm";
+import { decryptCredential } from "../services/credentialVault";
 
 const router = Router();
 
@@ -11,7 +12,7 @@ export async function getEproloConfig(): Promise<EproloConfig | null> {
   const [provider] = await db.select().from(providerPluginsTable)
     .where(eq(providerPluginsTable.name, "eprolo")).limit(1);
   if (!provider?.apiKey || !provider.apiSecret) return null;
-  return { apiKey: provider.apiKey, apiSecret: provider.apiSecret };
+  return { apiKey: decryptCredential(provider.apiKey), apiSecret: decryptCredential(provider.apiSecret) };
 }
 
 async function requireConfig(res: import("express").Response): Promise<EproloConfig | null> {
@@ -107,6 +108,7 @@ router.post("/eprolo/import", requireAdmin, async (req, res) => {
       trackQuantity: true,
       stock:       100,
       tags:        "eprolo,dropship",
+      eproloProductId: String(product.productid || product.id || ""),
     }).returning();
 
     return res.status(201).json({ ok: true, product: newProduct, message: `"${newProduct.name}" added to staging for review before publishing.` });

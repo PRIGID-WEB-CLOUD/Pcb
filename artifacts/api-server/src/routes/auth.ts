@@ -57,7 +57,7 @@ async function setSession(res: Response, userId: string) {
   const token = randomBytes(32).toString("base64url");
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
   await db.delete(sessionsTable).where(eq(sessionsTable.userId, userId));
-  await db.insert(sessionsTable).values({ token, userId, expiresAt });
+  await db.insert(sessionsTable).values({ token: digest(token), userId, expiresAt });
   res.cookie(SESSION_COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
@@ -69,7 +69,7 @@ async function setSession(res: Response, userId: string) {
 
 async function clearSession(req: Request, res: Response) {
   const token = req.cookies?.[SESSION_COOKIE] as string | undefined;
-  if (token) await db.delete(sessionsTable).where(eq(sessionsTable.token, token));
+  if (token) await db.delete(sessionsTable).where(eq(sessionsTable.token, digest(token)));
   res.clearCookie(SESSION_COOKIE, { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production" });
 }
 
@@ -82,6 +82,10 @@ router.get("/auth/me", async (req, res) => {
 
 router.post("/auth/register", validate(registerSchema), async (req, res) => {
   const { name, email, password } = req.body;
+  if (await isRateLimited(`register:ip:${req.ip}`, 10, 15 * 60 * 1000) ||
+      await isRateLimited(`register:email:${email}`, 5, 60 * 60 * 1000)) {
+    return res.status(429).json({ error: "Too many registration attempts. Try again later." });
+  }
   const existing = await db.select().from(usersTable).where(eq(usersTable.email, email)).limit(1);
   if (existing.length) return res.status(409).json({ error: "Email already registered." });
   const user = { id: randomUUID(), name, email, role: "CUSTOMER", passwordHash: await bcrypt.hash(password, 10) };
@@ -94,6 +98,10 @@ router.post("/auth/register", validate(registerSchema), async (req, res) => {
 const loginSchema = z.object({ email: emailSchema, password: z.string().min(1).max(128) });
 router.post("/auth/login", validate(loginSchema), async (req, res) => {
   const { email, password } = req.body;
+  if (await isRateLimited(`login:ip:${req.ip}`, 15, 15 * 60 * 1000) ||
+      await isRateLimited(`login:email:${email}`, 10, 15 * 60 * 1000)) {
+    return res.status(429).json({ error: "Too many login attempts. Try again later." });
+  }
   const [user] = await db.select().from(usersTable).where(eq(usersTable.email, email)).limit(1);
   if (!user || !(await bcrypt.compare(password, user.passwordHash))) return res.status(401).json({ error: "Invalid email or password." });
   await setSession(res, user.id);

@@ -1,8 +1,13 @@
 import { type Request, type Response, type NextFunction } from "express";
 import { db, sessionsTable, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
+import { createHash } from "node:crypto";
 
 export const SESSION_COOKIE = "luxe_session";
+
+function sessionDigest(token: string) {
+  return createHash("sha256").update(token).digest("hex");
+}
 
 export type UserRole = "CUSTOMER" | "ADMIN" | "SUPER_ADMIN";
 
@@ -37,7 +42,7 @@ export async function getSessionUser(req: Request): Promise<StoredUser | null> {
     .select({ user: usersTable, session: sessionsTable })
     .from(sessionsTable)
     .innerJoin(usersTable, eq(sessionsTable.userId, usersTable.id))
-    .where(eq(sessionsTable.token, token))
+    .where(eq(sessionsTable.token, sessionDigest(token)))
     .limit(1);
   const row = rows[0];
   if (!row) return null;
@@ -53,7 +58,7 @@ export async function requireAdmin(req: Request, res: Response, next: NextFuncti
     .select({ user: usersTable, expiresAt: sessionsTable.expiresAt })
     .from(sessionsTable)
     .innerJoin(usersTable, eq(sessionsTable.userId, usersTable.id))
-    .where(eq(sessionsTable.token, token))
+    .where(eq(sessionsTable.token, sessionDigest(token)))
     .limit(1);
 
   const row = rows[0];
@@ -76,7 +81,7 @@ export async function requireSuperAdmin(req: Request, res: Response, next: NextF
     .select({ user: usersTable, expiresAt: sessionsTable.expiresAt })
     .from(sessionsTable)
     .innerJoin(usersTable, eq(sessionsTable.userId, usersTable.id))
-    .where(eq(sessionsTable.token, token))
+    .where(eq(sessionsTable.token, sessionDigest(token)))
     .limit(1);
 
   const row = rows[0];

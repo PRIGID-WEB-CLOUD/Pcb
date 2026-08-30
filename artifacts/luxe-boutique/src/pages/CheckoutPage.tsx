@@ -14,7 +14,6 @@ export default function CheckoutPage() {
   const [shippingAddress, setShippingAddress] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
   const [processing, setProcessing]   = useState(false);
-  const [provider, setProvider]       = useState<"paystack" | "flutterwave">("paystack");
   const { formatPrice } = useCurrency();
 
   const [couponCode, setCouponCode]   = useState("");
@@ -107,14 +106,16 @@ export default function CheckoutPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          amount: total,
-          provider,
+          customerName: "Guest",
+          provider: "paystack",
           couponCode: coupon?.code,
-          callbackUrl: `${window.location.origin}/checkout/verify?provider=${provider}`,
+          shippingAddress,
+          callbackUrl: `${window.location.origin}/checkout/verify?provider=paystack`,
         }),
       });
       const data = await initRes.json();
-      const redirectUrl = provider === "flutterwave" ? data?.data?.link : data?.data?.authorization_url;
+      if (!initRes.ok) throw new Error(data?.error || "Payment provider is unavailable.");
+      const redirectUrl = data?.data?.authorization_url;
       if (redirectUrl) {
         window.location.assign(redirectUrl);
       } else {
@@ -251,13 +252,8 @@ export default function CheckoutPage() {
               </div>
               <div className="space-y-2">
                 <label className="text-[10px] uppercase tracking-widest font-bold text-slate-500">Payment Provider</label>
-                <div className="grid grid-cols-2 gap-3">
-                  {(["paystack", "flutterwave"] as const).map(p => (
-                    <button key={p} type="button" onClick={() => setProvider(p)}
-                      className={`py-3 rounded-xl border text-xs font-bold uppercase tracking-widest transition-colors ${provider === p ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"}`}>
-                      {p}
-                    </button>
-                  ))}
+                <div className="py-3 rounded-xl border border-slate-900 bg-slate-900 text-white text-center text-xs font-bold uppercase tracking-widest">
+                  Paystack
                 </div>
               </div>
               <button

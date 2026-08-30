@@ -13,54 +13,17 @@ export default function CheckoutVerifyPage() {
 
     if (!reference) { setStatus("failed"); return; }
 
-    const shippingAddress = sessionStorage.getItem("checkout_shipping") || "";
-    const customerEmail   = sessionStorage.getItem("checkout_email") || "";
-    const couponCode      = sessionStorage.getItem("checkout_coupon") || null;
-
     const run = async () => {
       try {
-        // 1. Verify payment with gateway
+        // The server verifies the gateway response and atomically creates the paid order.
         const verifyRes  = await fetch(`/api/payments/verify/${reference}?provider=${provider}`);
         const verifyData = await verifyRes.json();
 
-        const isSuccess =
-          (provider === "flutterwave" && verifyData.status === "successful") ||
-          (verifyData.status && verifyData.data?.status === "success");
+        if (!verifyRes.ok || !verifyData.status || !verifyData.order) { setStatus("failed"); return; }
+        setOrderRef(verifyData.order.id?.slice(0, 8).toUpperCase() ?? null);
+        await fetch("/api/cart", { method: "DELETE" });
 
-        if (!isSuccess) { setStatus("failed"); return; }
-
-        // 2. Fetch cart & build order
-        const cartRes = await fetch("/api/cart");
-        const cart    = cartRes.ok ? await cartRes.json() : null;
-
-        if (cart?.items?.length) {
-          const orderItems = cart.items.map((item: any) => ({
-            productId: item.productId || item.product.id,
-            quantity:  item.quantity,
-          }));
-
-          const orderRes = await fetch("/api/orders", {
-            method:  "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              customerEmail,
-              couponCode:     couponCode     || undefined,
-              shippingAddress,
-              items: orderItems,
-              paystackRef: reference,
-            }),
-          });
-
-          if (orderRes.ok) {
-            const order = await orderRes.json();
-            setOrderRef(order.id?.slice(0, 8).toUpperCase() ?? null);
-          }
-
-          // 3. Clear cart
-          await fetch("/api/cart", { method: "DELETE" });
-        }
-
-        // 5. Clear sessionStorage
+        // Clear checkout-only client state after the server confirms the order.
         sessionStorage.removeItem("checkout_shipping");
         sessionStorage.removeItem("checkout_coupon");
         sessionStorage.removeItem("checkout_discount");

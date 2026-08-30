@@ -1,15 +1,20 @@
 import { Router } from "express";
-import { randomUUID } from "crypto";
+import { createHash, randomBytes, randomUUID } from "crypto";
 import { desc, eq } from "drizzle-orm";
 import { requireAdmin } from "../middleware/requireAdmin";
 import { eprolo } from "../services/eprolo";
 import { sendEmail } from "../services/mailer";
 import { db, apiKeysTable, appSettingsTable, providerPluginsTable } from "@workspace/db";
+import { encryptCredential, decryptCredential, isEncryptedCredential } from "../services/credentialVault";
 
 const router = Router();
 router.use(requireAdmin);
 
 const DEFAULT_SETTINGS: Record<string, string> = { store_name: "LUXE BOUTIQUE" };
+const SECRET_SETTINGS = new Set([
+  "smtp_pass", "cloudinary_api_secret", "paystack_secret_key", "flutterwave_secret_key",
+  "stripe_secret_key", "eprolo_api_key", "eprolo_api_secret",
+]);
 const PROVIDER_CATALOG = [
   { name: "eprolo", label: "Eprolo", description: "Dropshipping and fulfillment." },
   { name: "paystack", label: "Paystack", description: "Card payments via Paystack." },
@@ -22,6 +27,13 @@ async function readSettings() {
   return { ...DEFAULT_SETTINGS, ...Object.fromEntries(rows.map((row) => [row.key, row.value])) };
 }
 
+function safeSettings(settings: Record<string, string>) {
+  return Object.fromEntries(Object.entries(settings).map(([key, value]) => [
+    key,
+    SECRET_SETTINGS.has(key) && value ? "●●●●●●●●" : value,
+  ]));
+}
+
 function configured(settings: Record<string, string>) {
   return {
     smtpConfigured: Boolean(settings.smtp_host && settings.smtp_user && settings.smtp_pass),
@@ -31,17 +43,21 @@ function configured(settings: Record<string, string>) {
 
 router.get("/settings", async (_req, res) => {
   const settings = await readSettings();
-  return res.json({ settings, status: configured(settings) });
+  return res.json({ settings: safeSettings(settings), status: configured(settings) });
 });
 
 router.put("/settings", async (req, res) => {
   for (const [key, value] of Object.entries(req.body as Record<string, unknown>)) {
     if (typeof value !== "string") continue;
-    await db.insert(appSettingsTable).values({ key, value, updatedAt: new Date() })
-      .onConflictDoUpdate({ target: appSettingsTable.key, set: { value, updatedAt: new Date() } });
+    if (SECRET_SETTINGS.has(key) && value === "●●●●●●●●") continue;
+    const storedValue = SECRET_SETTINGS.has(key) && value
+      ? (isEncryptedCredential(value) ? value : encryptCredential(value))
+      : value;
+    await db.insert(appSettingsTable).values({ key, value: storedValue, updatedAt: new Date() })
+      .onConflictDoUpdate({ target: appSettingsTable.key, set: { value: storedValue, updatedAt: new Date() } });
   }
   const settings = await readSettings();
-  return res.json({ settings, status: configured(settings) });
+  return res.json({ settings: safeSettings(settings), status: configured(settings) });
 });
 
 router.post("/settings/test/email", async (_req, res) => {
@@ -73,13 +89,13 @@ router.post("/settings/test/cloudinary", async (_req, res) => {
 });
 
 function makeKey() {
-  const rawKey = `pk_live_${randomUUID().replace(/-/g, "")}`;
+  const rawKey = `pk_live_${randomBytes(32).toString("base64url")}`;
   return { rawKey, keyPrefix: rawKey.slice(0, 12) };
 }
 
 function safeKey(key: typeof apiKeysTable.$inferSelect) {
-  const { rawKey: _, ...rest } = key;
-  return rest;
+  const { keyHash: _, ...safe } = key;
+  return safe;
 }
 
 router.get("/apikeys", async (_req, res) => {
@@ -92,7 +108,7 @@ router.post("/apikeys", async (req, res) => {
   if (!name) return res.status(400).json({ error: "name is required." });
   const { rawKey, keyPrefix } = makeKey();
   const [key] = await db.insert(apiKeysTable).values({
-    id: randomUUID(), name, rawKey, keyPrefix,
+    id: randomUUID(), name, keyHash: createHash("sha256").update(rawKey).digest("hex"), keyPrefix,
   }).returning();
   return res.status(201).json({ ...safeKey(key), rawKey });
 });
@@ -111,9 +127,11 @@ router.delete("/apikeys/:id/permanent", async (req, res) => {
 
 function safeProvider(provider: typeof providerPluginsTable.$inferSelect) {
   return {
-    ...provider,
-    apiKey: provider.apiKey ? `${provider.apiKey.slice(0, 6)}…` : null,
-    apiSecret: provider.apiSecret ? "●●●●●●●●" : null,
+    id: provider.id, name: provider.name, label: provider.label, description: provider.description,
+    mode: provider.mode, enabled: provider.enabled, connected: provider.connected,
+    webhookUrl: provider.webhookUrl, lastSyncAt: provider.lastSyncAt, lastError: provider.lastError,
+    updatedAt: provider.updatedAt, logoUrl: provider.logoUrl, storeId: provider.storeId,
+    apiKeyConfigured: Boolean(provider.apiKey), apiSecretConfigured: Boolean(provider.apiSecret),
   };
 }
 
@@ -140,7 +158,14 @@ router.put("/providers/:name", async (req, res) => {
   const raw = req.body as Record<string, unknown>;
   const updates: Record<string, unknown> = { updatedAt: new Date() };
   for (const key of ["apiKey", "apiSecret", "storeId", "enabled"]) {
-    if (key in raw) updates[key] = raw[key];
+    if (!(key in raw)) continue;
+    const value = raw[key];
+    if ((key === "apiKey" || key === "apiSecret") && typeof value === "string") {
+      if (value === "●●●●●●●●") continue;
+      updates[key] = value ? encryptCredential(value) : null;
+    } else {
+      updates[key] = value;
+    }
   }
   const [updated] = await db.update(providerPluginsTable).set(updates)
     .where(eq(providerPluginsTable.id, provider.id)).returning();
@@ -151,10 +176,12 @@ router.post("/providers/:name/connect", async (req, res) => {
   const provider = await getProvider(req.params.name as string);
   if (!provider) return res.status(404).json({ error: "Provider not found" });
   if (!provider.apiKey) return res.status(400).json({ connected: false, error: "No API key saved — add your key first." });
+  const apiKey = decryptCredential(provider.apiKey);
+  const apiSecret = provider.apiSecret ? decryptCredential(provider.apiSecret) : null;
 
   if (provider.name === "eprolo") {
-    if (!provider.apiSecret) return res.status(400).json({ connected: false, error: "Eprolo requires both API Key and API Secret." });
-    const result = await eprolo.testConnection({ apiKey: provider.apiKey, apiSecret: provider.apiSecret });
+    if (!apiSecret) return res.status(400).json({ connected: false, error: "Eprolo requires both API Key and API Secret." });
+    const result = await eprolo.testConnection({ apiKey, apiSecret });
     await db.update(providerPluginsTable).set({
       connected: result.ok, lastError: result.ok ? null : result.message,
       lastSyncAt: result.ok ? new Date() : provider.lastSyncAt, updatedAt: new Date(),
@@ -164,12 +191,12 @@ router.post("/providers/:name/connect", async (req, res) => {
 
   if (provider.name === "paystack") {
     try {
-      const response = await fetch("https://api.paystack.co/bank", { headers: { Authorization: `Bearer ${provider.apiKey}` } });
+      const response = await fetch("https://api.paystack.co/bank", { headers: { Authorization: `Bearer ${apiKey}` }, signal: AbortSignal.timeout(15_000) });
       if (!response.ok) return res.json({ connected: false, error: "Invalid Paystack secret key." });
     } catch { return res.json({ connected: false, error: "Could not reach Paystack API." }); }
   } else if (provider.name === "flutterwave") {
     try {
-      const response = await fetch("https://api.flutterwave.com/v3/banks/NG", { headers: { Authorization: `Bearer ${provider.apiKey}` } });
+      const response = await fetch("https://api.flutterwave.com/v3/banks/NG", { headers: { Authorization: `Bearer ${apiKey}` }, signal: AbortSignal.timeout(15_000) });
       if (!response.ok) return res.json({ connected: false, error: "Invalid Flutterwave secret key." });
     } catch { return res.json({ connected: false, error: "Could not reach Flutterwave API." }); }
   } else {

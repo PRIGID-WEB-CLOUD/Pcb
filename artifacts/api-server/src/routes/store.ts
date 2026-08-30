@@ -183,8 +183,6 @@ router.delete("/products/:id/variants/:variantId", requireAdmin, async (req, res
 
 // ── Orders ────────────────────────────────────────────────────────────────────
 
-type OrderItem = { name: string; qty: number; price: number };
-
 router.get("/orders", requireAdmin, async (_req, res) => {
   const rows = await db.select().from(ordersTable).orderBy(desc(ordersTable.createdAt));
   return res.json(rows);
@@ -200,6 +198,7 @@ router.get("/orders/:id", requireAdmin, async (req, res) => {
 // ── Payments and checkout lifecycle ──────────────────────────────────────────
 type CheckoutAddress = AddressSnapshot;
 type PendingCheckout = {
+  customerId?: string;
   customerName: string;
   customerEmail: string;
   items: Array<{ productId: string; quantity: number; price: number; name: string }>;
@@ -404,6 +403,7 @@ async function finalizePaidTransaction(reference: string, gatewayData: Record<st
     const [created] = await tx.insert(ordersTable).values({
       id: randomUUID(),
       customerName: metadata.customerName,
+      customerId: metadata.customerId,
       customerEmail: metadata.customerEmail,
       total: Math.max(0, subtotal - discount),
       status: "PROCESSING",
@@ -455,6 +455,7 @@ router.post("/payments/initialize", async (req, res) => {
   if (coupon && "error" in coupon) return res.status(400).json({ error: coupon.error });
   const discount = coupon && !("error" in coupon) ? coupon.discount : 0;
   const metadata: PendingCheckout = {
+    customerId: (await getSessionUser(req))?.id,
     customerName: parsed.data.customerName,
     customerEmail: parsed.data.customerEmail,
     items: cart.items.map((item) => ({ productId: item.productId, quantity: item.quantity, price: item.price, name: item.name })),

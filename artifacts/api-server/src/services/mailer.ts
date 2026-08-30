@@ -31,6 +31,7 @@ class SmtpClient {
 
   private attach(socket: SmtpSocket) {
     this.socket = socket;
+    socket.setTimeout(15_000, () => socket.destroy(new Error("SMTP operation timed out.")));
     socket.setEncoding("utf8");
     socket.on("data", (chunk: string) => {
       this.buffer += chunk;
@@ -58,7 +59,14 @@ class SmtpClient {
 
   private readResponse() {
     return new Promise<string>((resolve, reject) => {
-      this.pending = { resolve, reject };
+      const timeout = setTimeout(() => {
+        this.pending = null;
+        reject(new Error("SMTP response timed out."));
+      }, 15_000);
+      this.pending = {
+        resolve: (value) => { clearTimeout(timeout); resolve(value); },
+        reject: (error) => { clearTimeout(timeout); reject(error); },
+      };
       this.consume();
     });
   }
@@ -77,8 +85,15 @@ class SmtpClient {
       ? connectTls({ host, port, servername: host })
       : connectNet({ host, port });
     await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        raw.destroy();
+        reject(new Error("SMTP connection timed out."));
+      }, 15_000);
       raw.once("error", reject);
-      raw.once(port === 465 ? "secureConnect" : "connect", () => resolve());
+      raw.once(port === 465 ? "secureConnect" : "connect", () => {
+        clearTimeout(timeout);
+        resolve();
+      });
     });
     this.attach(raw);
     const greeting = await this.readResponse();

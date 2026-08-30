@@ -12,6 +12,8 @@ import {
   View,
 } from "react-native";
 import { router } from "expo-router";
+import * as Linking from "expo-linking";
+import * as WebBrowser from "expo-web-browser";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
@@ -60,22 +62,43 @@ export default function CheckoutScreen() {
     setProcessing(true);
     setError(null);
     try {
-      const res = await fetch(apiUrl("/api/orders"), {
+      const callbackUrl = Linking.createURL("checkout-verify");
+      const res = await fetch(apiUrl("/api/payments/initialize"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ shippingAddress }),
+        body: JSON.stringify({
+          customerName: user?.name || "Guest",
+          customerEmail: user?.email,
+          provider: "paystack",
+          shippingAddress,
+          callbackUrl,
+        }),
       });
-      if (res.ok) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        await refreshCart();
-        setSuccess(true);
-      } else {
+      if (!res.ok) {
         const data = await res.json();
-        setError(data.error || "Failed to place order");
+        throw new Error(data.error || "Unable to start secure payment.");
       }
+      const data = await res.json();
+      const authUrl = data?.data?.authorization_url;
+      if (!authUrl) throw new Error("Payment provider did not return a checkout URL.");
+      const browserResult = await WebBrowser.openAuthSessionAsync(authUrl, callbackUrl);
+      if (browserResult.type !== "success" || !browserResult.url) {
+        throw new Error("Payment was cancelled before completion.");
+      }
+      const query = Linking.parse(browserResult.url).queryParams || {};
+      const reference = String(query.reference || query.trxref || "");
+      if (!reference) throw new Error("Payment reference was not returned.");
+      const verify = await fetch(apiUrl(`/api/payments/verify/${encodeURIComponent(reference)}`), {
+        credentials: "include",
+      });
+      const verifyData = await verify.json();
+      if (!verify.ok || !verifyData.order) throw new Error(verifyData.error || "Payment could not be verified.");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      await refreshCart();
+      setSuccess(true);
     } catch {
-      setError("Network error. Please try again.");
+      setError("Payment could not be completed. Please try again.");
     }
     setProcessing(false);
   };
@@ -170,7 +193,7 @@ export default function CheckoutScreen() {
           <View style={[styles.infoBox, { backgroundColor: colors.muted }]}>
             <Feather name="info" size={14} color={colors.mutedForeground} />
             <Text style={[styles.infoText, { color: colors.mutedForeground }]}>
-              Payment is handled securely. You will be contacted for payment details after placing your order.
+               You will be redirected to Paystack to complete payment securely. Your order is created only after payment is verified.
             </Text>
           </View>
 
