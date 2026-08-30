@@ -703,20 +703,20 @@ export default function AdminSettingsPage() {
     if (!data) return;
     const s = data.settings;
     setSmtpHost(s.smtp_host  ?? ""); setSmtpPort(s.smtp_port ?? "587");
-    setSmtpUser(s.smtp_user  ?? ""); setSmtpPass(s.smtp_pass ?? "");
+    setSmtpUser(s.smtp_user  ?? ""); setSmtpPass(s.smtp_pass ? MASK : "");
     setSmtpFrom(s.smtp_from  ?? "");
     setCloudName(s.cloudinary_cloud_name    ?? "");
     setCloudApiKey(s.cloudinary_api_key     ?? "");
-    setCloudSecret(s.cloudinary_api_secret  ?? "");
+    setCloudSecret(s.cloudinary_api_secret ? MASK : "");
     setCloudPreset(s.cloudinary_upload_preset ?? "");
     setStoreName(s.store_name     ?? "Luxe Boutique");
     setStoreEmail(s.store_email   ?? "");
     setStoreCurrency(s.store_currency ?? "USD");
     setStoreTimezone(s.store_timezone ?? "UTC");
     setPaystackPublicKey(s.paystack_public_key      ?? "");
-    setPaystackSecretKey(s.paystack_secret_key      ?? "");
+    setPaystackSecretKey(s.paystack_secret_key ? MASK : "");
     setFlutterwavePublicKey(s.flutterwave_public_key  ?? "");
-    setFlutterwaveSecretKey(s.flutterwave_secret_key  ?? "");
+    setFlutterwaveSecretKey(s.flutterwave_secret_key ? MASK : "");
 
     const host = s.smtp_host ?? "";
     const preset = Object.entries(SMTP_PRESETS).find(([, v]) => v.host === host);

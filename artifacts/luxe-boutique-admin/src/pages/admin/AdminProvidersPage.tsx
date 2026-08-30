@@ -10,8 +10,8 @@ type Provider = {
   logoUrl: string | null;
   enabled: boolean;
   connected: boolean;
-  apiKey: string | null;
-  apiSecret: string | null;
+  apiKeyConfigured: boolean;
+  apiSecretConfigured: boolean;
   storeId: string | null;
   webhookUrl: string | null;
   lastSyncAt: string | null;
@@ -300,16 +300,16 @@ export default function AdminProvidersPage() {
                     )}
 
                     {/* Credential indicator */}
-                    {isEprolo && (p.apiKey || p.apiSecret) && (
+                    {isEprolo && (p.apiKeyConfigured || p.apiSecretConfigured) && (
                       <div className="flex items-center gap-3 mb-4 p-3 bg-[#f8f9ff] rounded-lg">
                         <div className="flex items-center gap-1.5 text-[11px] font-[Manrope] text-[#45464d]">
                           <span className="material-symbols-outlined text-[14px] text-[#006c49]">key</span>
-                          API Key: <code className="font-mono">{p.apiKey ?? "—"}</code>
+                           API Key: <code className="font-mono">{p.apiKeyConfigured ? "Configured" : "—"}</code>
                         </div>
                         <div className="w-px h-4 bg-[#e5eeff]" />
                         <div className="flex items-center gap-1.5 text-[11px] font-[Manrope] text-[#45464d]">
                           <span className="material-symbols-outlined text-[14px] text-[#006c49]">lock</span>
-                          Secret: {p.apiSecret ?? "—"}
+                           Secret: {p.apiSecretConfigured ? "Configured" : "—"}
                         </div>
                       </div>
                     )}
@@ -349,10 +349,10 @@ export default function AdminProvidersPage() {
                           </button>
                         </>
                       ) : (
-                        <button onClick={() => handleConnect(p)} disabled={isConnecting || !p.apiKey}
+                        <button onClick={() => handleConnect(p)} disabled={isConnecting || !p.apiKeyConfigured}
                           className="px-4 py-2 bg-black text-white font-[Manrope] font-bold text-xs tracking-widest uppercase hover:bg-[#006c49] transition-all rounded-lg flex items-center gap-1.5 disabled:opacity-40">
                           <span className={`material-symbols-outlined text-sm ${isConnecting ? "animate-spin" : ""}`}>{isConnecting ? "autorenew" : "link"}</span>
-                          {isConnecting ? "Connecting…" : p.apiKey ? "Connect" : "Add API Key First"}
+                          {isConnecting ? "Connecting…" : p.apiKeyConfigured ? "Connect" : "Add API Key First"}
                         </button>
                       )}
                     </div>
@@ -402,7 +402,7 @@ export default function AdminProvidersPage() {
                   <input
                     type="password"
                     className="w-full bg-[#f8f9ff] border border-[#c6c6cd] rounded-lg px-4 py-2.5 font-[Manrope] text-sm outline-none focus:border-black transition-colors"
-                    placeholder={activeProvider.apiKey ? "Leave blank to keep current" : "Enter API key…"}
+                     placeholder={activeProvider.apiKeyConfigured ? "Leave blank to keep current" : "Enter API key…"}
                     value={formKey}
                     onChange={e => setFormKey(e.target.value)}
                   />
@@ -414,7 +414,7 @@ export default function AdminProvidersPage() {
                   <input
                     type="password"
                     className="w-full bg-[#f8f9ff] border border-[#c6c6cd] rounded-lg px-4 py-2.5 font-[Manrope] text-sm outline-none focus:border-black transition-colors"
-                    placeholder={activeProvider.apiSecret ? "Leave blank to keep current" : "Enter API secret…"}
+                     placeholder={activeProvider.apiSecretConfigured ? "Leave blank to keep current" : "Enter API secret…"}
                     value={formSecret}
                     onChange={e => setFormSecret(e.target.value)}
                   />
